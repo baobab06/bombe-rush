@@ -23,40 +23,200 @@ function normalizeCode(input) {
 
 // src/core/characters.ts
 var CHARACTERS = [
-  { id: "renard", name: "Flamme", kind: "fox", tagline: "Renard malin" },
-  { id: "boulon", name: "Boulon", kind: "robot", tagline: "Robot de chantier" },
-  { id: "rainette", name: "Rainette", kind: "frog", tagline: "Grenouille sauteuse" },
-  { id: "kage", name: "Kage", kind: "ninja", tagline: "Ninja discret" },
-  { id: "champi", name: "Champi", kind: "mushroom", tagline: "Champignon têtu" },
-  { id: "bruno", name: "Bruno", kind: "bear", tagline: "Ourson costaud" }
+  { id: "renard", name: "Flamme", kind: "fox", tagline: "Renard malin", bio: "Toujours un coup d'avance… et une bombe dans la poche." },
+  { id: "boulon", name: "Boulon", kind: "robot", tagline: "Robot de chantier", bio: "Programmé pour tout démolir. Bloc par bloc." },
+  { id: "rainette", name: "Rainette", kind: "frog", tagline: "Grenouille sauteuse", bio: "Elle saute de joie à chaque explosion." },
+  { id: "kage", name: "Kage", kind: "ninja", tagline: "Ninja discret", bio: "On ne l'entend jamais arriver. Sa bombe, si." },
+  { id: "champi", name: "Champi", kind: "mushroom", tagline: "Champignon têtu", bio: "Petit, têtu, et franchement explosif." },
+  { id: "bruno", name: "Bruno", kind: "bear", tagline: "Ourson costaud", bio: "Un gros câlin, puis un gros BOUM." },
+  { id: "pingo", name: "Pingo", kind: "penguin", tagline: "Pingouin glisseur", bio: "Il glisse partout, même là où il n'y a pas de glace.", locked: true, rarity: "epic" }
 ];
 var P = (main, dark, light, accent) => ({ main, dark, light, accent });
-var SKINS = [
-  { id: "renard", characterId: "renard", name: "Classique", price: 0, rarity: "base", palette: P("#ff8a2b", "#c4520c", "#fff1df", "#3a2418") },
-  { id: "renard-arctique", characterId: "renard", name: "Arctique", price: 150, rarity: "rare", palette: P("#e9f4ff", "#9cb8d6", "#ffffff", "#3e5f8a"), accessory: "scarf" },
-  { id: "renard-ombre", characterId: "renard", name: "Ombre", price: 300, rarity: "epic", palette: P("#5b3d8f", "#341f5c", "#d8c9ff", "#ff5fa2"), accessory: "glasses" },
-  { id: "renard-or", characterId: "renard", name: "Doré", price: 500, rarity: "legend", palette: P("#ffcc33", "#c98a10", "#fff4c2", "#8a5a00"), accessory: "crown" },
-  { id: "boulon", characterId: "boulon", name: "Classique", price: 0, rarity: "base", palette: P("#5aa0ff", "#2c5fb8", "#d6e8ff", "#ffd23f") },
-  { id: "boulon-rouille", characterId: "boulon", name: "Rouille", price: 150, rarity: "rare", palette: P("#c8743f", "#7f4120", "#f2cfae", "#5fe0c0") },
-  { id: "boulon-neon", characterId: "boulon", name: "Néon", price: 300, rarity: "epic", palette: P("#2a2a3d", "#141422", "#5d5d80", "#ff3fb4"), accessory: "headphones" },
-  { id: "boulon-or", characterId: "boulon", name: "Doré", price: 500, rarity: "legend", palette: P("#ffcc33", "#c98a10", "#fff4c2", "#ff5a4f"), accessory: "crown" },
-  { id: "rainette", characterId: "rainette", name: "Classique", price: 0, rarity: "base", palette: P("#4fd46a", "#22893c", "#e8ffd0", "#1f6e33") },
-  { id: "rainette-tropic", characterId: "rainette", name: "Tropicale", price: 150, rarity: "rare", palette: P("#2fb7ff", "#1470b8", "#fff27a", "#ff8a1f"), accessory: "flower" },
-  { id: "rainette-lave", characterId: "rainette", name: "Lave", price: 300, rarity: "epic", palette: P("#ff4b3a", "#a8180f", "#ffd06a", "#2a1010") },
-  { id: "rainette-royale", characterId: "rainette", name: "Royale", price: 500, rarity: "legend", palette: P("#9a5cff", "#5c2bb8", "#f0e2ff", "#ffcc33"), accessory: "crown" },
-  { id: "kage", characterId: "kage", name: "Classique", price: 0, rarity: "base", palette: P("#3b3f6b", "#1e2140", "#ffd9b8", "#ff4b4b") },
-  { id: "kage-neige", characterId: "kage", name: "Neige", price: 150, rarity: "rare", palette: P("#eef2f7", "#a9b4c4", "#ffd9b8", "#3fa2ff") },
-  { id: "kage-sakura", characterId: "kage", name: "Sakura", price: 300, rarity: "epic", palette: P("#ff86b8", "#c4467c", "#ffe0cc", "#ffffff"), accessory: "flower" },
-  { id: "kage-or", characterId: "kage", name: "Doré", price: 500, rarity: "legend", palette: P("#2a2a2a", "#111111", "#ffd9b8", "#ffcc33"), accessory: "crown" },
-  { id: "champi", characterId: "champi", name: "Classique", price: 0, rarity: "base", palette: P("#ff4d4d", "#b81c2a", "#fff3e0", "#ffffff") },
-  { id: "champi-cepe", characterId: "champi", name: "Cèpe", price: 150, rarity: "rare", palette: P("#9a5a2c", "#5e3214", "#fff0d6", "#d9a76b") },
-  { id: "champi-lumi", characterId: "champi", name: "Lumi", price: 300, rarity: "epic", palette: P("#3fe0e0", "#14808f", "#f2ffff", "#d8ff5a"), accessory: "glasses" },
-  { id: "champi-or", characterId: "champi", name: "Doré", price: 500, rarity: "legend", palette: P("#ffcc33", "#c98a10", "#fff7e0", "#ffffff"), accessory: "crown" },
-  { id: "bruno", characterId: "bruno", name: "Classique", price: 0, rarity: "base", palette: P("#a8693a", "#6b3e1c", "#f2d2a8", "#3a2414") },
-  { id: "bruno-panda", characterId: "bruno", name: "Panda", price: 150, rarity: "rare", palette: P("#f6f6f2", "#2b2b2b", "#ffffff", "#2b2b2b") },
-  { id: "bruno-polaire", characterId: "bruno", name: "Polaire", price: 300, rarity: "epic", palette: P("#e8f6ff", "#9cc4dc", "#ffffff", "#2a3a4a"), accessory: "scarf" },
-  { id: "bruno-or", characterId: "bruno", name: "Doré", price: 500, rarity: "legend", palette: P("#ffcc33", "#c98a10", "#fff4c2", "#6b3e1c"), accessory: "crown" }
+var CLASSIC = {
+  renard: { name: "Classique", palette: P("#ff8a2b", "#c4520c", "#fff1df", "#3a2418"), aura: "leaves" },
+  boulon: { name: "Classique", palette: P("#5aa0ff", "#2c5fb8", "#d6e8ff", "#ffd23f") },
+  rainette: { name: "Classique", palette: P("#4fd46a", "#22893c", "#e8ffd0", "#1f6e33") },
+  kage: { name: "Classique", palette: P("#3b3f6b", "#1e2140", "#ffd9b8", "#ff4b4b") },
+  champi: { name: "Classique", palette: P("#ff4d4d", "#b81c2a", "#fff3e0", "#ffffff") },
+  bruno: { name: "Classique", palette: P("#a8693a", "#6b3e1c", "#f2d2a8", "#3a2414") },
+  pingo: { name: "Classique", palette: P("#2f3e5c", "#18223a", "#ffffff", "#ffb020"), wear: ["scarf"] }
+};
+var LEGACY = [
+  { id: "renard-arctique", characterId: "renard", name: "Arctique", rarity: "rare", palette: P("#e9f4ff", "#9cb8d6", "#ffffff", "#3e5f8a"), wear: ["scarf"], aura: "snow" },
+  { id: "renard-ombre", characterId: "renard", name: "Ombre", rarity: "epic", palette: P("#5b3d8f", "#341f5c", "#d8c9ff", "#ff5fa2"), wear: ["glasses"], aura: "smoke" },
+  { id: "boulon-rouille", characterId: "boulon", name: "Rouille", rarity: "rare", palette: P("#c8743f", "#7f4120", "#f2cfae", "#5fe0c0"), pattern: "spots" },
+  { id: "boulon-neon", characterId: "boulon", name: "Néon", rarity: "epic", palette: P("#2a2a3d", "#141422", "#5d5d80", "#ff3fb4"), wear: ["headphones"], aura: "bolts" },
+  { id: "rainette-tropic", characterId: "rainette", name: "Tropicale", rarity: "rare", palette: P("#2fb7ff", "#1470b8", "#fff27a", "#ff8a1f"), wear: ["flower"], aura: "bubbles" },
+  { id: "rainette-lave", characterId: "rainette", name: "Lave", rarity: "epic", palette: P("#ff4b3a", "#a8180f", "#ffd06a", "#2a1010"), aura: "embers" },
+  { id: "rainette-royale", characterId: "rainette", name: "Royale", rarity: "legend", palette: P("#9a5cff", "#5c2bb8", "#f0e2ff", "#ffcc33"), wear: ["crown"], aura: "sparkle" },
+  { id: "kage-neige", characterId: "kage", name: "Neige", rarity: "rare", palette: P("#eef2f7", "#a9b4c4", "#ffd9b8", "#3fa2ff"), aura: "snow" },
+  { id: "kage-sakura", characterId: "kage", name: "Sakura", rarity: "epic", palette: P("#ff86b8", "#c4467c", "#ffe0cc", "#ffffff"), wear: ["flower"], aura: "petals" },
+  { id: "champi-cepe", characterId: "champi", name: "Cèpe", rarity: "rare", palette: P("#9a5a2c", "#5e3214", "#fff0d6", "#d9a76b"), aura: "leaves" },
+  { id: "champi-lumi", characterId: "champi", name: "Lumi", rarity: "epic", palette: P("#3fe0e0", "#14808f", "#f2ffff", "#d8ff5a"), wear: ["glasses"], aura: "sparkle" },
+  { id: "bruno-panda", characterId: "bruno", name: "Panda", rarity: "rare", palette: P("#f6f6f2", "#2b2b2b", "#ffffff", "#2b2b2b"), pattern: "panda", aura: "leaves" },
+  { id: "bruno-polaire", characterId: "bruno", name: "Polaire", rarity: "epic", palette: P("#e8f6ff", "#9cc4dc", "#ffffff", "#2a3a4a"), wear: ["scarf"], aura: "snow" }
 ];
+var THEMES = [
+  {
+    id: "plage",
+    name: "Plage",
+    rarity: "common",
+    desc: "Lunettes de soleil, collier de fleurs et bulles de mer.",
+    palette: P("#2ec4b6", "#178a80", "#fff3c4", "#ff6b6b"),
+    wear: ["shades", "lei"],
+    pattern: "none",
+    aura: "bubbles"
+  },
+  {
+    id: "cartoon",
+    name: "Cartoon",
+    rarity: "common",
+    desc: "Grands yeux, gros contours, zéro sérieux.",
+    palette: P("#ff7eb6", "#d14f8a", "#ffffff", "#4cc9f0"),
+    wear: ["bow"],
+    pattern: "spots",
+    aura: "hearts",
+    eyes: "cartoon"
+  },
+  {
+    id: "pirate",
+    name: "Pirate",
+    rarity: "rare",
+    desc: "Tricorne, cache-œil et marinière. À l'abordage !",
+    palette: P("#3d5a80", "#24344d", "#f4e1c1", "#e63946"),
+    wear: ["pirate", "eyepatch"],
+    pattern: "stripes",
+    aura: "none"
+  },
+  {
+    id: "ninja",
+    name: "Ninja",
+    rarity: "rare",
+    desc: "Masque de l'ombre et nuage de fumée.",
+    palette: P("#2b2d42", "#14151f", "#ffd9b8", "#e63946"),
+    perKind: { ninja: { main: "#1a1a24", accent: "#9b5de5" } },
+    wear: ["bandana"],
+    pattern: "none",
+    aura: "smoke"
+  },
+  {
+    id: "robot",
+    name: "Mécano",
+    rarity: "rare",
+    desc: "Carrosserie chromée et petits éclairs.",
+    palette: P("#b8c4cf", "#6c7a89", "#eef3f7", "#00d4ff"),
+    perKind: { robot: { main: "#ffb703", dark: "#b86e00" } },
+    wear: ["helmet"],
+    pattern: "circuit",
+    aura: "bolts"
+  },
+  {
+    id: "futur",
+    name: "Futuriste",
+    rarity: "epic",
+    desc: "Visière néon et circuits lumineux venus de l'an 3000.",
+    palette: P("#1b1f3b", "#0b0d1f", "#7df9ff", "#ff2bd6"),
+    wear: ["visor"],
+    pattern: "circuit",
+    aura: "bolts",
+    eyes: "glow"
+  },
+  {
+    id: "volcan",
+    name: "Volcan",
+    rarity: "epic",
+    desc: "Une peau de roche fissurée de lave… et des braises partout.",
+    palette: P("#3a1c1c", "#1e0e0e", "#ffb347", "#ff4d00"),
+    wear: ["horns"],
+    pattern: "cracks",
+    aura: "embers"
+  },
+  {
+    id: "glace",
+    name: "Glacé",
+    rarity: "epic",
+    desc: "Givré de la tête aux pieds. Attention, ça glisse.",
+    palette: P("#bde0fe", "#7fa7d6", "#ffffff", "#3a86ff"),
+    wear: ["beanie"],
+    pattern: "frost",
+    aura: "snow"
+  },
+  {
+    id: "or",
+    name: "Doré",
+    rarity: "legend",
+    desc: "Or massif, couronne et éclats scintillants.",
+    palette: P("#ffcc33", "#c98a10", "#fff4c2", "#8a5a00"),
+    wear: ["crown"],
+    pattern: "none",
+    aura: "sparkle",
+    special: "shimmer"
+  },
+  {
+    id: "galaxie",
+    name: "Galaxie",
+    rarity: "legend",
+    desc: "Skin spécial : un ciel étoilé vivant et une auréole cosmique.",
+    palette: P("#2a1b5c", "#120a2e", "#c8b6ff", "#ff7ad9"),
+    wear: ["halo"],
+    pattern: "galaxy",
+    aura: "cosmos",
+    eyes: "glow",
+    special: "rainbow"
+  }
+];
+function buildSkins() {
+  const out = [];
+  for (const c of CHARACTERS) {
+    const base = CLASSIC[c.id];
+    out.push({
+      id: c.id,
+      characterId: c.id,
+      name: base.name,
+      theme: "classique",
+      rarity: "common",
+      free: true,
+      palette: base.palette,
+      wear: base.wear ?? [],
+      pattern: base.pattern ?? "none",
+      aura: base.aura ?? "none",
+      desc: "La tenue d'origine."
+    });
+    for (const l of LEGACY.filter((s) => s.characterId === c.id)) {
+      out.push({
+        id: l.id,
+        characterId: c.id,
+        name: l.name,
+        theme: "collection",
+        rarity: l.rarity,
+        palette: l.palette,
+        wear: l.wear ?? [],
+        pattern: l.pattern ?? "none",
+        aura: l.aura ?? "none",
+        desc: "Édition originale.",
+        special: l.rarity === "legend" ? "shimmer" : undefined
+      });
+    }
+    for (const t of THEMES) {
+      out.push({
+        id: `${c.id}-${t.id}`,
+        characterId: c.id,
+        name: t.name,
+        theme: t.id,
+        rarity: t.rarity,
+        palette: { ...t.palette, ...t.perKind?.[c.kind] ?? {} },
+        wear: [...t.wear],
+        pattern: t.pattern,
+        aura: t.aura,
+        eyes: t.eyes,
+        special: t.special,
+        desc: t.desc
+      });
+    }
+  }
+  return out;
+}
+var SKINS = buildSkins();
 
 // src/core/rules.ts
 var RULES = {
@@ -1292,6 +1452,8 @@ class Match {
         name: slot.name,
         characterId: slot.characterId,
         skinId: slot.skinId,
+        accessoryId: slot.accessoryId,
+        trailId: slot.trailId,
         isBot: slot.isBot,
         difficulty: slot.difficulty,
         alive: true,
@@ -1930,7 +2092,7 @@ class GameRunner {
     const used = new Set(seats.map((s) => s.characterId));
     this.slots = seats.map((s, i) => {
       this.seatOf.set(s.token, i);
-      return { name: s.name, characterId: s.characterId, skinId: s.skinId, isBot: false, accountId: s.token };
+      return { name: s.name, characterId: s.characterId, skinId: s.skinId, accessoryId: s.accessoryId, trailId: s.trailId, isBot: false, accountId: s.token };
     });
     if (opts.fillBots) {
       const free = CHARACTERS.filter((c) => !used.has(c.id));
@@ -2027,6 +2189,18 @@ class GameRunner {
     for (const token of this.seatOf.keys())
       this.send(token, { t: "snap", s: snap });
   }
+  lastEmote = new Map;
+  emote(token, id) {
+    const i = this.seatOf.get(token);
+    if (i === undefined || !/^emo-[a-z0-9-]{1,24}$/.test(id) || !this.match.players[i]?.alive)
+      return;
+    const now = performance.now();
+    if (now - (this.lastEmote.get(token) ?? 0) < 1000)
+      return;
+    this.lastEmote.set(token, now);
+    for (const t of this.seatOf.keys())
+      this.send(t, { t: "emote", player: i, id });
+  }
   freeze(token) {
     const i = this.seatOf.get(token);
     if (i === undefined)
@@ -2057,6 +2231,8 @@ class Lobby {
         name: c.name,
         characterId: c.characterId,
         skinId: c.skinId,
+        accessoryId: c.accessoryId,
+        trailId: c.trailId,
         ready: mb.ready,
         connected: mb.connected,
         isHost: mb.token === r.hostToken
@@ -2238,7 +2414,7 @@ class Lobby {
       return this.error(c.token, "not_ready", why);
     const seats = r.members.map((mb) => {
       const cl = this.hooks.client(mb.token);
-      return { token: cl.token, name: cl.name, characterId: cl.characterId, skinId: cl.skinId };
+      return { token: cl.token, name: cl.name, characterId: cl.characterId, skinId: cl.skinId, accessoryId: cl.accessoryId, trailId: cl.trailId };
     });
     const taken = new Set;
     for (const s of seats) {
@@ -2270,6 +2446,9 @@ class Lobby {
   }
   input(c, seq, cmd) {
     this.roomOf(c)?.game?.input(c.token, seq, cmd);
+  }
+  emote(c, id) {
+    this.roomOf(c)?.game?.emote(c.token, id);
   }
   disconnected(c) {
     const r = this.roomOf(c);
@@ -2569,7 +2748,7 @@ function acceptUpgrade(req, socket) {
 // server/index.ts
 var PORT = Number(process.env.PORT ?? 8787);
 var HERE = dirname(fileURLToPath(import.meta.url));
-var STATIC_DIR = process.env.STATIC_DIR ? resolve(process.env.STATIC_DIR) : existsSync(join(HERE, "www", "index.html")) ? join(HERE, "www") : join(process.cwd(), "dist", "www");
+var STATIC_DIR = process.env.STATIC_DIR ? resolve(process.env.STATIC_DIR) : existsSync(join(HERE, "www", "index.html")) ? join(HERE, "www") : existsSync(join(HERE, "index.html")) ? HERE : join(process.cwd(), "dist", "www");
 var clients = new Map;
 var conns = new Map;
 var push = new PushService;
@@ -2586,6 +2765,7 @@ var lobby = new Lobby({
 var matchmaker = new Matchmaker(lobby);
 setInterval(() => matchmaker.tick(), 1000);
 var cleanName = (n) => String(n ?? "").replace(/[<>&"]/g, "").trim().slice(0, 16) || "Joueur";
+var cosm = (v) => typeof v === "string" && /^[a-z0-9-]{1,40}$/.test(v) ? v : undefined;
 var MAX_MSG_PER_SEC = 150;
 var MAX_ROOMS = 2000;
 function onMessage(conn, raw, state) {
@@ -2619,7 +2799,9 @@ function onMessage(conn, raw, state) {
     c.connected = true;
     c.name = cleanName(msg.name);
     c.characterId = String(msg.characterId || "renard");
-    c.skinId = msg.skinId ? String(msg.skinId) : undefined;
+    c.skinId = cosm(msg.skinId);
+    c.accessoryId = cosm(msg.accessoryId);
+    c.trailId = cosm(msg.trailId);
     send(token, { t: "welcome", you: c.id, v: PROTOCOL_VERSION });
     if (c.room)
       lobby.reconnect(c);
@@ -2660,7 +2842,9 @@ function onMessage(conn, raw, state) {
       break;
     case "setLook":
       c.characterId = String(msg.characterId || c.characterId);
-      c.skinId = msg.skinId ? String(msg.skinId) : undefined;
+      c.skinId = cosm(msg.skinId);
+      c.accessoryId = cosm(msg.accessoryId);
+      c.trailId = cosm(msg.trailId);
       lobby.updateProfile(c);
       break;
     case "setSettings":
@@ -2675,6 +2859,9 @@ function onMessage(conn, raw, state) {
     case "input":
       if (msg.cmd)
         lobby.input(c, Number(msg.seq) || 0, msg.cmd);
+      break;
+    case "emote":
+      lobby.emote(c, String(msg.id ?? ""));
       break;
     case "pushToken":
       push.register(c.token, msg.platform, String(msg.token));
