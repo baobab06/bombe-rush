@@ -9,4 +9,4 @@ services:
     healthCheckPath: /health
     envVars:
       - key: STATIC_DIR
-        value: ./www
+        value: .
