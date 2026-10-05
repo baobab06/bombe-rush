@@ -1,0 +1,13 @@
+# Render « Blueprint » (dépôt = projet complet, le serveur prêt à l’emploi est dans deploy/).
+services:
+  - type: web
+    name: bombe-rush
+    runtime: node
+    plan: free
+    rootDir: deploy
+    buildCommand: echo "rien à compiler"
+    startCommand: node server.mjs
+    healthCheckPath: /health
+    envVars:
+      - key: STATIC_DIR
+        value: ./www

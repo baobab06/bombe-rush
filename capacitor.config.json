@@ -1,0 +1,17 @@
+{
+  "appId": "com.bomberush.game",
+  "appName": "Bombe Rush",
+  "webDir": "dist/www",
+  "android": {
+    "backgroundColor": "#12231a"
+  },
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "LocalNotifications": {
+      "smallIcon": "ic_stat_icon",
+      "iconColor": "#ff7a1a"
+    }
+  }
+}
