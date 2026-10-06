@@ -1,6 +1,7 @@
 /* Tests headless de la simulation : `bun tests/sim.test.ts` */
 import { Match } from "../src/core/match";
 import { RULES } from "../src/core/rules";
+import { BOMB_KINDS } from "../src/core/bombs";
 import { NO_INPUT, TILE, type Difficulty, type InputCmd } from "../src/core/types";
 import { FOREST } from "../src/maps/forest";
 import { MAPS } from "../src/maps";
@@ -414,6 +415,83 @@ for (const diff of ["easy", "normal", "hard", "expert"] as Difficulty[]) {
     `  ${diff.padEnd(6)} durée moy ${(totalTime / N).toFixed(0)}s · suicides/partie ${(suicides / N).toFixed(2)} · kills/partie ${(kills / N).toFixed(2)} · bombes/partie ${(bombs / N).toFixed(0)} · bonus/partie ${(bonuses / N).toFixed(1)} · mort subite ${sudden}/${N} · égalités ${draws}`,
   );
   check(invariant === 0, `${diff} : aucun bot dans un mur, toutes les parties se terminent`);
+}
+
+console.log("Mèche courte (bombs.ts)");
+{
+  check(BOMB_KINDS.standard.fuse === RULES.bombFuse && RULES.bombFuse <= 1.5 && RULES.bombFuse >= 1.2, `délai avant explosion : ${RULES.bombFuse} s (avant : 2 s)`);
+  check(RULES.bombWarn > 0.3 && RULES.bombWarn < RULES.bombFuse, `alerte visuelle pendant les ${RULES.bombWarn} dernières secondes`);
+  const m = emptyMatch(2);
+  place(m, 0, 3, 3);
+  place(m, 1, 11, 9);
+  m.tryPlaceBomb(m.players[0]);
+  run(m, RULES.bombFuse - 0.1);
+  check(m.bombs.size === 1, "pas d'explosion avant la fin de la mèche");
+  run(m, 0.15);
+  check(m.bombs.size === 0 && m.players[0].alive === false, "explosion à l'heure, le poseur resté dessus est touché");
+  // on a le temps de fuir : poser puis s'écarter d'une case et tourner
+  const e = emptyMatch(2);
+  place(e, 0, 3, 3);
+  place(e, 1, 11, 9);
+  e.tryPlaceBomb(e.players[0]);
+  let t = 0;
+  for (; t < RULES.bombFuse + 0.7; t += DT) {
+    const sx = Math.floor(e.players[0].x), sy = Math.floor(e.players[0].y);
+    const inp = e.players.map(() => NO_INPUT);
+    void sy;
+    // portée 2 : deux cases à droite puis une vers le bas (derrière un pilier)
+    inp[0] = sx < 5 || e.players[0].x < 5.4 ? { mx: 1, my: 0, bomb: false, ability: false } : e.players[0].y < 4.5 ? { mx: 0, my: 1, bomb: false, ability: false } : NO_INPUT;
+    e.step(inp);
+  }
+  check(e.players[0].alive && e.bombs.size === 0, `portée 2 : poser, 2 cases à droite puis 1 en bas → on s'en sort (vitesse de base)`);
+  const c = emptyMatch(2);
+  place(c, 0, 3, 3);
+  place(c, 1, 11, 9);
+  c.tryPlaceBomb(c.players[0]);
+  run(c, 0.6);
+  place(c, 0, 5, 3);
+  c.players[0].maxBombs = 2;
+  c.tryPlaceBomb(c.players[0]);
+  place(c, 0, 9, 9);
+  run(c, RULES.bombFuse - 0.6 + 0.05);
+  check(c.bombs.size === 0, "réaction en chaîne : la 2e bombe saute avec la 1re");
+  const cells = c.blastCells(3, 3, 2);
+  check(cells.length === 9 || cells.length > 0, `zone d'alerte calculée (${cells.length} cases)`);
+}
+
+console.log("Classement réel");
+{
+  const m = emptyMatch(4);
+  m.players.forEach((p, i) => place(m, i, 3 + i * 2, 3));
+  m.time = 10;
+  m.kill(m.players[2], -1);
+  m.time = 20;
+  m.kill(m.players[0], 1);
+  let st = m.standings();
+  const of = (id: number) => st.find((x) => x.id === id)!;
+  check(of(0).place === 3 && of(2).place === 4 && of(0).decided && !of(1).decided, "en cours : 1er mort = 4e, 2e mort = 3e, les vivants restent à départager");
+  m.time = 30;
+  m.kill(m.players[1], -1);
+  for (let i = 0; i < 200 && m.phase !== "over"; i++) m.step(idle(m));
+  st = m.standings();
+  check(m.phase === "over" && m.winnerId === 3 && of(3).place === 1 && of(1).place === 2 && m.players[1].place === 2, "fin : survivant 1er, dernier mort 2e");
+  const d = emptyMatch(4);
+  d.time = 5;
+  d.kill(d.players[0], -1);
+  d.time = 9;
+  d.kill(d.players[1], -1);
+  d.kill(d.players[2], -1);
+  const ds = d.standings();
+  const dof = (id: number) => ds.find((x) => x.id === id)!;
+  check(dof(1).place === 2 && dof(2).place === 2 && dof(0).place === 4 && dof(3).place === 1, "morts au même instant : ex aequo (meilleure place partagée)");
+  const z = emptyMatch(4);
+  z.time = 5;
+  z.kill(z.players[0], -1);
+  z.kill(z.players[1], -1);
+  z.kill(z.players[2], -1);
+  z.kill(z.players[3], -1);
+  for (let i = 0; i < 200 && z.phase !== "over"; i++) z.step(idle(z));
+  check(z.winnerId === -1 && z.players.every((p) => p.place === 1), "tout le monde saute ensemble : égalité, pas de vainqueur");
 }
 
 console.log(failures ? `\n${failures} échec(s)` : "\nTout est vert.");

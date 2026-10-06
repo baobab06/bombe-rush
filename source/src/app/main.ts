@@ -7,8 +7,8 @@ import type { Difficulty } from "../core/types";
 import { MAPS, RANDOM_MAP } from "../maps";
 import { activeEvents } from "../meta/economy";
 import { applyMatch, xpToNext, type RewardSummary } from "../meta/progression";
-import { ONLINE_STAKE, STAKES, STAKE_ORDER, type StakeId } from "../meta/economy";
-import { beginMatch, isSettled, settleAbandoned, settleMatch, stakeOf, type CoinTransaction, type MatchContext } from "../meta/rewards";
+import { ONLINE_STAKE, STAKES, STAKE_ORDER, placeMedal, placeName, type StakeId } from "../meta/economy";
+import { beginMatch, isSettled, maxLoss, settleAbandoned, settleMatch, stakeOf, stakeTable, type CoinTransaction, type MatchContext } from "../meta/rewards";
 import type { Profile } from "../meta/profile";
 import { SaveSystem } from "../meta/save";
 import { cleanName, countOwned, dailyState, ensureMissions, equippedSkin, featured, grantStarterGift, missionsToClaim, priceOf, renameCost } from "../meta/store";
@@ -30,7 +30,7 @@ import { Modal, Wallet, fmt, type AppCtx, type ScreenId } from "./ctx";
 import { Locker } from "./locker";
 import { OnlineController } from "./online";
 import { openDaily, openMissions } from "./rewards";
-import { GameScreen, type GameResult } from "./game";
+import { GameScreen, type GameResult, type StandingRow } from "./game";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -439,8 +439,9 @@ class App implements AppCtx {
     $("heroSkin").textContent = `${skin.name} · ${c.tagline}`;
     const mode = MODES.find((m) => m.id === p.lastSetup.modeId)?.name ?? "Classique";
     const map = MAPS.find((m) => m.id === p.lastSetup.mapId)?.name ?? "Carte aléatoire";
-    const k = STAKES[(p.lastSetup.difficulty as StakeId) in STAKES ? (p.lastSetup.difficulty as StakeId) : "normal"];
-    $("playSub").innerHTML = `${mode} · ${map} · ${k.label} <span class="ps-win">+${fmt(k.win)}</span> <span class="ps-loss">−${fmt(k.loss)}</span>`;
+    const sid = (p.lastSetup.difficulty as StakeId) in STAKES ? (p.lastSetup.difficulty as StakeId) : "normal";
+    const tbl = stakeTable(sid, p.lastSetup.botCount + 1);
+    $("playSub").innerHTML = `${mode} · ${map} · ${STAKES[sid].label} <span class="ps-win">🥇 ${signed(tbl[0].amount)}</span> <span class="ps-loss">💀 ${signed(tbl[tbl.length - 1].amount)}</span>`;
     const cc = countOwned(p);
     $("collCount").textContent = `${cc.owned}/${cc.total}`;
     const deal = featured();
@@ -569,12 +570,13 @@ class App implements AppCtx {
     diff.innerHTML = "";
     for (const id of STAKE_ORDER) {
       const k = STAKES[id];
+      const tb = stakeTable(id, st.botCount + 1);
       const b = document.createElement("button");
       b.className = "stake-card" + (id === st.difficulty ? " sel" : "");
       b.dataset.v = id;
       b.setAttribute("role", "radio");
       b.setAttribute("aria-checked", String(id === st.difficulty));
-      b.innerHTML = `<b>${k.label}</b><span class="gain">+${fmt(k.win)}<i class="coin"></i></span><span class="risk">−${fmt(k.loss)}<i class="coin"></i></span>`;
+      b.innerHTML = `<b>${k.label}</b><span class="gain">🥇 ${signed(tb[0].amount)}<i class="coin"></i></span><span class="risk">💀 ${signed(tb[tb.length - 1].amount)}<i class="coin"></i></span>`;
       b.addEventListener("click", () => {
         this.click();
         st.difficulty = id as Difficulty;
@@ -582,16 +584,17 @@ class App implements AppCtx {
       });
       diff.appendChild(b);
     }
-    this.renderStakeBanner($("stakeBanner"), st.difficulty as StakeId);
+    this.renderStakeBanner($("stakeBanner"), st.difficulty as StakeId, st.botCount + 1);
   }
 
-  /** Bandeau « risque / récompense » d'une difficulté. */
-  private renderStakeBanner(el: HTMLElement, id: StakeId) {
+  /** Bandeau « risque / récompense » : pièces selon la place finale. */
+  private renderStakeBanner(el: HTMLElement, id: StakeId, players: number) {
     const k = STAKES[id];
     el.dataset.tier = id;
     el.innerHTML = `<div class="sb-title"><b>${k.label.toUpperCase()} ${k.emoji}</b><small>${k.tag}</small></div>
-      <div class="sb-line win">🏆 Victoire <b>+${fmt(k.win)}</b><i class="coin"></i></div>
-      <div class="sb-line loss">💥 Défaite <b>−${fmt(k.loss)}</b><i class="coin"></i></div>`;
+      <div class="sb-places">${stakeTable(id, players)
+        .map((r) => `<span class="sbp ${r.amount > 0 ? "up" : "down"}" title="${placeName(r.place)}"><i>${placeMedal(r.place, players)}</i><b>${signed(r.amount)}</b></span>`)
+        .join("")}</div>`;
   }
 
   // ------------------------------------------------- mises et règlement
@@ -603,6 +606,7 @@ class App implements AppCtx {
       stake: this.game.online ? ONLINE_STAKE : ((this.game.setup?.difficulty ?? "normal") as StakeId),
       modeId: this.game.session?.match.config.modeId ?? "classic",
       online: this.game.online,
+      players: this.game.session?.match.players.length ?? 4,
     };
   }
 
@@ -614,10 +618,12 @@ class App implements AppCtx {
     this.persist();
   }
 
-  /** Quitter / recommencer une partie en cours : compte comme une défaite. */
+  /** Quitter / recommencer une partie en cours : dernière place. */
   private abandonLive(): CoinTransaction | null {
     if (!this.game.live) return null;
-    const tx = settleMatch(this._profile, this.currentStake(), "abandon");
+    const ctx = this.currentStake();
+    const n = ctx.players ?? 4;
+    const tx = settleMatch(this._profile, ctx, { place: n, players: n, abandon: true });
     this.persist();
     if (tx) this.toast(`Partie abandonnée : −${fmt(-tx.applied)} 🪙`, "bad");
     return tx;
@@ -761,7 +767,7 @@ class App implements AppCtx {
       const tx = settleAbandoned(this._profile);
       this.persist();
       this.wallet.sync();
-      if (tx) this.toast(`Partie quittée en cours : défaite, −${fmt(-tx.applied)} 🪙`, "bad");
+      if (tx) this.toast(tx.outcome === "abandon" ? `Partie quittée en cours : dernière place, −${fmt(-tx.applied)} 🪙` : `Partie quittée à la fin : ${signed(tx.applied)} 🪙`, tx.applied < 0 ? "bad" : "good");
     };
     // en ligne, on laisse au joueur le temps de reprendre sa place
     if (pend.online && this.online.wasInRoom) window.setTimeout(settle, 10000);
@@ -1047,7 +1053,7 @@ class App implements AppCtx {
     };
     o.onKicked = () => {
       // exclu par l'hôte : ce n'est pas un abandon, la partie ne coûte rien
-      if (this.game.live && this.game.online) settleMatch(this._profile, this.currentStake(), "draw");
+      if (this.game.live && this.game.online) settleMatch(this._profile, this.currentStake(), { place: 1, players: 4, void: true });
       this.persist();
       this.toast("Tu as été exclu de la salle par l'hôte.", "bad");
       if (this.screen === "game" || this.screen === "pause") this.game.startDemo();
@@ -1104,8 +1110,8 @@ class App implements AppCtx {
     $("lobbyNet").className = "net " + cls;
     $("lobbyNet").textContent = label;
     $("modeHint").textContent = host ? "" : "(choisi par l'hôte)";
-    const ok = STAKES[ONLINE_STAKE];
-    $("lobbyStake").innerHTML = `· mise : <span class="ps-win">+${fmt(ok.win)}</span> / <span class="ps-loss">−${fmt(ok.loss)}</span> 🪙`;
+    const ot = stakeTable(ONLINE_STAKE, Math.max(2, r.players.length));
+    $("lobbyStake").innerHTML = `· pièces : ${ot.map((x) => `<span class="${x.amount > 0 ? "ps-win" : "ps-loss"}">${placeMedal(x.place, ot.length)} ${signed(x.amount)}</span>`).join(" ")} 🪙`;
     $("lobbyModes").querySelectorAll<HTMLButtonElement>("button").forEach((b) => {
       b.classList.toggle("sel", b.dataset.mode === r.modeId);
       b.disabled = !host;
@@ -1204,7 +1210,8 @@ class App implements AppCtx {
     this.game.setPaused(true);
     this.go("pause");
     const live = this.game.live;
-    const loss = stakeOf(this.currentStake().stake).loss;
+    const cs = this.currentStake();
+    const loss = maxLoss(cs.stake, cs.players ?? 4);
     $("btnRestart").querySelector("span")!.textContent = live ? `Recommencer (−${fmt(loss)} 🪙)` : "Recommencer";
     $("btnQuit").querySelector("span")!.textContent = live ? `Abandonner (−${fmt(loss)} 🪙)` : "Quitter la partie";
   }
@@ -1300,6 +1307,17 @@ class App implements AppCtx {
   }
 
   // ------------------------------------------------------------ résultats
+  private rankTimer = 0;
+  private rankSig = "";
+
+  /** Ambiance de l'écran de fin selon la place (colonne du barème). */
+  private tierOf(r: GameResult, tx: CoinTransaction | null): "gold" | "silver" | "bronze" | "ko" | "draw" {
+    if (r.won) return "gold";
+    if (r.draw) return "draw";
+    const col = tx?.column ?? (r.place === r.players ? 4 : r.place === 2 ? 2 : 3);
+    return col <= 1 ? "gold" : col === 2 ? "silver" : col === 3 ? "bronze" : "ko";
+  }
+
   private showResults(r: GameResult) {
     const p = this._profile;
     // le règlement a eu lieu à la fin de la partie (une seule fois) ;
@@ -1308,43 +1326,94 @@ class App implements AppCtx {
     const summary = this.lastSummary;
     const tx = this.lastTx;
     this.go("results");
+    const tier = this.tierOf(r, tx);
+    const ord = placeName(r.place);
+    const medal = r.draw ? "🤝" : placeMedal(r.place, r.players);
+    const KICK = { gold: "VICTOIRE !", silver: "BIEN JOUÉ !", bronze: "PRESQUE…", ko: "AÏE… DERNIER", draw: "ÉGALITÉ !" } as const;
+    $("resKicker").textContent = KICK[tier];
     const title = $("resTitle");
-    title.innerHTML = r.won ? 'VICTOIRE ! <span class="emo">🎉</span>' : r.draw ? "ÉGALITÉ" : 'DÉFAITE <span class="emo">💥</span>';
-    title.className = "res-title " + (r.won ? "win" : "lose");
-    const ord = r.place === 1 ? "1er" : `${r.place}e`;
-    $("resKicker").textContent = r.draw ? "Personne ne survit" : `${ord} sur ${r.players}`;
+    title.innerHTML = r.draw ? `<small>Personne ne gagne</small><span class="rt-place">${medal} ${ord} ex aequo</span>` : `<small>Tu termines</small><span class="rt-place">${medal} ${ord} !</span>`;
+    title.className = `res-title t-${tier}`;
+    const hero = $("resHero");
+    hero.className = `res-hero-col t-${tier}`;
+    void hero.offsetWidth;
+    hero.classList.add("go");
     this.resStage.set({ characterId: r.characterId, skinId: r.skinId, accessoryId: p.equipped.accessory, trailId: p.equipped.trail }, null);
-    this.resStage.setMode(r.won ? "win" : r.draw ? "idle" : "sad");
-    this.resStage.showEmote(r.won ? (p.equipped.emotes.includes("emo-party") ? "emo-party" : "emo-gg") : null);
-    const lines = summary?.lines ?? [];
-    $("resLines").classList.toggle("two", lines.length > 2);
-    $("resLines").innerHTML = lines
-      .map((l, i) => `<li style="animation-delay:${0.15 + i * 0.1}s"><span>${l.label}</span><span><em class="x">+${l.xp} XP</em></span></li>`)
-      .join("");
-    const fmtT = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
-    const stats: [string, string][] = [
-      [String(r.bombsPlaced), "Bombes"],
-      [String(r.kills), "Élim."],
-      [String(r.blocksDestroyed), "Blocs"],
-      [String(r.bonusesPicked), "Bonus"],
-      [fmtT(r.survivalTime), "Survie"],
-    ];
-    $("resStats").innerHTML = stats.map(([v, l]) => `<div><b>${v}</b><span>${l}</span></div>`).join("");
-    this.animateStake(tx);
-    if (r.won) {
-      window.setTimeout(() => {
-        if (this.screen !== "results") return;
-        const c = this.fx.center(title);
-        this.fx.confetti(c.x, c.y, 90, 1.3);
-      }, 350);
-    }
+    this.resStage.setMode(tier === "gold" ? "win" : tier === "silver" ? "happy" : tier === "bronze" ? "sad" : tier === "ko" ? "ko" : "idle");
+    this.resStage.showEmote(tier === "gold" ? (p.equipped.emotes.includes("emo-party") ? "emo-party" : "emo-gg") : tier === "ko" ? "emo-cry" : null);
+    // classement : affiché tout de suite, complété en direct si la partie continue
+    this.rankSig = "";
+    this.renderRanking(r.standings, r.players, true);
+    window.clearInterval(this.rankTimer);
+    const key = this.game.matchKey;
+    this.rankTimer = window.setInterval(() => {
+      if (this.screen !== "results" || this.game.matchKey !== key || !this.game.session) return window.clearInterval(this.rankTimer);
+      const rows = this.game.standings();
+      if (!rows.length) return;
+      this.renderRanking(rows, r.players, false);
+      if (rows.every((x) => x.decided)) window.clearInterval(this.rankTimer);
+    }, 200);
+    const mmss = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
+    $("resFacts").innerHTML = [`💣 <b>${r.bombsPlaced}</b> bombes`, `💥 <b>${r.kills}</b> élim.`, `🧱 <b>${r.blocksDestroyed}</b> blocs`, `⏱️ <b>${mmss(r.survivalTime)}</b>`].map((t) => `<span>${t}</span>`).join("");
+    this.animateStake(tx, tier);
+    // célébration selon la place
+    window.setTimeout(() => {
+      if (this.screen !== "results") return;
+      const c = this.fx.center(title);
+      const st = this.fx.center($("resStage"));
+      if (tier === "gold") {
+        this.fx.confetti(c.x, c.y, 110, 1.4);
+        window.setTimeout(() => this.screen === "results" && this.fx.confetti(st.x, st.y, 60, 1.1), 450);
+        this.fx.sparkle(st.x, st.y, 24, "#ffd23f");
+      } else if (tier === "silver") {
+        this.fx.confetti(c.x, c.y, 34, 0.9);
+        this.fx.sparkle(st.x, st.y, 14, "#dfe8ff");
+      } else if (tier === "ko") {
+        haptics.pulse(120);
+        audio.play("thud");
+      }
+    }, 350);
     for (const [i, d] of (summary?.missionsDone ?? []).entries())
       window.setTimeout(() => this.toast(`🎯 Mission terminée : ${d.label.replace("{n}", String(d.goal))} — réclame ta récompense !`, "good"), 2600 + i * 1200);
     if (summary) this.animateXp(summary);
   }
 
-  /** Bloc « mise » des résultats : gain doré ou perte rouge, animés. */
-  private animateStake(tx: CoinTransaction | null) {
+  /** Classement final : médaille, portrait, pseudo ; le joueur est mis en avant. */
+  private renderRanking(rows: StandingRow[], players: number, first: boolean) {
+    const sorted = [...rows].sort((a, b) => Number(b.decided === false) - Number(a.decided === false) || a.place - b.place || a.id - b.id);
+    const sig = sorted.map((x) => `${x.id}:${x.place}:${x.decided}`).join("|");
+    if (sig === this.rankSig) return;
+    const prev = this.rankSig;
+    this.rankSig = sig;
+    const ol = $("resRank");
+    ol.innerHTML = "";
+    const n = sorted.length;
+    sorted.forEach((x, i) => {
+      const li = document.createElement("li");
+      const tie = rows.filter((o) => o.decided && x.decided && o.place === x.place).length > 1;
+      li.className = `rk${x.me ? " me" : ""}${x.decided ? ` p${Math.min(x.place, 4)}${x.place === players ? " last" : ""}` : " pending"}`;
+      // apparition du dernier vers le premier, pour le suspense
+      if (first) li.style.animationDelay = `${0.12 + (n - 1 - i) * 0.12}s`;
+      else if (prev && !prev.includes(`${x.id}:${x.place}:${x.decided}`)) li.classList.add("flip");
+      const medal = !x.decided ? "⏳" : placeMedal(x.place, players);
+      const face = document.createElement("canvas");
+      face.className = "rk-face";
+      face.width = face.height = 64;
+      drawPortrait(face, x.characterId, x.skinId, 1, 0, x.accessoryId ?? null, 0.95);
+      li.innerHTML = `<span class="rk-medal">${medal}</span>`;
+      li.appendChild(face);
+      li.insertAdjacentHTML(
+        "beforeend",
+        `<span class="rk-name"><b>${esc(x.me ? this._profile.name : x.name)}</b>${x.me ? '<em class="rk-you">TOI</em>' : ""}</span>
+        <span class="rk-place">${x.decided ? `${placeName(x.place)}${tie ? " ex aequo" : ""}` : "en jeu…"}</span>
+        <span class="rk-kills" title="Éliminations">💥 ${x.kills}</span>`,
+      );
+      ol.appendChild(li);
+    });
+  }
+
+  /** Bloc « pièces » des résultats : gain doré ou perte rouge, animés. */
+  private animateStake(tx: CoinTransaction | null, tier: string) {
     const box = $("resStake");
     const delta = $("resDelta");
     const note = $("resNote");
@@ -1361,11 +1430,12 @@ class App implements AppCtx {
     const k = stakeOf(tx.stake);
     const gain = tx.requested > 0;
     const kind = gain ? "win" : tx.requested < 0 ? "loss" : "neutral";
-    box.className = `stake-result ${kind}`;
+    box.className = `stake-result ${kind} t-${tier}`;
     box.dataset.tier = tx.stake;
-    $("resDiff").innerHTML = `Difficulté : <b>${k.label.toUpperCase()} ${k.emoji}</b>${this.game.online ? " · en ligne" : ""}`;
-    mods.innerHTML = gain
-      ? [`<span>Mise ${k.label} <b>+${fmt(tx.base)}</b></span>`, ...tx.modifiers.map((m) => `<span>${m.icon ?? "✨"} ${m.label} <b>+${fmt(m.amount)}</b></span>`)].join("")
+    const placeLbl = tx.outcome === "draw" ? "égalité" : tx.outcome === "abandon" ? "abandon" : `${placeName(tx.place)} place`;
+    $("resDiff").innerHTML = `${k.label.toUpperCase()} ${k.emoji} · <b>${placeLbl}</b>${this.game.online ? " · en ligne" : ""}`;
+    mods.innerHTML = tx.modifiers.length
+      ? [`<span>Barème <b>${signed(tx.base)}</b></span>`, ...tx.modifiers.map((m) => `<span>${m.icon ?? "✨"} ${m.label} <b>+${fmt(m.amount)}</b></span>`)].join("")
       : "";
     note.textContent =
       kind === "loss" && tx.applied !== tx.requested
@@ -1373,8 +1443,10 @@ class App implements AppCtx {
         : kind === "loss"
           ? `Ton solde passe de ${fmt(tx.before)} à ${fmt(tx.after)} 🪙`
           : kind === "win"
-            ? "Ajouté à ton solde (boutique, personnage…)"
-            : "Égalité : ni gain ni perte";
+            ? tx.outcome === "draw"
+              ? "Égalité pour la 1re place : récompense de 2e"
+              : "Ajouté à ton solde (boutique, personnage…)"
+            : "Ni gain ni perte";
     // le compteur part de l'ancien solde
     document.querySelectorAll<HTMLElement>("[data-coins]").forEach((el) => (el.textContent = fmt(tx.before)));
     const sign = kind === "loss" ? "−" : "+";
@@ -1383,7 +1455,8 @@ class App implements AppCtx {
     box.classList.remove("go");
     void box.offsetWidth;
     box.classList.add("go");
-    const t0 = performance.now() + 650;
+    // laisse le classement apparaître d'abord
+    const t0 = performance.now() + 900;
     const tick = (now: number) => {
       if (this.screen !== "results") return;
       const kk = Math.max(0, Math.min(1, (now - t0) / 650));
@@ -1392,11 +1465,11 @@ class App implements AppCtx {
       if (kind === "win") {
         audio.play("buy");
         const c = this.fx.center(delta);
-        this.fx.sparkle(c.x, c.y, 18, "#ffd23f");
+        this.fx.sparkle(c.x, c.y, tier === "gold" ? 26 : 14, "#ffd23f");
         this.wallet.earn(this.fx, delta, tx.after - tx.before, tx.before);
       } else if (kind === "loss") {
         audio.play("deny");
-        haptics.pulse(60);
+        haptics.pulse(tier === "ko" ? 90 : 50);
         this.wallet.lose(this.fx, delta, tx.before - tx.after, tx.before);
       } else this.wallet.sync();
     };
@@ -1428,14 +1501,23 @@ class App implements AppCtx {
           void bar.offsetWidth;
           bar.style.transition = "";
           bar.style.width = `${(s.xpAfter / xpToNext(s.levelAfter)) * 100}%`;
-          txt.textContent = `${s.xpAfter} / ${xpToNext(s.levelAfter)} XP`;
+          txt.textContent = `+${s.xp} XP · ${s.xpAfter} / ${xpToNext(s.levelAfter)}`;
         }, 950);
       } else {
         bar.style.width = `${(s.xpAfter / xpToNext(s.levelAfter)) * 100}%`;
-        txt.textContent = `${s.xpAfter} / ${xpToNext(s.levelAfter)} XP`;
+        txt.textContent = `+${s.xp} XP · ${s.xpAfter} / ${xpToNext(s.levelAfter)}`;
       }
     }, 450);
   }
+}
+
+/** « +70 » / « −25 » (vrai signe moins) */
+function esc(t: string): string {
+  return t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+}
+
+function signed(n: number): string {
+  return n > 0 ? `+${fmt(n)}` : n < 0 ? `−${fmt(-n)}` : "0";
 }
 
 const app = new App();

@@ -42,23 +42,51 @@ export const FEATURED = {
 
 // ------------------------------------------------ RISQUE / RÉCOMPENSE
 /**
- * Mise de chaque difficulté : pièces gagnées en cas de victoire, perdues en
- * cas de défaite. C'EST LE SEUL ENDROIT À MODIFIER pour changer les gains.
+ * BARÈME DE FIN DE PARTIE — C'EST LE SEUL ENDROIT À MODIFIER.
+ *
+ * Pièces gagnées (+) ou perdues (−) selon la PLACE FINALE du joueur, pour
+ * chaque difficulté : [1er, 2e, 3e, 4e].
  * Ajouter une difficulté = ajouter une ligne (et son profil de bot dans
  * src/ai/bot.ts).
  */
 export const STAKES = {
-  easy: { label: "Facile", emoji: "🟢", tag: "Tranquille", win: 50, loss: 10 },
-  normal: { label: "Normal", emoji: "🔵", tag: "Équilibré", win: 100, loss: 20 },
-  hard: { label: "Difficile", emoji: "🔥", tag: "Gros gains", win: 175, loss: 35 },
-  expert: { label: "Expert", emoji: "💀", tag: "Tout ou rien", win: 300, loss: 60 },
+  easy: { label: "Facile", emoji: "🟢", tag: "Tranquille", places: [50, 20, -10, -25] },
+  normal: { label: "Normal", emoji: "🔵", tag: "Équilibré", places: [100, 40, -15, -30] },
+  hard: { label: "Difficile", emoji: "🔥", tag: "Gros gains", places: [175, 70, -25, -50] },
+  expert: { label: "Expert", emoji: "💀", tag: "Tout ou rien", places: [300, 120, -50, -100] },
 } as const;
 export type StakeId = keyof typeof STAKES;
 export const STAKE_ORDER: StakeId[] = ["easy", "normal", "hard", "expert"];
-/** Parties en ligne entre amis : mise de cette difficulté. */
+/** Parties en ligne entre amis : barème de cette difficulté. */
 export const ONLINE_STAKE: StakeId = "normal";
-/** Égalité (personne ne survit) : ni gain ni perte. */
-export const DRAW_COINS = 0;
+
+/**
+ * Parties à moins de 4 joueurs : quelle colonne du barème s'applique à
+ * chaque place (1 = colonne « 1er », 4 = colonne « 4e »).
+ * Le dernier prend toujours la perte maximale.
+ * Plus de 4 joueurs : le 1er gagne le gros lot, le dernier perd le maximum,
+ * la 1re moitié du classement touche la colonne « 2e », le reste la « 3e ».
+ */
+export const PLACE_COLUMNS: Record<number, number[]> = {
+  2: [1, 4],
+  3: [1, 2, 4],
+  4: [1, 2, 3, 4],
+};
+/**
+ * Égalité pour la 1re place (les derniers sautent en même temps, ou temps
+ * écoulé avec plusieurs survivants) : personne ne gagne, les ex aequo
+ * touchent la colonne « 2e ».
+ */
+export const DRAW_COLUMN = 2;
+/** Partie annulée (exclu par l'hôte…) : ni gain ni perte. */
+export const VOID_COINS = 0;
+
+export const PLACE_NAMES = ["1er", "2e", "3e", "4e"];
+export const PLACE_MEDALS = ["🥇", "🥈", "🥉", "💀"];
+/** « 1er », « 2e »… (au-delà de 4 aussi) */
+export const placeName = (place: number) => (place === 1 ? "1er" : `${place}e`);
+/** médaille d'une place (le dernier a toujours 💀) */
+export const placeMedal = (place: number, players: number) => (place >= players && players > 1 ? "💀" : PLACE_MEDALS[Math.min(place, 3) - 1] ?? "💀");
 
 /** Expérience (progression de niveau) — indépendante des pièces. */
 export const MATCH_XP = { win: 80, draw: 40, participation: 20, second: 15, perKill: 15 };

@@ -112,6 +112,10 @@ export class Match {
     this.mode.onStart?.(this);
   }
 
+  get isOver(): boolean {
+    return this.phase === "over";
+  }
+
   get timeLeft(): number {
     return Math.max(0, RULES.matchDuration - this.time);
   }
@@ -264,6 +268,29 @@ export class Match {
     // ordre déterministe : par id
     toExplode.sort((a, b) => a.id - b.id);
     for (const b of toExplode) if (this.bombs.has(b.id)) this.detonate(b);
+  }
+
+  /**
+   * Cases que touchera l'explosion d'une bombe posée en (tx, ty) — mêmes
+   * règles que detonate(), sans rien modifier (alerte visuelle, IA…).
+   */
+  blastCells(tx: number, ty: number, range: number): number[] {
+    const g = this.grid;
+    const out = [g.idx(tx, ty)];
+    for (const [dx, dy] of DIRS) {
+      for (let i = 1; i <= range; i++) {
+        const x = tx + dx * i;
+        const y = ty + dy * i;
+        const t = g.tile(x, y);
+        if (t === TILE.WALL) break;
+        const idx = g.idx(x, y);
+        out.push(idx);
+        if (t === TILE.BLOCK || g.bombAt[idx] >= 0) break;
+        const bo = g.bonusAt[idx];
+        if (bo >= 0 && (this.bonuses.get(bo)?.invuln ?? 1) <= 0) break;
+      }
+    }
+    return out;
   }
 
   /** Fait exploser une bombe et, en chaîne, toutes celles touchées. */
@@ -642,23 +669,33 @@ export class Match {
     }
   }
 
+  /**
+   * Classement RÉEL de la partie (pas l'ordre d'affichage) : les survivants
+   * d'abord, puis les morts du dernier au premier tombé. Morts au même
+   * instant = ex aequo (ils partagent la meilleure des deux places).
+   * `decided` : place définitive (un joueur encore en vie ne l'est qu'à la fin).
+   */
+  standings(): { id: number; place: number; alive: boolean; decided: boolean }[] {
+    const over = this.phase === "over";
+    const ranked = [...this.players].sort((a, b) => {
+      if (a.alive !== b.alive) return a.alive ? -1 : 1;
+      if (a.alive) return a.id - b.id;
+      return b.deathTime - a.deathTime || a.id - b.id;
+    });
+    let place = 1;
+    return ranked.map((p, i) => {
+      const prev = ranked[i - 1];
+      if (i > 0 && !(prev.alive && p.alive) && !(!prev.alive && !p.alive && prev.deathTime === p.deathTime)) place = i + 1;
+      return { id: p.id, place, alive: p.alive, decided: over || !p.alive };
+    });
+  }
+
   private finish(): void {
     this.phase = "over";
     const alive = this.players.filter((p) => p.alive);
     for (const p of alive) p.stats.survivalTime = this.time;
     this.winnerId = alive.length === 1 ? alive[0].id : -1;
-    // places : vivants d'abord, puis par ordre de mort inverse (ex aequo partagés)
-    const ranked = [...this.players].sort((a, b) => {
-      if (a.alive !== b.alive) return a.alive ? -1 : 1;
-      return b.deathTime - a.deathTime;
-    });
-    let place = 1;
-    ranked.forEach((p, i) => {
-      const prev = ranked[i - 1];
-      if (i > 0 && !(prev.alive && p.alive) && !(!prev.alive && !p.alive && prev.deathTime === p.deathTime))
-        place = i + 1;
-      p.place = place;
-    });
+    for (const st of this.standings()) this.players[st.id].place = st.place;
     this.events.push({ t: "matchEnd", winner: this.winnerId });
   }
 }

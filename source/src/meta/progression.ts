@@ -1,6 +1,6 @@
 import { MATCH_XP, type MissionDef } from "./economy";
 import type { Profile } from "./profile";
-import { settleMatch, type CoinTransaction, type MatchContext, type Outcome } from "./rewards";
+import { settleMatch, type CoinTransaction, type MatchContext, type Placement } from "./rewards";
 import { progressMissions } from "./store";
 
 /** XP nécessaire pour passer du niveau `level` au suivant. */
@@ -50,8 +50,9 @@ export function computeXp(o: MatchOutcome): XpLine[] {
   return lines;
 }
 
-export function outcomeOf(o: MatchOutcome): Outcome {
-  return o.won ? "win" : o.draw ? "draw" : "loss";
+/** Place finale (barème des pièces) à partir du résultat de la partie. */
+export function placementOf(o: MatchOutcome): Placement {
+  return { place: o.won ? 1 : Math.max(1, o.place), players: o.players, draw: o.draw };
 }
 
 /**
@@ -59,7 +60,7 @@ export function outcomeOf(o: MatchOutcome): Outcome {
  * Renvoie null si cette partie a déjà été réglée (aucun double gain possible).
  */
 export function applyMatch(p: Profile, o: MatchOutcome, ctx: MatchContext, now = new Date()): RewardSummary | null {
-  const tx = settleMatch(p, ctx, outcomeOf(o), now);
+  const tx = settleMatch(p, ctx, placementOf(o), now);
   if (!tx) return null;
   const lines = computeXp(o);
   const xp = lines.reduce((a, l) => a + l.xp, 0);

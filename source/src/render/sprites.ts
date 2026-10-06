@@ -227,22 +227,42 @@ export function drawShield(ctx: Ctx, cx: number, cy: number, s: number, t: numbe
 }
 
 // ---------------------------------------------------------------- bombe
-export function drawBomb(ctx: Ctx, cx: number, cy: number, s: number, fuseRatio: number, t: number, spawnT: number) {
+export function drawBomb(ctx: Ctx, cx: number, cy: number, s: number, fuseRatio: number, t: number, spawnT: number, fuseLeft = 9, warn = 0.55) {
   // pulsation qui s'accélère quand la mèche raccourcit
   const urgency = 1 - fuseRatio;
-  const freq = 5 + urgency * 22;
-  const pulse = 1 + Math.sin(t * freq) * (0.04 + urgency * 0.06);
+  // phase d'alerte : 0 → 1 pendant les dernières `warn` secondes
+  const alarm = fuseLeft < warn ? 1 - Math.max(0, fuseLeft) / warn : 0;
+  const freq = 5 + urgency * 22 + alarm * 26;
+  const pulse = 1 + Math.sin(t * freq) * (0.04 + urgency * 0.06) + alarm * 0.14;
   const pop = spawnT < 0.15 ? 0.6 + (spawnT / 0.15) * 0.4 + Math.sin((spawnT / 0.15) * Math.PI) * 0.2 : 1;
   const r = s * 0.33 * pulse * pop;
+  // la bombe tremble juste avant d'exploser
+  if (alarm > 0) {
+    cx += (Math.random() - 0.5) * s * 0.06 * alarm;
+    cy += (Math.random() - 0.5) * s * 0.04 * alarm;
+  }
   const by = cy + s * 0.04;
   ctx.fillStyle = "rgba(0,0,0,0.25)";
   ctx.beginPath();
   ctx.ellipse(cx, cy + s * 0.32, s * 0.3, s * 0.09, 0, 0, Math.PI * 2);
   ctx.fill();
-  const flash = fuseRatio < 0.3 && Math.sin(t * freq) > 0.3;
+  // halo rouge d'alerte
+  if (alarm > 0) {
+    const hr = r * (1.6 + alarm * 0.6);
+    const hg = ctx.createRadialGradient(cx, by, r * 0.6, cx, by, hr);
+    hg.addColorStop(0, `rgba(255,60,40,${0.55 * alarm * (0.7 + 0.3 * Math.sin(t * 40))})`);
+    hg.addColorStop(1, "rgba(255,60,40,0)");
+    ctx.fillStyle = hg;
+    ctx.beginPath();
+    ctx.arc(cx, by, hr, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // alerte : toujours rouge, éclairs blancs de plus en plus fréquents
+  const flash = alarm > 0 || (fuseRatio < 0.45 && Math.sin(t * freq) > 0.3);
+  const white = alarm > 0.2 && Math.sin(t * freq) > 0.55 - alarm * 0.4;
   const g = ctx.createRadialGradient(cx - r * 0.35, by - r * 0.4, r * 0.1, cx, by, r);
-  g.addColorStop(0, flash ? "#ff8a7a" : "#5b5f8a");
-  g.addColorStop(1, flash ? "#c2182b" : "#1b1c33");
+  g.addColorStop(0, white ? "#ffffff" : flash ? "#ff8a7a" : "#5b5f8a");
+  g.addColorStop(1, white ? "#ffb0a0" : flash ? "#c2182b" : "#1b1c33");
   ctx.fillStyle = g;
   ctx.strokeStyle = "#0e0f1d";
   ctx.lineWidth = Math.max(1.2, s * 0.045);
@@ -269,7 +289,7 @@ export function drawBomb(ctx: Ctx, cx: number, cy: number, s: number, fuseRatio:
   ctx.quadraticCurveTo(fx0 + s * 0.02, fy1, fx1, fy1);
   ctx.stroke();
   // étincelle
-  const sp = s * (0.07 + Math.random() * 0.04);
+  const sp = s * (0.07 + Math.random() * 0.04) * (1 + alarm * 0.9);
   ctx.fillStyle = "#fff6b0";
   ctx.beginPath();
   ctx.arc(fx1, fy1, sp * 0.6, 0, Math.PI * 2);

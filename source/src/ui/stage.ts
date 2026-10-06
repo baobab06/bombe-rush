@@ -24,7 +24,7 @@ export const RARITY_COLOR: Record<Rarity, string> = {
   legend: "#ffc83d",
 };
 
-type Mode = "idle" | "run" | "win" | "sad";
+type Mode = "idle" | "run" | "win" | "sad" | "happy" | "ko";
 
 export class Stage {
   private P = new Particles();
@@ -210,6 +210,18 @@ export class Stage {
       } else if (r < 0.85 && this.idleEmotes.length) this.showEmote(this.idleEmotes[Math.floor(Math.random() * this.idleEmotes.length)]);
       else this.face = 0;
     }
+    // 2e place : petits sauts de joie ; dernière place : sonné, étoiles
+    if (this.mode === "happy" && t > this.nextAct) {
+      this.nextAct = t + 1.6 + Math.random() * 0.8;
+      this.act = Math.random() < 0.35 ? "wave" : "hop";
+      this.actAt = t;
+    }
+    if (this.mode === "ko" && t > this.nextAct) {
+      this.nextAct = t + 1.3;
+      this.flashAt = -10;
+      this.actAt = t;
+      for (let k = 0; k < 3; k++) this.P.spawn("star", (Math.random() - 0.5) * 0.6, -0.2, { z: 1.2 + Math.random() * 0.3, vx: (Math.random() - 0.5) * 0.8, vz: 0.4, life: 0.9, size: 0.09, color: "#ffe066" });
+    }
     if (this.act && sinceAct > 1.2) this.act = null;
     const running = this.mode === "run";
     const pose: CharPose = {
@@ -220,6 +232,7 @@ export class Stage {
       t,
       expr: this.expr(),
       celebrate: this.mode === "win" || this.act === "hop",
+      hurt: this.mode === "ko" && sinceAct < 0.45 ? sinceAct / 0.45 : undefined,
       wave: this.act === "wave" ? Math.min(1, sinceAct / 1.2) : undefined,
     };
     if (this.act === "wave") pose.wave = Math.min(0.999, sinceAct / 1.2);
@@ -247,7 +260,8 @@ export class Stage {
 
   private expr(): Expr {
     if (this.mode === "win") return "happy";
-    if (this.mode === "sad") return "dizzy";
+    if (this.mode === "sad" || this.mode === "ko") return "dizzy";
+    if (this.mode === "happy") return "happy";
     if (this.act === "wave" || this.act === "hop") return "happy";
     return "normal";
   }

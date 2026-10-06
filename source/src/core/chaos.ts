@@ -1,4 +1,5 @@
 import type { Match } from "./match";
+import { BOMB_KINDS } from "./bombs";
 import { RULES } from "./rules";
 import { TILE } from "./types";
 
@@ -57,7 +58,7 @@ export const CHAOS_EVENTS: ChaosEventDef[] = [
       if (run.data.next > 0) return;
       run.data.next = 0.38;
       const [c] = m.randomFreeCells(1, true);
-      if (c) m.spawnNeutralBomb(c[0], c[1], RULES.bombFuse, 2);
+      if (c) m.spawnNeutralBomb(c[0], c[1], BOMB_KINDS.rain.fuse, 2);
     },
   },
   {

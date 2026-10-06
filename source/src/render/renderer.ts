@@ -70,6 +70,8 @@ export class Renderer {
   private groundKey = "";
   private time = 0;
   private shake = 0;
+  /** cases menacées par une explosion imminente (index → intensité 0..1) */
+  private warnHeat = new Map<number, number>();
   private flash = 0;
   private bombBorn = new Map<number, number>();
   private dying: Dying[] = [];
@@ -255,10 +257,49 @@ export class Renderer {
     }
   }
 
+  /** Zone de l'explosion imminente : cases rouges qui pulsent de plus en plus fort. */
+  private drawBlastWarnings(m: Match, s: number, t: number) {
+    const ctx = this.ctx;
+    const g = m.grid;
+    const warn = RULES.bombWarn;
+    const heat = this.warnHeat;
+    heat.clear();
+    for (const b of m.bombs.values()) {
+      if (b.fuse > warn) continue;
+      const k = 1 - Math.max(0, b.fuse) / warn;
+      for (const i of m.blastCells(b.tx, b.ty, b.range)) heat.set(i, Math.max(heat.get(i) ?? 0, k));
+    }
+    if (!heat.size) return;
+    const pulse = 0.5 + 0.5 * Math.sin(t * 28);
+    const pad = s * 0.05;
+    for (const [i, k] of heat) {
+      const x = (i % g.w) * s;
+      const y = Math.floor(i / g.w) * s;
+      ctx.fillStyle = `rgba(255,30,30,${0.35 + k * 0.3 + pulse * 0.12})`;
+      ctx.beginPath();
+      ctx.roundRect(x + pad, y + pad, s - pad * 2, s - pad * 2, s * 0.16);
+      ctx.fill();
+      ctx.strokeStyle = `rgba(255,240,230,${0.45 + k * 0.5})`;
+      ctx.lineWidth = Math.max(1.5, s * 0.05);
+      ctx.stroke();
+    }
+  }
+
+  /** Teinte rouge sur un bloc pris dans une explosion imminente. */
+  private warnTint(i: number, X: number, Y: number, s: number) {
+    const k = this.warnHeat.get(i);
+    if (k === undefined) return;
+    const pulse = 0.5 + 0.5 * Math.sin(this.time * 28);
+    this.ctx.fillStyle = `rgba(255,30,30,${0.22 + k * 0.25 + pulse * 0.1})`;
+    this.ctx.beginPath();
+    this.ctx.roundRect(X + s * 0.06, Y - s * 0.12, s * 0.88, s * 1.06, s * 0.16);
+    this.ctx.fill();
+  }
+
   /** Une bombe va bientôt sauter tout près : petite tête inquiète. */
   private inDanger(m: Match, x: number, y: number): boolean {
     for (const b of m.bombs.values()) {
-      if (b.fuse > 1.1) continue;
+      if (b.fuse > RULES.bombWarn + 0.35) continue;
       const dx = Math.abs(b.tx + 0.5 - x);
       const dy = Math.abs(b.ty + 0.5 - y);
       if ((dx < 0.6 && dy <= b.range + 0.5) || (dy < 0.6 && dx <= b.range + 0.5)) return true;
@@ -444,6 +485,9 @@ export class Renderer {
       ctx.fill();
     }
 
+    // alerte « la bombe va sauter » : la zone de l'explosion rougit au sol
+    this.drawBlastWarnings(m, s, t);
+
     // index des joueurs par rangée (position interpolée)
     const px = (i: number) => (prev ? prev[i * 2] + (m.players[i].x - prev[i * 2]) * alpha : m.players[i].x);
     const py = (i: number) => (prev ? prev[i * 2 + 1] + (m.players[i].y - prev[i * 2 + 1]) * alpha : m.players[i].y);
@@ -485,6 +529,7 @@ export class Renderer {
           } else art.pillar(ctx, X, Y, s, x, y);
         } else if (tile === TILE.BLOCK) {
           art.block(ctx, X, Y, s, x, y);
+          this.warnTint(i, X, Y, s);
         }
         const bonusId = g.bonusAt[i];
         if (bonusId >= 0) {
@@ -496,7 +541,7 @@ export class Renderer {
           const b = m.bombs.get(bombId);
           if (b) {
             if (!this.bombBorn.has(b.id)) this.bombBorn.set(b.id, t);
-            drawBomb(ctx, X + s / 2, Y + s / 2, s, b.fuse / b.fuseTotal, t, t - this.bombBorn.get(b.id)!);
+            drawBomb(ctx, X + s / 2, Y + s / 2, s, b.fuse / b.fuseTotal, t, t - this.bombBorn.get(b.id)!, b.fuse, RULES.bombWarn);
           }
         }
       }

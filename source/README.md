@@ -14,8 +14,10 @@ Render redéploie tout seul en 2-3 minutes.
 ### Où changer les chiffres (sans toucher au reste)
 | Quoi | Fichier |
 |---|---|
-| **Mises par difficulté** (victoire + / défaite −) : `STAKES` | `src/meta/economy.ts` |
-| Bonus de victoire (événements, séries, 1re victoire du jour…) : `WIN_MODIFIERS` | `src/meta/rewards.ts` |
+| **Pièces selon la place finale** (1er, 2e, 3e, 4e) par difficulté : `STAKES` | `src/meta/economy.ts` |
+| Parties à 2, 3 ou 5+ joueurs : quelle colonne du barème pour chaque place (`PLACE_COLUMNS`), égalité (`DRAW_COLUMN`) | `src/meta/economy.ts` |
+| Bonus sur les gains (événements ×2, séries, 1re victoire du jour…) : `GAIN_MODIFIERS` | `src/meta/rewards.ts` |
+| **Délai avant explosion des bombes** et alerte (`fuse`, `warn`), futurs types de bombes : `BOMB_KINDS` | `src/core/bombs.ts` |
 | Prix par rareté, gains de fin de partie, récompense du jour, missions, événements, promo du jour | `src/meta/economy.ts` |
 | Personnages et skins (un thème = une entrée dans `THEMES`, créé pour tous les persos) | `src/core/characters.ts` |
 | Accessoires, effets (traînées), emotes | `src/core/cosmetics.ts` |
@@ -329,8 +331,8 @@ Conseils pour l'APK :
 
 ## Équilibrage rapide
 
-Tout est dans `src/core/rules.ts` (durée de mèche, portée de départ, vitesse,
-durée du bouclier, mort subite…) et `src/maps/forest.ts` (densité de blocs,
+Tout est dans `src/core/rules.ts` (portée de départ, vitesse,
+durée du bouclier, mort subite…), la mèche des bombes dans `src/core/bombs.ts` et `src/maps/forest.ts` (densité de blocs,
 probabilité et répartition des bonus). Les profils des bots sont en tête de
 `src/ai/bot.ts`.
 

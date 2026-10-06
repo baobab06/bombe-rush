@@ -53,7 +53,7 @@ export interface Profile {
   /** parties déjà réglées (anti double récompense) */
   settled: string[];
   /** partie commencée mais pas encore réglée (abandon si on quitte) */
-  pending: { matchId: string; stake: "easy" | "normal" | "hard" | "expert"; modeId: string; online?: boolean; startedAt: number; ending?: boolean } | null;
+  pending: { matchId: string; stake: "easy" | "normal" | "hard" | "expert"; modeId: string; online?: boolean; players?: number; startedAt: number; ending?: boolean } | null;
   /** dernières transactions de pièces (historique) */
   ledger: import("./rewards").CoinTransaction[];
   winStreak: number;

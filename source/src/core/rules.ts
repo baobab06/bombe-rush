@@ -1,4 +1,6 @@
 /** Réglages de gameplay centralisés : on équilibre le jeu ici, nulle part ailleurs. */
+import { BOMB_KINDS, BOMB_WARN } from "./bombs";
+
 export const RULES = {
   tickRate: 60,
   countdown: 3, // secondes avant le départ
@@ -17,7 +19,10 @@ export const RULES = {
   startRange: 1, // la bombe ne touche qu'une case autour d'elle au début
   maxRange: 8,
 
-  bombFuse: 2.0, // délai avant explosion (s)
+  /** délai avant explosion (s) : se règle dans src/core/bombs.ts */
+  bombFuse: BOMB_KINDS.standard.fuse,
+  /** alerte « elle va sauter » (s avant l'explosion) */
+  bombWarn: BOMB_WARN,
   fireDuration: 0.55,
 
   shieldDuration: 3,

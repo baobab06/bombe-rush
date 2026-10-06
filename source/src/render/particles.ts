@@ -128,6 +128,13 @@ export class Particles {
         vz: 0.8 + Math.random(), vx: (Math.random() - 0.5) * 0.6, life: 0.9 + Math.random() * 0.5, size: 0.05, color: "#ffb347",
       });
     this.spawn("ring", x, y, { life: 0.35, size: 0.3, color: "#fff6c8" });
+    // onde de choc plus large + éclair blanc au centre
+    this.spawn("ring", x, y, { life: 0.5, size: 0.62, color: "#ffb347" });
+    this.spawn("glow", x, y, { z: 0.2, life: 0.2, size: 0.55, color: "#fffbe0" });
+    for (let i = 0; i < 4; i++)
+      this.spawn("ember", x + (Math.random() - 0.5) * 0.9, y + (Math.random() - 0.5) * 0.9, {
+        vz: 1.4 + Math.random() * 1.2, vx: (Math.random() - 0.5) * 1.6, vy: (Math.random() - 0.5) * 1.6, life: 0.6 + Math.random() * 0.4, size: 0.06, color: "#ff6a2a",
+      });
     this.mark("scorch", x, y, { life: 6, size: 0.42 + Math.random() * 0.08 });
   }
 

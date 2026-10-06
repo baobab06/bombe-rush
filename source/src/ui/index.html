@@ -270,27 +270,28 @@
   <!-- Résultats -->
   <section class="screen" id="results" hidden>
     <div class="results">
-      <div class="res-hero-col">
-        <p class="res-kicker" id="resKicker">1er sur 4</p>
-        <h2 class="res-title" id="resTitle">VICTOIRE !</h2>
+      <div class="res-hero-col" id="resHero">
+        <p class="res-kicker" id="resKicker">Victoire !</p>
+        <h2 class="res-title" id="resTitle"><small>Tu termines</small><span class="rt-place">1er !</span></h2>
         <canvas class="stage" id="resStage"></canvas>
         <div class="wallet res-wallet" data-wallet><i class="coin"></i><b data-coins>0</b></div>
       </div>
       <div class="res-side panel">
+        <h3 class="res-rank-title">🏆 Classement final</h3>
+        <ol class="res-rank" id="resRank"></ol>
         <div class="stake-result" id="resStake">
           <span class="sr-diff" id="resDiff"></span>
           <div class="sr-amount"><i class="coin"></i><span id="resDelta">+0</span></div>
           <div class="sr-mods" id="resMods"></div>
           <p class="sr-note" id="resNote"></p>
         </div>
-        <ul class="res-lines" id="resLines"></ul>
         <div class="res-level">
           <span class="lvl" id="resLevel">1</span>
           <span class="xpbar big"><i id="resXpBar"></i></span>
           <span class="xp-text" id="resXpText"></span>
         </div>
         <div class="levelup" id="resLevelUp" hidden>NIVEAU 2 !</div>
-        <div class="res-stats" id="resStats"></div>
+        <p class="res-facts" id="resFacts"></p>
         <div class="res-actions">
           <button class="btn btn-ghost" id="btnMenu"><span>Menu</span></button>
           <button class="btn btn-yellow" id="btnAgain"><span>REJOUER</span></button>

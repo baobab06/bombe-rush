@@ -36,6 +36,21 @@ function randomLook(characterId: string, flashy: boolean) {
   };
 }
 
+/** Une ligne du classement final (calculé par la simulation, pas l'affichage). */
+export interface StandingRow {
+  id: number;
+  name: string;
+  characterId: string;
+  skinId?: string;
+  accessoryId?: string;
+  place: number;
+  /** place définitive (un joueur encore en vie attend la fin de la partie) */
+  decided: boolean;
+  alive: boolean;
+  kills: number;
+  me: boolean;
+}
+
 export interface GameResult {
   won: boolean;
   draw: boolean;
@@ -49,6 +64,8 @@ export interface GameResult {
   characterId: string;
   skinId?: string;
   modeId: string;
+  /** classement de tous les joueurs au moment du résultat */
+  standings: StandingRow[];
 }
 
 
@@ -237,6 +254,10 @@ export class GameScreen {
         steps++;
       }
       if (steps === 6) this.acc = 0;
+      // joueur éliminé, écran de résultats affiché : en solo, la fin de la
+      // partie entre bots est jouée en accéléré (sans son) pour établir le
+      // vrai classement final en une ou deux secondes
+      if (this.finished && !this.online && m.phase !== "over") for (let k = 0; k < 90 && !m.isOver; k++) s.step(NO_INPUT);
       this.afterSteps(dt);
     }
     const frozen = this.paused && !this.online;
@@ -280,13 +301,14 @@ export class GameScreen {
       if (cd > 0) audio.play("count");
       this.chaosCount = cd;
     }
-    // tic-tac quand une bombe est sur le point d'exploser
+    // tic-tac quand une bombe va exploser : de plus en plus rapide
     this.tickTimer -= dt;
-    let urgent = false;
-    for (const b of m.bombs.values()) if (b.fuse < 1.1) urgent = true;
-    if (urgent && this.tickTimer <= 0) {
-      audio.play("tick", 0.7);
-      this.tickTimer = 0.18;
+    let soonest = Infinity;
+    for (const b of m.bombs.values()) soonest = Math.min(soonest, b.fuse);
+    if (!this.finished && soonest < RULES.bombWarn + 0.35 && this.tickTimer <= 0) {
+      const k = Math.max(0, Math.min(1, soonest / (RULES.bombWarn + 0.35)));
+      audio.play("tick", 0.95 - k * 0.4);
+      this.tickTimer = 0.055 + k * 0.15;
     }
     audio.setIntensity(m.suddenDeath ? 1 : m.aliveCount <= 2 ? 0.5 : 0);
 
@@ -339,24 +361,38 @@ export class GameScreen {
   /** Identifiant unique de la partie (sert à ne la régler qu'une fois). */
   matchKey = "";
 
+  /** Classement actuel de la partie (se complète tant qu'elle continue). */
+  standings(): StandingRow[] {
+    const s = this.session;
+    if (!s) return [];
+    const m = s.match;
+    return m.standings().map((st) => {
+      const p = m.players[st.id];
+      return {
+        id: p.id,
+        name: p.name,
+        characterId: p.characterId,
+        skinId: p.skinId,
+        accessoryId: p.accessoryId,
+        place: st.place,
+        decided: st.decided,
+        alive: st.alive,
+        kills: p.stats.kills,
+        me: p.id === s.localPlayer,
+      };
+    });
+  }
+
   private computeResult(): GameResult {
     const s = this.session!;
     const m = s.match;
     const me = m.players[s.localPlayer];
-    let place: number;
-    let won = false;
-    let draw = false;
-    if (me.alive) {
-      // la partie est finie et je suis vivant
-      won = m.winnerId === me.id;
-      draw = !won;
-      place = 1;
-    } else {
-      // place = 1 + nombre de joueurs morts après moi ou encore vivants
-      place = 1 + m.players.filter((p) => p.id !== me.id && (p.alive || p.deathTime > me.deathTime)).length;
-      draw = m.phase === "over" && m.winnerId < 0 && me.deathTime === Math.max(...m.players.map((p) => p.deathTime));
-      if (draw) place = 1;
-    }
+    // place réelle d'après la simulation (morts simultanées = ex aequo)
+    const standings = this.standings();
+    const place = standings.find((r) => r.me)?.place ?? m.players.length;
+    const won = m.phase === "over" && m.winnerId === me.id;
+    // 1re place partagée (temps écoulé, ou derniers morts ensemble) : égalité
+    const draw = place === 1 && !won;
     return {
       won,
       draw,
@@ -370,6 +406,7 @@ export class GameScreen {
       characterId: me.characterId,
       skinId: me.skinId,
       modeId: m.config.modeId,
+      standings,
     };
   }
 
@@ -382,7 +419,7 @@ export class GameScreen {
 
   // ---------------------------------------------------------- événements
   private handleEvents(events: SimEvent[]) {
-    if (!events.length) return;
+    if (!events.length || this.finished) return;
     const s = this.session!;
     const m = s.match;
     this.renderer.onEvents(m, events);

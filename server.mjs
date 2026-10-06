@@ -218,32 +218,12 @@ function buildSkins() {
 }
 var SKINS = buildSkins();
 
-// src/core/rules.ts
-var RULES = {
-  tickRate: 60,
-  countdown: 3,
-  matchDuration: 150,
-  suddenDeathAt: 42,
-  suddenDeathInterval: 0.4,
-  suddenDeathWarn: 0.7,
-  endDelay: 1,
-  baseSpeed: 3.4,
-  speedPerLevel: 0.45,
-  maxSpeedLevel: 5,
-  startBombs: 1,
-  maxBombs: 8,
-  startRange: 1,
-  maxRange: 8,
-  bombFuse: 2,
-  fireDuration: 0.55,
-  shieldDuration: 3,
-  maxShieldCharges: 1,
-  ventPeriod: 9,
-  ventStagger: 3,
-  ventWarn: 1.6,
-  cornerAssist: 0.42
+// src/core/bombs.ts
+var BOMB_KINDS = {
+  standard: { id: "standard", name: "Bombe", fuse: 1.4, warn: 0.55 },
+  rain: { id: "rain", name: "Bombe du ciel", fuse: 1.6, warn: 0.55 }
 };
-var DT = 1 / RULES.tickRate;
+var BOMB_WARN = Math.max(...Object.values(BOMB_KINDS).map((k) => k.warn));
 
 // src/core/types.ts
 var TILE = { FLOOR: 0, WALL: 1, BLOCK: 2 };
@@ -280,7 +260,7 @@ var CHAOS_EVENTS = [
       run.data.next = 0.38;
       const [c] = m.randomFreeCells(1, true);
       if (c)
-        m.spawnNeutralBomb(c[0], c[1], RULES.bombFuse, 2);
+        m.spawnNeutralBomb(c[0], c[1], BOMB_KINDS.rain.fuse, 2);
     }
   },
   {
@@ -666,6 +646,34 @@ var DIRS = [
   [0, -1, 4],
   [0, 1, 8]
 ];
+
+// src/core/rules.ts
+var RULES = {
+  tickRate: 60,
+  countdown: 3,
+  matchDuration: 150,
+  suddenDeathAt: 42,
+  suddenDeathInterval: 0.4,
+  suddenDeathWarn: 0.7,
+  endDelay: 1,
+  baseSpeed: 3.4,
+  speedPerLevel: 0.45,
+  maxSpeedLevel: 5,
+  startBombs: 1,
+  maxBombs: 8,
+  startRange: 1,
+  maxRange: 8,
+  bombFuse: BOMB_KINDS.standard.fuse,
+  bombWarn: BOMB_WARN,
+  fireDuration: 0.55,
+  shieldDuration: 3,
+  maxShieldCharges: 1,
+  ventPeriod: 9,
+  ventStagger: 3,
+  ventWarn: 1.6,
+  cornerAssist: 0.42
+};
+var DT = 1 / RULES.tickRate;
 
 // src/core/rng.ts
 class Rng {
@@ -1486,6 +1494,9 @@ class Match {
           this.vents.push([x, y, this.vents.length * RULES.ventStagger]);
     this.mode.onStart?.(this);
   }
+  get isOver() {
+    return this.phase === "over";
+  }
   get timeLeft() {
     return Math.max(0, RULES.matchDuration - this.time);
   }
@@ -1633,6 +1644,27 @@ class Match {
     for (const b of toExplode)
       if (this.bombs.has(b.id))
         this.detonate(b);
+  }
+  blastCells(tx, ty, range) {
+    const g = this.grid;
+    const out = [g.idx(tx, ty)];
+    for (const [dx, dy] of DIRS) {
+      for (let i = 1;i <= range; i++) {
+        const x = tx + dx * i;
+        const y = ty + dy * i;
+        const t = g.tile(x, y);
+        if (t === TILE.WALL)
+          break;
+        const idx = g.idx(x, y);
+        out.push(idx);
+        if (t === TILE.BLOCK || g.bombAt[idx] >= 0)
+          break;
+        const bo = g.bonusAt[idx];
+        if (bo >= 0 && (this.bonuses.get(bo)?.invuln ?? 1) <= 0)
+          break;
+      }
+    }
+    return out;
   }
   detonate(first) {
     const queue = [first];
@@ -2012,24 +2044,31 @@ class Match {
         this.finish();
     }
   }
+  standings() {
+    const over = this.phase === "over";
+    const ranked = [...this.players].sort((a, b) => {
+      if (a.alive !== b.alive)
+        return a.alive ? -1 : 1;
+      if (a.alive)
+        return a.id - b.id;
+      return b.deathTime - a.deathTime || a.id - b.id;
+    });
+    let place = 1;
+    return ranked.map((p, i) => {
+      const prev = ranked[i - 1];
+      if (i > 0 && !(prev.alive && p.alive) && !(!prev.alive && !p.alive && prev.deathTime === p.deathTime))
+        place = i + 1;
+      return { id: p.id, place, alive: p.alive, decided: over || !p.alive };
+    });
+  }
   finish() {
     this.phase = "over";
     const alive = this.players.filter((p) => p.alive);
     for (const p of alive)
       p.stats.survivalTime = this.time;
     this.winnerId = alive.length === 1 ? alive[0].id : -1;
-    const ranked = [...this.players].sort((a, b) => {
-      if (a.alive !== b.alive)
-        return a.alive ? -1 : 1;
-      return b.deathTime - a.deathTime;
-    });
-    let place = 1;
-    ranked.forEach((p, i) => {
-      const prev = ranked[i - 1];
-      if (i > 0 && !(prev.alive && p.alive) && !(!prev.alive && !p.alive && prev.deathTime === p.deathTime))
-        place = i + 1;
-      p.place = place;
-    });
+    for (const st of this.standings())
+      this.players[st.id].place = st.place;
     this.events.push({ t: "matchEnd", winner: this.winnerId });
   }
 }
