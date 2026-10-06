@@ -812,7 +812,8 @@ function computeDanger(m, extra) {
 var PROFILES = {
   easy: { think: 0.5, margin: 0.12, bonusRadius: 4, aggression: 0.25, mistake: 0.08, reflex: false, trapRadius: 0, shieldSense: 0.12, escapeRoom: 1 },
   normal: { think: 0.22, margin: 0.22, bonusRadius: 7, aggression: 0.6, mistake: 0.012, reflex: true, trapRadius: 1, shieldSense: 0.25, escapeRoom: 2 },
-  hard: { think: 0.1, margin: 0.25, bonusRadius: 11, aggression: 0.9, mistake: 0, reflex: true, trapRadius: 2, shieldSense: 0.35, escapeRoom: 3 }
+  hard: { think: 0.1, margin: 0.25, bonusRadius: 11, aggression: 0.9, mistake: 0, reflex: true, trapRadius: 2, shieldSense: 0.35, escapeRoom: 3 },
+  expert: { think: 0.06, margin: 0.28, bonusRadius: 14, aggression: 1, mistake: 0, reflex: true, trapRadius: 3, shieldSense: 0.45, escapeRoom: 3 }
 };
 
 class BotBrain {

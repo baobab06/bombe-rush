@@ -1,0 +1,303 @@
+<title>Bombe Rush</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Dela+Gothic+One&display=swap">
+<style>/*__CSS__*/</style>
+
+<div id="app">
+  <canvas id="game" aria-label="Arène de jeu"></canvas>
+  <div id="veil"></div>
+
+  <!-- HUD en partie : colonnes latérales, hors de l'arène -->
+  <div id="hud" hidden>
+    <div class="hud-col hud-l">
+      <button class="icon-btn" id="btnPause" aria-label="Pause"><i data-icon="pause"></i></button>
+      <button class="icon-btn emote-btn" id="btnEmote" aria-label="Emotes"><i data-icon="emote"></i></button>
+      <div class="emote-wheel" id="emoteWheel" hidden></div>
+    </div>
+    <div class="hud-col hud-r">
+      <div class="chaos-badge" id="hudChaos" hidden>💀 MODE CHAOS</div>
+      <div class="timer" id="hudTimer">2:30</div>
+      <div class="alive" id="hudAlive"></div>
+      <div class="powers" id="hudPowers"></div>
+    </div>
+  </div>
+  <div id="banner" hidden><span id="bannerKicker">⚠️</span><strong id="bannerText">MORT SUBITE !</strong></div>
+  <div id="netOverlay" hidden><div><b>📶 Connexion perdue</b><span>Reconnexion en cours… ta place est gardée.</span></div></div>
+  <div id="rotateHint" hidden>
+    <div class="phone"><i></i></div>
+    <p>Tiens ton téléphone à l'horizontale</p>
+  </div>
+
+  <!-- Chargement -->
+  <section class="screen boot" id="boot">
+    <div class="boot-rays"></div>
+    <div class="boot-inner">
+      <h1 class="logo"><span class="logo-a">BOMBE</span><span class="logo-b">RUSH</span><i class="logo-bomb"></i></h1>
+      <div class="boot-bar"><i id="bootBar"></i></div>
+      <button class="boot-tap" id="bootTap" hidden>TOUCHE POUR JOUER</button>
+      <p class="boot-tip" id="bootTip" hidden></p>
+    </div>
+  </section>
+
+  <!-- Premier lancement : pseudo -->
+  <section class="screen" id="welcome" hidden>
+    <div class="ident">
+      <div class="ident-hero"><canvas class="stage" id="welcomeHero"></canvas></div>
+      <div class="ident-form panel">
+        <p class="kicker">Bienvenue dans l'arène !</p>
+        <h2 class="title">Choisis ton pseudo</h2>
+        <label class="field"><span>Pseudo</span><input id="welcomeName" maxlength="16" autocomplete="nickname" spellcheck="false" placeholder="Ton pseudo"></label>
+        <div class="mini-chars" id="welcomeChars"></div>
+        <button class="btn btn-yellow" id="btnWelcome"><span>C'EST PARTI</span></button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Arrivée par lien d'invitation -->
+  <section class="screen" id="invite" hidden>
+    <div class="ident">
+      <div class="ident-hero">
+        <canvas class="stage" id="inviteHero"></canvas>
+        <div class="invite-room" id="inviteRoom"></div>
+      </div>
+      <div class="ident-form panel">
+        <p class="kicker" id="inviteKicker">Invitation</p>
+        <h2 class="title" id="inviteTitle">On t'invite !</h2>
+        <label class="field"><span>Ton pseudo</span><input id="inviteName" maxlength="16" autocomplete="nickname" spellcheck="false" placeholder="Ton pseudo"></label>
+        <div class="mini-chars" id="inviteChars"></div>
+        <button class="btn btn-yellow" id="btnInviteJoin"><span>REJOINDRE LA PARTIE</span></button>
+        <button class="btn-link" id="btnInviteMenu">Aller au menu</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Accueil -->
+  <section class="screen home" id="home" hidden>
+    <header class="home-top">
+      <button class="profile" id="homeProfile" aria-label="Profil">
+        <canvas class="avatar" id="homeAvatar" width="96" height="96"></canvas>
+        <span class="pinfo">
+          <b id="homeName">Joueur</b>
+          <span class="lvl-row"><span class="lvl" id="homeLevel">1</span><span class="xpbar"><i id="homeXpBar"></i></span></span>
+        </span>
+      </button>
+      <div class="event-chip" id="homeEvent" hidden></div>
+      <div class="top-r">
+        <button class="round-btn r-gift" id="btnDaily" aria-label="Récompense du jour"><i data-icon="gift"></i><span class="dot" id="dailyDot" hidden>!</span></button>
+        <button class="round-btn r-miss" id="btnMissions" aria-label="Missions"><i data-icon="missions"></i><span class="dot" id="missionDot" hidden>1</span></button>
+        <div class="wallet" data-wallet><i class="coin"></i><b data-coins>0</b><button class="wallet-plus" data-go="shop" aria-label="Boutique"><i data-icon="plus"></i></button></div>
+      </div>
+    </header>
+    <div class="home-body">
+      <div class="home-hero">
+        <div class="home-logo logo"><span class="logo-a">BOMBE</span><span class="logo-b">RUSH</span></div>
+        <canvas class="stage" id="homeStage" aria-label="Ton personnage"></canvas>
+        <button class="nameplate" id="homeNameplate"><b id="heroName">Flamme</b><span id="heroSkin">Classique</span></button>
+      </div>
+      <div class="home-menu">
+        <button class="btn btn-play" id="btnPlay"><i data-icon="play"></i><span class="lbl">JOUER</span><small id="playSub">Classique · 3 bots</small></button>
+        <button class="btn btn-blue btn-private" id="btnPrivate"><i data-icon="users"></i><span>PARTIE PRIVÉE</span></button>
+        <div class="tiles">
+          <button class="tile t-orange" id="btnChars"><i data-icon="hero"></i><span>PERSONNAGE</span></button>
+          <button class="tile t-pink" id="btnShop"><i data-icon="shop"></i><span>BOUTIQUE</span><em class="ribbon" id="shopRibbon" hidden>PROMO</em></button>
+          <button class="tile t-purple" id="btnCollection"><i data-icon="collection"></i><span>COLLECTION</span><small id="collCount"></small></button>
+          <button class="tile t-teal" id="btnSettings"><i data-icon="gear"></i><span>PARAMÈTRES</span></button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Préparation de partie -->
+  <section class="screen" id="setup" hidden>
+    <header class="bar"><button class="back" data-back aria-label="Retour"><i data-icon="back"></i></button><h2>Nouvelle partie</h2><div class="wallet" data-wallet><i class="coin"></i><b data-coins>0</b></div></header>
+    <div class="setup-grid">
+      <div class="setup-left panel">
+        <h3 class="label">Mode</h3>
+        <div class="choice-row" id="modeRow"></div>
+        <h3 class="label">Adversaires</h3>
+        <div class="seg" id="segBots" role="radiogroup">
+          <button data-v="1">1 bot</button><button data-v="2">2 bots</button><button data-v="3">3 bots</button>
+        </div>
+        <h3 class="label">Difficulté <small>plus c'est dur, plus ça rapporte</small></h3>
+        <div class="stakes" id="segDiff" role="radiogroup"></div>
+      </div>
+      <div class="setup-right">
+        <div class="label-row"><h3 class="label">Carte</h3><button class="chip" id="btnRandomMap">🎲 Aléatoire</button></div>
+        <div class="map-row" id="mapRow"></div>
+        <div class="launch-row">
+          <div class="stake-banner" id="stakeBanner"></div>
+          <button class="btn btn-yellow launch" id="btnLaunch"><i data-icon="play"></i><span>LANCER</span></button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Partie privée : entrée -->
+  <section class="screen" id="private" hidden>
+    <header class="bar"><button class="back" data-back aria-label="Retour"><i data-icon="back"></i></button><h2>Partie privée</h2><span class="net" id="netStatus"></span></header>
+    <div class="private-grid">
+      <div class="private-card panel">
+        <h3 class="label first">Créer une salle</h3>
+        <label class="field"><span>Ton pseudo</span><input id="pseudo" maxlength="16" autocomplete="nickname" spellcheck="false"></label>
+        <button class="btn btn-yellow" id="btnCreateRoom"><span>CRÉER UNE SALLE</span></button>
+        <p class="hint">Tu obtiens un lien à envoyer à tes amis : ils arrivent directement dans ta salle.</p>
+      </div>
+      <div class="private-card panel alt">
+        <h3 class="label first">Rejoindre avec un code</h3>
+        <div class="join-row">
+          <input id="joinCode" maxlength="5" placeholder="CODE" autocomplete="off" spellcheck="false" inputmode="text">
+          <button class="btn btn-blue small" id="btnJoinRoom"><span>Rejoindre</span></button>
+        </div>
+        <p class="hint" id="privateInfo">Le plus simple : ouvre le lien d'invitation reçu, tu rejoins la salle automatiquement.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Lobby -->
+  <section class="screen" id="lobby" hidden>
+    <header class="bar">
+      <h2 id="roomName">Partie de …</h2>
+      <span class="net" id="lobbyNet"></span>
+    </header>
+    <div class="lobby-grid">
+      <div class="lobby-left">
+        <div class="code-box panel">
+          <div><small>CODE</small><b id="roomCode">-----</b></div>
+          <div class="code-actions">
+            <button class="btn btn-yellow small" id="btnInvite"><i data-icon="share"></i><span>INVITER</span></button>
+            <button class="chip" id="btnCopyCode">Copier le code</button>
+            <button class="chip" id="btnCopyLink">Copier le lien</button>
+          </div>
+        </div>
+        <h3 class="label">Choisis ton mode <small id="modeHint"></small> <small class="stake-hint" id="lobbyStake"></small></h3>
+        <div class="mode-pick" id="lobbyModes">
+          <button data-mode="classic">🎮 CLASSIQUE</button>
+          <button data-mode="chaos">💀 CHAOS</button>
+        </div>
+        <h3 class="label">Carte</h3>
+        <div class="map-chips" id="lobbyMaps"></div>
+        <label class="toggle small"><span>Compléter avec des bots</span><input type="checkbox" id="lobbyBots"><i></i></label>
+      </div>
+      <div class="lobby-right">
+        <h3 class="label first">Joueurs <small id="playerCount">1/4</small></h3>
+        <ul class="slots" id="lobbySlots"></ul>
+        <p class="lobby-why" id="lobbyWhy"></p>
+        <div class="lobby-actions">
+          <button class="btn btn-ghost" id="btnLeaveRoom"><span>Quitter</span></button>
+          <button class="btn btn-yellow" id="btnLobbyMain"><span>PRÊT</span></button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Personnage (vestiaire) -->
+  <section class="screen" id="chars" hidden>
+    <header class="bar"><button class="back" data-back aria-label="Retour"><i data-icon="back"></i></button><h2>Personnage</h2><div class="wallet" data-wallet><i class="coin"></i><b data-coins>0</b><button class="wallet-plus" data-go="shop" aria-label="Boutique"><i data-icon="plus"></i></button></div></header>
+    <div class="locker">
+      <div class="locker-stage panel">
+        <canvas class="stage" id="charStage" aria-label="Aperçu du personnage"></canvas>
+        <div class="hero-text"><b id="charName">Flamme</b><span id="charTag">Renard malin</span></div>
+      </div>
+      <div class="locker-side">
+        <div class="char-row" id="charRow"></div>
+        <nav class="tabs" id="lockerTabs"></nav>
+        <div class="grid" id="lockerGrid"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Boutique -->
+  <section class="screen" id="shop" hidden>
+    <header class="bar"><button class="back" data-back aria-label="Retour"><i data-icon="back"></i></button><h2>Boutique</h2><span class="bar-note" id="shopTimer"></span><div class="wallet" data-wallet><i class="coin"></i><b data-coins>0</b></div></header>
+    <div class="browser" id="shopBrowser"></div>
+  </section>
+
+  <!-- Collection -->
+  <section class="screen" id="collection" hidden>
+    <header class="bar"><button class="back" data-back aria-label="Retour"><i data-icon="back"></i></button><h2>Collection</h2><span class="bar-progress"><span id="collProgressText">0/0</span><span class="xpbar"><i id="collProgress"></i></span></span><div class="wallet" data-wallet><i class="coin"></i><b data-coins>0</b></div></header>
+    <div class="browser" id="collBrowser"></div>
+  </section>
+
+  <!-- Réglages -->
+  <section class="screen" id="settings" hidden>
+    <header class="bar"><button class="back" data-back aria-label="Retour"><i data-icon="back"></i></button><h2>Paramètres</h2></header>
+    <div class="settings-grid">
+      <div class="panel">
+        <h3 class="label first">Son & vibrations</h3>
+        <label class="toggle"><span>Musique</span><input type="checkbox" id="setMusic"><i></i></label>
+        <label class="toggle"><span>Effets sonores</span><input type="checkbox" id="setSfx"><i></i></label>
+        <label class="toggle"><span>Vibration</span><input type="checkbox" id="setVibe"><i></i></label>
+        <dl class="keys">
+          <dt>Tactile</dt><dd>Joystick à gauche (là où tu poses le pouce), bombe et bouclier à droite.</dd>
+          <dt>Clavier</dt><dd>Flèches / ZQSD · Espace : bombe · E : bouclier · 1-4 : emotes · Échap : pause</dd>
+        </dl>
+      </div>
+      <div class="panel">
+        <h3 class="label first">Profil</h3>
+        <div class="stats-mini" id="profileStats"></div>
+        <div class="server-row" id="serverRow" hidden>
+          <h3 class="label">Serveur en ligne (parties privées)</h3>
+          <div class="join-row"><input id="serverUrl" placeholder="https://bombe-rush.onrender.com" autocomplete="off" spellcheck="false" inputmode="url"><button class="btn btn-blue small" id="btnServer"><span>OK</span></button></div>
+          <p class="hint" id="serverHint"></p>
+        </div>
+        <div class="danger-zone">
+          <button class="btn-link" id="btnReset">Réinitialiser la progression</button>
+          <div class="confirm" id="resetConfirm" hidden>
+            <span>Tout effacer ?</span>
+            <button class="btn btn-red small" id="btnResetYes"><span>Effacer</span></button>
+            <button class="btn btn-ghost small" id="btnResetNo"><span>Annuler</span></button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Pause -->
+  <section class="screen modal" id="pause" hidden>
+    <div class="card panel">
+      <h2>Pause</h2>
+      <button class="btn btn-yellow" id="btnResume"><i data-icon="play"></i><span>REPRENDRE</span></button>
+      <button class="btn btn-blue" id="btnRestart"><span>Recommencer</span></button>
+      <button class="btn btn-ghost" id="btnQuit"><span>Quitter la partie</span></button>
+    </div>
+  </section>
+
+  <!-- Résultats -->
+  <section class="screen" id="results" hidden>
+    <div class="results">
+      <div class="res-hero-col">
+        <p class="res-kicker" id="resKicker">1er sur 4</p>
+        <h2 class="res-title" id="resTitle">VICTOIRE !</h2>
+        <canvas class="stage" id="resStage"></canvas>
+        <div class="wallet res-wallet" data-wallet><i class="coin"></i><b data-coins>0</b></div>
+      </div>
+      <div class="res-side panel">
+        <div class="stake-result" id="resStake">
+          <span class="sr-diff" id="resDiff"></span>
+          <div class="sr-amount"><i class="coin"></i><span id="resDelta">+0</span></div>
+          <div class="sr-mods" id="resMods"></div>
+          <p class="sr-note" id="resNote"></p>
+        </div>
+        <ul class="res-lines" id="resLines"></ul>
+        <div class="res-level">
+          <span class="lvl" id="resLevel">1</span>
+          <span class="xpbar big"><i id="resXpBar"></i></span>
+          <span class="xp-text" id="resXpText"></span>
+        </div>
+        <div class="levelup" id="resLevelUp" hidden>NIVEAU 2 !</div>
+        <div class="res-stats" id="resStats"></div>
+        <div class="res-actions">
+          <button class="btn btn-ghost" id="btnMenu"><span>Menu</span></button>
+          <button class="btn btn-yellow" id="btnAgain"><span>REJOUER</span></button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Fenêtres (récompense du jour, missions, achat…) -->
+  <div class="modal-wrap" id="modal" hidden><div class="sheet panel" id="modalSheet" role="dialog" aria-modal="true"></div></div>
+  <div id="toasts" aria-live="polite"></div>
+  <canvas id="uiFx" aria-hidden="true"></canvas>
+</div>
+<script>/*__JS__*/</script>
