@@ -2,14 +2,14 @@
 import { CHARACTERS, SKINS, THEMES } from "../src/core/characters";
 import { ACCESSORIES, EMOTES, TRAILS } from "../src/core/cosmetics";
 import { CATALOG, getItem } from "../src/meta/catalog";
-import { DAILY_REWARDS, PRICES, STARTER_GIFT } from "../src/meta/economy";
+import { DAILY_REWARDS, NAME_CHANGE_PRICE, PRICES, STARTER_GIFT } from "../src/meta/economy";
 import { defaultProfile } from "../src/meta/profile";
 import { applyMatch } from "../src/meta/progression";
 import { beginMatch, settleAbandoned, settleMatch } from "../src/meta/rewards";
 import { SaveSystem, memoryBackend, migrate } from "../src/meta/save";
 import {
   buy, claimDaily, claimMission, countOwned, dailyState, ensureMissions, equip, equippedSkin, featured, grantStarterGift,
-  isEquipped, owns, priceOf,
+  isEquipped, owns, priceOf, rename, renameCost,
 } from "../src/meta/store";
 
 let failures = 0;
@@ -140,6 +140,21 @@ const dr = defaultProfile();
 dr.coins = 50;
 applyMatch(dr, { ...W(false), draw: true, place: 1 }, { matchId: "d", stake: "expert", modeId: "classic" }, fixed);
 check(dr.coins === 50, "égalité : ni gain ni perte");
+
+console.log("Pseudo");
+const n = defaultProfile();
+check(renameCost(n, "Toto") === 0 && rename(n, "  Toto  ").ok && n.name === "Toto" && n.coins === 0, "premier pseudo gratuit");
+check(NAME_CHANGE_PRICE === 300, "changer de pseudo coûte 300");
+let rr = rename(n, "Titi");
+check(!rr.ok && rr.reason === "coins" && rr.missing === 300 && n.name === "Toto", "pas assez de pièces : pseudo inchangé");
+n.coins = 450;
+rr = rename(n, "Titi");
+check(rr.ok && rr.cost === 300 && n.coins === 150 && n.name === "Titi", "changement payé : 450 → 150");
+check(!rename(n, "Titi").ok && n.coins === 150, "même pseudo : refusé, rien débité");
+check(!rename(n, " a ").ok && n.name === "Titi", "pseudo trop court refusé");
+check(rename(n, "x".repeat(30)).ok === false && n.coins === 150, "150 pièces : 2e changement refusé");
+const EMO = EMOTES.filter((e) => e.taunt);
+check(EMO.length >= 8 && EMO.every((e) => !e.free && getItem(e.id)?.price), `${EMO.length} emotes de moquerie en boutique`);
 
 console.log("Sauvegarde");
 const be = memoryBackend();

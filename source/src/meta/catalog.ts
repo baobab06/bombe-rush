@@ -41,7 +41,7 @@ function build(): CatalogItem[] {
     });
   for (const a of ACCESSORIES) out.push({ id: a.id, kind: "accessory", name: a.name, rarity: a.rarity, price: PRICES[a.rarity], desc: a.desc, free: false });
   for (const t of TRAILS) out.push({ id: t.id, kind: "trail", name: t.name, rarity: t.rarity, price: t.free ? 0 : PRICES[t.rarity], desc: t.desc, free: !!t.free });
-  for (const e of EMOTES) out.push({ id: e.id, kind: "emote", name: e.name, rarity: e.rarity, price: e.free ? 0 : EMOTE_PRICES[e.rarity], desc: `Emote ${e.emoji}`, free: !!e.free });
+  for (const e of EMOTES) out.push({ id: e.id, kind: "emote", name: e.name, rarity: e.rarity, price: e.free ? 0 : EMOTE_PRICES[e.rarity], desc: e.taunt ? `Moquerie ${e.emoji} « ${e.name} »` : `Emote ${e.emoji}`, free: !!e.free });
   for (const c of CHARACTERS)
     out.push({
       id: `chr-${c.id}`, kind: "character", name: c.name, rarity: c.rarity ?? "common", price: c.locked ? CHARACTER_PRICES[c.id] ?? PRICES.epic : 0,

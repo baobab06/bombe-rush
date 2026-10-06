@@ -65,6 +65,10 @@ export const MATCH_XP = { win: 80, draw: 40, participation: 20, second: 15, perK
 
 /** Cadeau de bienvenue pour découvrir la boutique (donné une seule fois). */
 export const STARTER_GIFT = 1000;
+/** Changer de pseudo (le tout premier pseudo est gratuit). */
+export const NAME_CHANGE_PRICE = 300;
+export const NAME_MIN = 2;
+export const NAME_MAX = 16;
 
 // ------------------------------------------------------ récompense du jour
 /** Jour 1 → 7, puis on recommence. Rater un jour remet la série à zéro. */

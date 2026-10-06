@@ -493,9 +493,9 @@ export class GameScreen {
       }
     };
     for (const e of events) {
-      if (e.t === "playerDied" && e.killer >= 0 && e.killer !== e.player) say(e.killer, ["emo-lol", "emo-cool", "emo-gg", "emo-fire"], 0.45);
-      if (e.t === "matchEnd" && e.winner >= 0) say(e.winner, ["emo-party", "emo-crown", "emo-cool"], 0.9);
-      if (e.t === "shieldBlocked") say(e.player, ["emo-angry", "emo-ghost"], 0.4);
+      if (e.t === "playerDied" && e.killer >= 0 && e.killer !== e.player) say(e.killer, ["emo-lol", "emo-cool", "emo-gg", "emo-fire", "emo-tongue", "emo-missed", "emo-clown", "emo-snail"], 0.5);
+      if (e.t === "matchEnd" && e.winner >= 0) say(e.winner, ["emo-party", "emo-crown", "emo-cool", "emo-dance", "emo-yawn"], 0.9);
+      if (e.t === "shieldBlocked") say(e.player, ["emo-angry", "emo-ghost", "emo-chicken", "emo-tongue"], 0.45);
     }
   }
 

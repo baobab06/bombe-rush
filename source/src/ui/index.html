@@ -139,7 +139,7 @@
     <div class="private-grid">
       <div class="private-card panel">
         <h3 class="label first">Créer une salle</h3>
-        <label class="field"><span>Ton pseudo</span><input id="pseudo" maxlength="16" autocomplete="nickname" spellcheck="false"></label>
+        <label class="field"><span>Ton pseudo <em class="edit-tag">✏️ changer</em></span><input id="pseudo" maxlength="16" readonly class="tap-edit"></label>
         <button class="btn btn-yellow" id="btnCreateRoom"><span>CRÉER UNE SALLE</span></button>
         <p class="hint">Tu obtiens un lien à envoyer à tes amis : ils arrivent directement dans ta salle.</p>
       </div>
@@ -235,6 +235,10 @@
       </div>
       <div class="panel">
         <h3 class="label first">Profil</h3>
+        <div class="name-row">
+          <div class="name-cur"><span>Pseudo</span><b id="setName"></b></div>
+          <button class="btn btn-blue small" id="btnRename"><span>Changer · <i class="coin"></i><em id="renameCostLbl">300</em></span></button>
+        </div>
         <div class="stats-mini" id="profileStats"></div>
         <div class="server-row" id="serverRow" hidden>
           <h3 class="label">Serveur en ligne (parties privées)</h3>

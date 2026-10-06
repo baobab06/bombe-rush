@@ -749,3 +749,23 @@ button:focus-visible, input:focus-visible + i { outline: 3px solid var(--coin); 
   .launch-row .launch { font-size: min(5.2cqh, 2.6cqw); padding-inline: 2.4cqh; flex-basis: 36%; }
   .launch-row { gap: 1.6cqh; }
 }
+
+/* ---- pseudo payant */
+.name-row { display: flex; align-items: center; justify-content: space-between; gap: 2cqh; margin-bottom: 2cqh; padding: 1.6cqh 2.4cqh; border-radius: 3cqh; background: rgba(10,6,40,.45); }
+.name-cur { display: flex; flex-direction: column; min-width: 0; }
+.name-cur span { font-size: max(10.5px, .62em); font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.name-cur b { font-size: 1.05rem; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.name-row .btn { flex-shrink: 0; }
+.name-row .btn span { display: inline-flex; align-items: center; gap: .8cqh; }
+.name-row .btn .coin { width: 4.6cqh; height: 4.6cqh; }
+.name-row .btn em { font-style: normal; }
+.tap-edit { cursor: pointer; caret-color: transparent; }
+.edit-tag { font-style: normal; color: var(--coin); letter-spacing: .04em; margin-left: 1cqh; text-transform: none; }
+.rename { display: flex; align-items: center; gap: 4cqh; margin: 1cqh 0 3cqh; }
+.rename .field { flex: 1 1 auto; min-width: 0; }
+.rename-cost { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-start; max-width: 44%; }
+.rename-cost .cost { display: flex; align-items: center; gap: 1.4cqh; font-family: var(--display); font-size: 1.3em; color: #fff; text-shadow: var(--outline); }
+.rename-cost .cost .coin { width: 7cqh; height: 7cqh; }
+.rename-cost .cost.poor { color: #ff6b8a; }
+.rename-cost p { margin: .6cqh 0 0; font-size: max(11px, .7em); color: var(--muted); }
+.rename-cost p b { color: #fff; }

@@ -5,7 +5,7 @@
  */
 import { EMOTE_SLOTS, getEmote } from "../core/cosmetics";
 import { CATALOG, characterItemId, getItem, type CatalogItem, type ItemKind } from "./catalog";
-import { DAILY_REWARDS, FEATURED, MISSIONS, MISSIONS_PER_DAY, STARTER_GIFT, type MissionDef } from "./economy";
+import { DAILY_REWARDS, FEATURED, MISSIONS, MISSIONS_PER_DAY, NAME_CHANGE_PRICE, NAME_MAX, NAME_MIN, STARTER_GIFT, type MissionDef } from "./economy";
 import type { Profile } from "./profile";
 
 // ----------------------------------------------------------------- dates
@@ -269,3 +269,29 @@ export function canUseEmote(p: Profile, id: string): boolean {
 }
 
 export { characterItemId };
+
+// ------------------------------------------------------------------ pseudo
+/** Nettoie un pseudo saisi (espaces, longueur max). */
+export function cleanName(raw: string): string {
+  return raw.trim().replace(/\s+/g, " ").slice(0, NAME_MAX);
+}
+
+/** Prix pour passer à ce pseudo : gratuit la première fois ou s'il ne change pas. */
+export function renameCost(p: Profile, raw: string): number {
+  return !p.named || cleanName(raw) === p.name ? 0 : NAME_CHANGE_PRICE;
+}
+
+export type RenameResult = { ok: true; cost: number } | { ok: false; reason: "short" | "same" | "coins"; missing?: number };
+
+/** Change le pseudo et débite le prix (jamais de solde négatif). */
+export function rename(p: Profile, raw: string): RenameResult {
+  const v = cleanName(raw);
+  if (v.length < NAME_MIN) return { ok: false, reason: "short" };
+  if (p.named && v === p.name) return { ok: false, reason: "same" };
+  const cost = renameCost(p, v);
+  if (p.coins < cost) return { ok: false, reason: "coins", missing: cost - p.coins };
+  p.coins -= cost;
+  p.name = v;
+  p.named = true;
+  return { ok: true, cost };
+}

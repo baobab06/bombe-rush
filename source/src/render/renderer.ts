@@ -668,6 +668,7 @@ export class Renderer {
     else if (won || (t - f.happyAt < 0.8 && t >= f.happyAt)) expr = "happy";
     else if (this.inDanger(m, p.x, p.y)) expr = "scared";
     else if (f.emote && getEmote(f.emote.id)?.emoji === "😡" && t - f.emote.at < 2) expr = "angry";
+    else if (f.emote && getEmote(f.emote.id)?.taunt && t - f.emote.at < 2) expr = "happy";
     // anneau de couleur au sol : chaque joueur se repère d'un coup d'œil
     ctx.lineWidth = Math.max(1.5, s * (id === this.localPlayer ? 0.065 : 0.045));
     ctx.strokeStyle = id === this.localPlayer ? "rgba(255,255,255,0.9)" : c.palette.main;
@@ -706,11 +707,13 @@ export class Renderer {
     // bulle au-dessus de la tête, ou sur le côté si elle sortirait de l'écran
     let bx = x * this.s;
     let by = (y - head - 0.62) * this.s;
+    let below = false;
     if (this.oy + by - this.s * 0.45 < 0) {
       bx += this.s * 0.95;
       by = (y - 0.55) * this.s;
-    }
-    drawEmoteBubble(this.ctx, bx, by, this.s, def, age);
+      below = true;
+    } else if (def.taunt && this.oy + by - this.s * 0.85 < 0) below = true;
+    drawEmoteBubble(this.ctx, bx, by, this.s, def, age, false, below);
   }
 
   private drawDying(m: Match, d: Dying) {

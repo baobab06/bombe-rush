@@ -11,7 +11,8 @@ import { ONLINE_STAKE, STAKES, STAKE_ORDER, type StakeId } from "../meta/economy
 import { beginMatch, isSettled, settleAbandoned, settleMatch, stakeOf, type CoinTransaction, type MatchContext } from "../meta/rewards";
 import type { Profile } from "../meta/profile";
 import { SaveSystem } from "../meta/save";
-import { countOwned, dailyState, ensureMissions, equippedSkin, featured, grantStarterGift, missionsToClaim, priceOf } from "../meta/store";
+import { cleanName, countOwned, dailyState, ensureMissions, equippedSkin, featured, grantStarterGift, missionsToClaim, priceOf, renameCost } from "../meta/store";
+import { openRename } from "./rename";
 import { haptics } from "../platform/haptics";
 import { bonusIconURL, drawMapThumb, drawPortrait } from "../ui/thumbs";
 import { viewport } from "../platform/viewport";
@@ -369,6 +370,15 @@ class App implements AppCtx {
     bind("setMusic", "music");
     bind("setSfx", "sfx");
     bind("setVibe", "vibration");
+    $("btnRename").addEventListener("click", () => {
+      this.click();
+      this.askRename();
+    });
+    $("inviteName").addEventListener("click", () => {
+      if (!this._profile.named) return;
+      this.click();
+      this.askRename();
+    });
     $("btnReset").addEventListener("click", () => {
       $("resetConfirm").hidden = false;
     });
@@ -661,6 +671,8 @@ class App implements AppCtx {
       [fmt(p.coinsEarned), "Pièces gagnées"],
       [`${cc.owned}/${cc.total}`, "Collection"],
     ];
+    $("setName").textContent = p.name;
+    $("renameCostLbl").textContent = fmt(renameCost(p, p.name + "!"));
     $("profileStats").innerHTML = rows.map(([v, l]) => `<div><b>${v}</b><span>${l}</span></div>`).join("");
   }
 
@@ -769,7 +781,10 @@ class App implements AppCtx {
     const p = this._profile;
     if (!this.identChar) this.identChar = p.characterId;
     const name = $<HTMLInputElement>(id === "welcome" ? "welcomeName" : "inviteName");
-    if (!name.value) name.value = p.named ? p.name : "";
+    if (!name.value || p.named) name.value = p.named ? p.name : "";
+    // une fois le pseudo choisi, le modifier passe par la fenêtre payante
+    name.readOnly = p.named;
+    name.classList.toggle("tap-edit", p.named);
     const grid = $(id === "welcome" ? "welcomeChars" : "inviteChars");
     grid.innerHTML = "";
     for (const c of CHARACTERS.filter((ch) => p.ownedCharacters.includes(ch.id))) {
@@ -831,9 +846,21 @@ class App implements AppCtx {
     btn.querySelector("span")!.textContent = full ? "SALLE PLEINE" : pk.playing ? "REJOINDRE (manche en cours)" : "REJOINDRE LA PARTIE";
   }
 
+  /** Changement de pseudo payant, puis mise à jour de tous les écrans. */
+  private askRename() {
+    openRename(this, () => {
+      this.online.updateIdentity();
+      $<HTMLInputElement>("pseudo").value = this._profile.name;
+      $<HTMLInputElement>("inviteName").value = this._profile.name;
+      $("homeName").textContent = this._profile.name;
+      if (this.screen === "settings") this.renderSettings();
+    });
+  }
+
   /** Enregistre pseudo + personnage choisis sur l'écran d'identité. */
   private saveIdent(input: string): boolean {
-    const v = $<HTMLInputElement>(input).value.trim().replace(/\s+/g, " ").slice(0, 16);
+    // déjà nommé : le pseudo ne change que via askRename (payant)
+    const v = this._profile.named ? this._profile.name : cleanName($<HTMLInputElement>(input).value);
     if (v.length < 2) {
       this.toast("Choisis un pseudo (2 caractères minimum)", "bad");
       $<HTMLInputElement>(input).focus();
@@ -896,13 +923,9 @@ class App implements AppCtx {
       this.go("private");
       if (o.available) o.connect();
     });
-    $<HTMLInputElement>("pseudo").addEventListener("change", (e) => {
-      const v = (e.target as HTMLInputElement).value.trim().slice(0, 16);
-      if (v) {
-        this._profile.name = v;
-        this.persist();
-        o.updateIdentity();
-      }
+    $("pseudo").addEventListener("click", () => {
+      this.click();
+      this.askRename();
     });
     $("btnCreateRoom").addEventListener("click", () => {
       this.click();

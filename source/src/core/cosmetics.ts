@@ -63,8 +63,10 @@ export interface EmoteDef {
   emoji: string;
   name: string;
   rarity: Rarity;
-  anim: "pop" | "bounce" | "shake" | "spin" | "party";
+  anim: "pop" | "bounce" | "shake" | "spin" | "party" | "laugh" | "dance";
   free?: boolean;
+  /** emote de moquerie : affiche aussi son texte au-dessus de la bulle */
+  taunt?: boolean;
 }
 
 export const EMOTES: EmoteDef[] = [
@@ -80,6 +82,15 @@ export const EMOTES: EmoteDef[] = [
   { id: "emo-fire", emoji: "🔥", name: "En feu", rarity: "epic", anim: "bounce" },
   { id: "emo-crown", emoji: "👑", name: "Le roi", rarity: "epic", anim: "spin" },
   { id: "emo-party", emoji: "🎉", name: "La fête !", rarity: "legend", anim: "party" },
+  // ---- moqueries (le texte s'affiche au-dessus de la bulle)
+  { id: "emo-tongue", emoji: "😜", name: "Nananère !", rarity: "common", anim: "shake", taunt: true },
+  { id: "emo-missed", emoji: "🤭", name: "Raté !", rarity: "common", anim: "laugh", taunt: true },
+  { id: "emo-snail", emoji: "🐌", name: "Trop lent !", rarity: "rare", anim: "bounce", taunt: true },
+  { id: "emo-clown", emoji: "🤡", name: "Le clown !", rarity: "rare", anim: "laugh", taunt: true },
+  { id: "emo-yawn", emoji: "🥱", name: "Je m'ennuie…", rarity: "rare", anim: "pop", taunt: true },
+  { id: "emo-chicken", emoji: "🐔", name: "Poule mouillée !", rarity: "epic", anim: "shake", taunt: true },
+  { id: "emo-baby", emoji: "🍼", name: "Petit joueur", rarity: "epic", anim: "spin", taunt: true },
+  { id: "emo-dance", emoji: "🕺", name: "Danse de la victoire", rarity: "legend", anim: "dance", taunt: true },
 ];
 
 export const getAccessory = (id: string | null | undefined) => ACCESSORIES.find((a) => a.id === id);
