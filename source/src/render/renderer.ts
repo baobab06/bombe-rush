@@ -144,7 +144,7 @@ export class Renderer {
           break;
         }
         case "explode":
-          P.explosion(e.x + 0.5, e.y + 0.5);
+          P.explosion(e.x + 0.5, e.y + 0.5, m.players[e.owner]?.boomId);
           this.shake = Math.min(1, this.shake + 0.35 + e.cells * 0.02);
           this.flash = Math.min(0.5, this.flash + 0.18);
           break;

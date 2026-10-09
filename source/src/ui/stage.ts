@@ -44,6 +44,10 @@ export class Stage {
   private trailAcc = { t: 0, step: 0 };
   /** emotes que le personnage peut lancer tout seul (accueil) */
   idleEmotes: string[] = [];
+  /** aperçu d'un effet d'explosion (boutique / collection) */
+  boomPreview: string | null = null;
+  private boomAt = -10;
+  private boomSide = 1;
 
   constructor(
     readonly canvas: HTMLCanvasElement,
@@ -114,6 +118,11 @@ export class Stage {
     const dt = Math.min(0.05, Math.max(0, (now - this.last) / 1000));
     this.last = now;
     this.t += dt;
+    if (this.boomPreview && this.t - this.boomAt > 1.5) {
+      this.boomAt = this.t;
+      this.boomSide = -this.boomSide;
+      this.P.explosion(this.boomSide * 0.95, 0.35, this.boomPreview);
+    }
     this.draw(dt);
     this.raf = requestAnimationFrame(this.frame);
   };

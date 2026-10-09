@@ -9,6 +9,7 @@ export interface OnlineIdentity {
   skinId?: string;
   accessoryId?: string;
   trailId?: string;
+  boomId?: string;
 }
 
 /**
@@ -145,7 +146,7 @@ export class OnlineController {
   updateIdentity() {
     const id = this.identity();
     this.conn?.send({ t: "setName", name: id.name });
-    this.conn?.send({ t: "setLook", characterId: id.characterId, skinId: id.skinId, accessoryId: id.accessoryId, trailId: id.trailId });
+    this.conn?.send({ t: "setLook", characterId: id.characterId, skinId: id.skinId, accessoryId: id.accessoryId, trailId: id.trailId, boomId: id.boomId });
   }
   sendEmote(id: string) {
     this.conn?.send({ t: "emote", id });

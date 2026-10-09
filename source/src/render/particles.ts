@@ -1,4 +1,5 @@
 /** Système de particules léger (pool fixe, aucune allocation en jeu). */
+import { getBoom } from "../core/cosmetics";
 
 export type ParticleKind =
   | "chip"
@@ -106,13 +107,16 @@ export class Particles {
   }
 
   // ------------------------------------------------------------ recettes
-  explosion(x: number, y: number) {
+  /** Explosion ; `style` = effet d'explosion équipé par le poseur de la bombe. */
+  explosion(x: number, y: number, style?: string) {
+    const d = getBoom(style);
+    const pick = (a: string[]) => a[Math.floor(Math.random() * a.length)];
     for (let i = 0; i < 10; i++) {
       const a = Math.random() * Math.PI * 2;
       const sp = 1 + Math.random() * 2.5;
       this.spawn("smoke", x, y, {
         vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, vz: 0.6 + Math.random(), life: 0.7 + Math.random() * 0.5,
-        size: 0.25 + Math.random() * 0.2, color: Math.random() < 0.5 ? "#e9e2d6" : "#bdb4a6",
+        size: 0.25 + Math.random() * 0.2, color: pick(d.smoke),
       });
     }
     for (let i = 0; i < 16; i++) {
@@ -120,21 +124,29 @@ export class Particles {
       const sp = 3 + Math.random() * 5;
       this.spawn("spark", x, y, {
         vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, vz: 2 + Math.random() * 3, life: 0.35 + Math.random() * 0.3,
-        size: 0.06, color: Math.random() < 0.5 ? "#ffe066" : "#ff8a2a",
+        size: 0.06, color: pick(d.spark),
       });
     }
     for (let i = 0; i < 4; i++)
       this.spawn("ember", x + (Math.random() - 0.5) * 0.6, y + (Math.random() - 0.5) * 0.6, {
-        vz: 0.8 + Math.random(), vx: (Math.random() - 0.5) * 0.6, life: 0.9 + Math.random() * 0.5, size: 0.05, color: "#ffb347",
+        vz: 0.8 + Math.random(), vx: (Math.random() - 0.5) * 0.6, life: 0.9 + Math.random() * 0.5, size: 0.05, color: pick(d.spark),
       });
-    this.spawn("ring", x, y, { life: 0.35, size: 0.3, color: "#fff6c8" });
+    this.spawn("ring", x, y, { life: 0.35, size: 0.3, color: d.glow });
     // onde de choc plus large + éclair blanc au centre
-    this.spawn("ring", x, y, { life: 0.5, size: 0.62, color: "#ffb347" });
-    this.spawn("glow", x, y, { z: 0.2, life: 0.2, size: 0.55, color: "#fffbe0" });
+    this.spawn("ring", x, y, { life: 0.5, size: 0.62, color: d.ring });
+    this.spawn("glow", x, y, { z: 0.2, life: 0.2, size: 0.55, color: d.glow });
     for (let i = 0; i < 4; i++)
       this.spawn("ember", x + (Math.random() - 0.5) * 0.9, y + (Math.random() - 0.5) * 0.9, {
-        vz: 1.4 + Math.random() * 1.2, vx: (Math.random() - 0.5) * 1.6, vy: (Math.random() - 0.5) * 1.6, life: 0.6 + Math.random() * 0.4, size: 0.06, color: "#ff6a2a",
+        vz: 1.4 + Math.random() * 1.2, vx: (Math.random() - 0.5) * 1.6, vy: (Math.random() - 0.5) * 1.6, life: 0.6 + Math.random() * 0.4, size: 0.06, color: pick(d.spark),
       });
+    if (d.extra) {
+      const kind: ParticleKind = d.extra === "confetti" ? "confetti" : d.extra === "snow" ? "flake" : d.extra === "hearts" ? "heart" : d.extra === "bubbles" ? "bubble" : "twinkle";
+      for (let i = 0; i < 8; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const sp = 0.8 + Math.random() * 1.6;
+        this.spawn(kind, x, y, { vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, z: 0.3, vz: 1 + Math.random() * 1.5, life: 0.8 + Math.random() * 0.5, size: kind === "confetti" ? 0.07 : 0.11, color: pick(d.spark), rot: Math.random() * 6 });
+      }
+    }
     this.mark("scorch", x, y, { life: 6, size: 0.42 + Math.random() * 0.08 });
   }
 

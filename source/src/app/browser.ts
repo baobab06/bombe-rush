@@ -6,7 +6,8 @@
  */
 import { audio } from "../audio/audio";
 import { CHARACTERS, RARITY_LABEL, RARITY_ORDER, getCharacter } from "../core/characters";
-import { CATALOG, CATEGORIES, getItem, type CatalogItem, type ItemKind } from "../meta/catalog";
+import { CATALOG, CATEGORIES, getItem, isBuyable, type CatalogItem, type ItemKind } from "../meta/catalog";
+import { unlockText } from "../meta/unlocks";
 import { countOwned, equip, equippedSkin, featured, isEquipped, owns, priceOf } from "../meta/store";
 import { icon } from "../ui/icons";
 import { itemCard } from "../ui/items";
@@ -89,7 +90,7 @@ export class ItemBrowser {
 
   // ------------------------------------------------------------- onglets
   private tabs(): { id: Tab; label: string }[] {
-    const list: { id: Tab; label: string }[] = CATEGORIES.map((c) => ({ id: c.id, label: c.label }));
+    const list: { id: Tab; label: string }[] = CATEGORIES.filter((c) => this.mode === "collection" || CATALOG.some((i) => i.kind === c.id && isBuyable(i))).map((c) => ({ id: c.id, label: c.label }));
     if (this.mode === "shop") list.unshift({ id: "featured", label: "À la une" });
     return list;
   }
@@ -144,6 +145,8 @@ export class ItemBrowser {
   private items(): CatalogItem[] {
     if (this.tab === "featured") return featured().items;
     let list = CATALOG.filter((i) => i.kind === this.tab);
+    // boutique : uniquement ce qui se vend (les exclusifs se gagnent)
+    if (this.mode === "shop") list = list.filter((i) => isBuyable(i) || i.free);
     if (this.tab === "skin") list = list.filter((i) => i.characterId === this.charFilter);
     const rank = (i: CatalogItem) => (i.free ? -1 : RARITY_ORDER.indexOf(i.rarity));
     return list.slice().sort((a, b) => rank(a) - rank(b) || a.price - b.price);
@@ -171,11 +174,11 @@ export class ItemBrowser {
         {
           owned: own,
           equipped: own && isEquipped(p, it.id),
-          price: pr.price,
+          price: it.exclusive && !own ? undefined : pr.price,
           fullPrice: pr.full,
           deal: pr.deal,
           affordable: p.coins >= pr.price,
-          sub: it.kind === "skin" && (this.tab === "featured" || this.mode === "collection") ? getCharacter(it.characterId!).name : undefined,
+          sub: it.exclusive && !own ? "🔒 Exclusif" : it.kind === "skin" && (this.tab === "featured" || this.mode === "collection") ? getCharacter(it.characterId!).name : undefined,
           isNew: !!feat && !p.seen.includes(it.id) && !it.free,
           dim: this.mode === "collection" ? undefined : false,
           big: !!feat && i === 0,
@@ -226,6 +229,7 @@ export class ItemBrowser {
     const skin = equippedSkin(p, p.characterId);
     this.stage.setMode(it.kind === "trail" ? "run" : "idle");
     this.stage.showEmote(null);
+    this.stage.boomPreview = it.kind === "boom" ? it.id : null;
     switch (it.kind) {
       case "skin":
         this.stage.set({ characterId: it.characterId!, skinId: it.id, trailId: p.equipped.trail }, it.rarity);
@@ -243,11 +247,19 @@ export class ItemBrowser {
         this.stage.set({ characterId: p.characterId, skinId: skin, accessoryId: p.equipped.accessory, trailId: p.equipped.trail }, it.rarity);
         this.stage.showEmote(it.id, true);
         break;
+      case "boom":
+      case "title":
+        this.stage.set({ characterId: p.characterId, skinId: skin, accessoryId: p.equipped.accessory, trailId: p.equipped.trail }, it.rarity);
+        break;
     }
     this.rarEl.textContent = RARITY_LABEL[it.rarity];
     this.rarEl.dataset.r = it.rarity;
     this.nameEl.textContent = it.kind === "skin" ? `${getCharacter(it.characterId!).name} ${it.name}` : it.name;
     this.descEl.textContent = it.desc;
+    if (this.mode === "collection") {
+      const how = owns(p, it.id) ? "✔ Possédé" : `Comment l'obtenir : ${unlockText(it.id)}`;
+      this.descEl.insertAdjacentHTML("beforeend", `<br><small class="how">${how}</small>`);
+    }
     this.renderAction(it);
   }
 
@@ -284,6 +296,12 @@ export class ItemBrowser {
         btn.innerHTML = `<span>ÉQUIPER</span>`;
         btn.addEventListener("click", () => this.doEquip(it, false));
       }
+      return;
+    }
+    if (this.mode === "collection" && it.exclusive) {
+      btn.classList.add("btn-ghost");
+      btn.disabled = true;
+      btn.innerHTML = `${icon("lock")}<span>${unlockText(it.id)}</span>`;
       return;
     }
     if (this.mode === "collection") {
@@ -338,7 +356,7 @@ export class ItemBrowser {
     audio.play("equip");
     this.ctx.fx.sparkle(this.ctx.fx.center(this.stage.canvas).x, this.ctx.fx.center(this.stage.canvas).y, 14);
     if (!toggle) this.stage.flash();
-    if (!toggle) this.ctx.toast(`${it.name} équipé !`, "good");
+    if (!toggle) this.ctx.toast(it.kind === "title" ? `🏷️ Titre « ${it.name} » équipé !` : `${it.name} équipé !`, "good");
     this.render();
     this.select(it.id, false);
   }

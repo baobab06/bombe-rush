@@ -78,14 +78,17 @@
       <button class="profile" id="homeProfile" aria-label="Profil">
         <canvas class="avatar" id="homeAvatar" width="96" height="96"></canvas>
         <span class="pinfo">
-          <b id="homeName">Joueur</b>
-          <span class="lvl-row"><span class="lvl" id="homeLevel">1</span><span class="xpbar"><i id="homeXpBar"></i></span></span>
+          <span class="pname"><b id="homeName">Joueur</b><em class="ptitle" id="homeTitle"></em></span>
+          <span class="lvl-row"><span class="lvl" id="homeLevel">1</span><span class="xpbar"><i id="homeXpBar"></i></span><small class="xp-num" id="homeXpNum"></small></span>
+          <span class="next-rw" id="homeNext"></span>
         </span>
+        <span class="dot" id="profileDot" hidden>!</span>
       </button>
+      <button class="rank-chip" id="btnRank" aria-label="Rang"><span class="rk-ico" id="homeRankIco">🥉</span><span class="rk-txt"><b id="homeRank">Bronze</b><span class="xpbar"><i id="homeRankBar"></i></span></span></button>
       <div class="event-chip" id="homeEvent" hidden></div>
       <div class="top-r">
         <button class="round-btn r-gift" id="btnDaily" aria-label="Récompense du jour"><i data-icon="gift"></i><span class="dot" id="dailyDot" hidden>!</span></button>
-        <button class="round-btn r-miss" id="btnMissions" aria-label="Missions"><i data-icon="missions"></i><span class="dot" id="missionDot" hidden>1</span></button>
+        <button class="round-btn r-chest" id="btnChestsTop" aria-label="Coffres"><span class="emo-ico">🎁</span><span class="dot" id="chestDot" hidden>1</span></button>
         <div class="wallet" data-wallet><i class="coin"></i><b data-coins>0</b><button class="wallet-plus" data-go="shop" aria-label="Boutique"><i data-icon="plus"></i></button></div>
       </div>
     </header>
@@ -99,9 +102,11 @@
         <button class="btn btn-play" id="btnPlay"><i data-icon="play"></i><span class="lbl">JOUER</span><small id="playSub">Classique · 3 bots</small></button>
         <button class="btn btn-blue btn-private" id="btnPrivate"><i data-icon="users"></i><span>PARTIE PRIVÉE</span></button>
         <div class="tiles">
-          <button class="tile t-orange" id="btnChars"><i data-icon="hero"></i><span>PERSONNAGE</span></button>
+          <button class="tile t-orange" id="btnChars"><i data-icon="hero"></i><span>PERSONNAGE</span><small id="charMastery"></small></button>
           <button class="tile t-pink" id="btnShop"><i data-icon="shop"></i><span>BOUTIQUE</span><em class="ribbon" id="shopRibbon" hidden>PROMO</em></button>
           <button class="tile t-purple" id="btnCollection"><i data-icon="collection"></i><span>COLLECTION</span><small id="collCount"></small></button>
+          <button class="tile t-green" id="btnMissions"><i data-icon="missions"></i><span>MISSIONS</span><span class="dot" id="missionDot" hidden>1</span></button>
+          <button class="tile t-gold" id="btnChests"><span class="emo-ico">🎁</span><span>COFFRES</span><small id="chestCount"></small></button>
           <button class="tile t-teal" id="btnSettings"><i data-icon="gear"></i><span>PARAMÈTRES</span></button>
         </div>
       </div>
@@ -198,6 +203,7 @@
       <div class="locker-stage panel">
         <canvas class="stage" id="charStage" aria-label="Aperçu du personnage"></canvas>
         <div class="hero-text"><b id="charName">Flamme</b><span id="charTag">Renard malin</span></div>
+        <div class="char-mastery" id="charMasteryBox"></div>
       </div>
       <div class="locker-side">
         <div class="char-row" id="charRow"></div>
@@ -217,6 +223,47 @@
   <section class="screen" id="collection" hidden>
     <header class="bar"><button class="back" data-back aria-label="Retour"><i data-icon="back"></i></button><h2>Collection</h2><span class="bar-progress"><span id="collProgressText">0/0</span><span class="xpbar"><i id="collProgress"></i></span></span><div class="wallet" data-wallet><i class="coin"></i><b data-coins>0</b></div></header>
     <div class="browser" id="collBrowser"></div>
+  </section>
+
+  <!-- Missions -->
+  <section class="screen" id="missions" hidden>
+    <header class="bar"><button class="back" data-back aria-label="Retour"><i data-icon="back"></i></button><h2>Missions</h2><div class="wallet" data-wallet><i class="coin"></i><b data-coins>0</b></div></header>
+    <div class="mis-wrap">
+      <nav class="tabs" id="missionTabs">
+        <button class="tab sel" data-tab="daily">Du jour <span class="dot" id="misDotD" hidden>1</span></button>
+        <button class="tab" data-tab="weekly">De la semaine <span class="dot" id="misDotW" hidden>1</span></button>
+        <span class="tab-note" id="missionTimer"></span>
+      </nav>
+      <div class="mis-list" id="missionList"></div>
+    </div>
+  </section>
+
+  <!-- Profil : succès, maîtrise, statistiques -->
+  <section class="screen" id="profile" hidden>
+    <header class="bar"><button class="back" data-back aria-label="Retour"><i data-icon="back"></i></button><h2>Profil</h2><div class="wallet" data-wallet><i class="coin"></i><b data-coins>0</b></div></header>
+    <div class="prof-grid">
+      <aside class="prof-card panel" id="profCard"></aside>
+      <div class="prof-main">
+        <nav class="tabs" id="profTabs">
+          <button class="tab sel" data-tab="ach">Succès <span class="dot" id="achDot" hidden>1</span></button>
+          <button class="tab" data-tab="mastery">Maîtrise</button>
+          <button class="tab" data-tab="stats">Statistiques</button>
+        </nav>
+        <div class="prof-body" id="profBody"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Rang -->
+  <section class="screen" id="rank" hidden>
+    <header class="bar"><button class="back" data-back aria-label="Retour"><i data-icon="back"></i></button><h2>Rang</h2><span class="bar-note">Rang personnel · parties contre les bots</span></header>
+    <div class="rank-grid" id="rankBody"></div>
+  </section>
+
+  <!-- Coffres -->
+  <section class="screen" id="chests" hidden>
+    <header class="bar"><button class="back" data-back aria-label="Retour"><i data-icon="back"></i></button><h2>Coffres</h2><span class="bar-note">Gagnés en jouant · jamais payants</span><div class="wallet" data-wallet><i class="coin"></i><b data-coins>0</b></div></header>
+    <div class="chest-grid" id="chestBody"></div>
   </section>
 
   <!-- Réglages -->
@@ -289,8 +336,10 @@
           <span class="lvl" id="resLevel">1</span>
           <span class="xpbar big"><i id="resXpBar"></i></span>
           <span class="xp-text" id="resXpText"></span>
+          <div class="levelup" id="resLevelUp" hidden>NIVEAU 2 !</div>
         </div>
-        <div class="levelup" id="resLevelUp" hidden>NIVEAU 2 !</div>
+        <div class="res-prog" id="resProg"></div>
+        <div class="res-grants" id="resGrants"></div>
         <p class="res-facts" id="resFacts"></p>
         <div class="res-actions">
           <button class="btn btn-ghost" id="btnMenu"><span>Menu</span></button>

@@ -26,6 +26,7 @@ export interface Client {
   skinId?: string;
   accessoryId?: string;
   trailId?: string;
+  boomId?: string;
   room: string | null;
   connected: boolean;
 }
@@ -72,6 +73,7 @@ export class Lobby {
         skinId: c.skinId,
         accessoryId: c.accessoryId,
         trailId: c.trailId,
+        boomId: c.boomId,
         ready: mb.ready,
         connected: mb.connected,
         isHost: mb.token === r.hostToken,
@@ -243,7 +245,7 @@ export class Lobby {
     if (why) return this.error(c.token, "not_ready", why);
     const seats = r.members.map((mb) => {
       const cl = this.hooks.client(mb.token)!;
-      return { token: cl.token, name: cl.name, characterId: cl.characterId, skinId: cl.skinId, accessoryId: cl.accessoryId, trailId: cl.trailId };
+      return { token: cl.token, name: cl.name, characterId: cl.characterId, skinId: cl.skinId, accessoryId: cl.accessoryId, trailId: cl.trailId, boomId: cl.boomId };
     });
     // deux joueurs avec le même personnage : le second reçoit un autre perso libre
     const taken = new Set<string>();

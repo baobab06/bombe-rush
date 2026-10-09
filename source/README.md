@@ -18,10 +18,19 @@ Render redéploie tout seul en 2-3 minutes.
 | Parties à 2, 3 ou 5+ joueurs : quelle colonne du barème pour chaque place (`PLACE_COLUMNS`), égalité (`DRAW_COLUMN`) | `src/meta/economy.ts` |
 | Bonus sur les gains (événements ×2, séries, 1re victoire du jour…) : `GAIN_MODIFIERS` | `src/meta/rewards.ts` |
 | **Délai avant explosion des bombes** et alerte (`fuse`, `warn`), futurs types de bombes : `BOMB_KINDS` | `src/core/bombs.ts` |
-| Prix par rareté, gains de fin de partie, récompense du jour, missions, événements, promo du jour | `src/meta/economy.ts` |
+| Prix par rareté, missions du jour, événements, promo du jour | `src/meta/economy.ts` |
+| **Progression** : XP par place (`XP_BY_PLACE`), courbe des niveaux (`levelXp`), récompenses de niveau (`LEVEL_REWARDS`), maîtrise (`masteryXp`, `masteryRewards`), missions de la semaine, connexion quotidienne (`LOGIN_REWARDS`), séries (`STREAK_BONUSES`), coffres (`CHESTS`, probabilités, doublons), rangs (`RANKS`, `RANK_RULES`), succès (`ACHIEVEMENTS`) | `src/meta/progress-config.ts` |
+| Explosions et titres (cosmétiques) | `src/core/cosmetics.ts` |
 | Personnages et skins (un thème = une entrée dans `THEMES`, créé pour tous les persos) | `src/core/characters.ts` |
 | Accessoires, effets (traînées), emotes | `src/core/cosmetics.ts` |
 | Règles d'achat / équipement / missions (fonctions pures, testées) | `src/meta/store.ts` |
+
+### Progression (0.6)
+- `grants.ts` : un seul chemin pour donner pièces, XP, objets, coffres (doublon → pièces) ; ouverture des coffres.
+- `progression.ts` : fin de partie → pièces, XP, maîtrise du perso joué, rang, série, missions, succès (une seule fois par partie).
+- `mastery.ts`, `weekly.ts`, `achievements.ts`, `rank.ts`, `unlocks.ts` (« comment l'obtenir »), `clock.ts` (l'heure ne recule jamais ; heure du serveur via `/health` quand il est joignable).
+- Écrans : `missions-screen.ts`, `profile-screen.ts`, `rank-screen.ts`, `chests-screen.ts`.
+- Limites : sauvegarde locale (pas de compte) ; rang personnel, pas de classement mondial (interface `Leaderboard` prête dans `rank.ts`).
 
 ### Architecture ajoutée
 - `src/meta/catalog.ts` : catalogue unique de tout ce qui se possède (skins,

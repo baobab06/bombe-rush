@@ -213,6 +213,21 @@ function buildSkins() {
         desc: t.desc
       });
     }
+    out.push({
+      id: `${c.id}-maitre`,
+      characterId: c.id,
+      name: "Maître",
+      theme: "maitrise",
+      rarity: "legend",
+      palette: { ...base.palette, accent: "#ffd23f" },
+      wear: ["crown"],
+      pattern: "stripes",
+      aura: "stars",
+      eyes: "glow",
+      special: "shimmer",
+      desc: `Exclusif : atteins le niveau 30 de maîtrise avec ${c.name}.`,
+      exclusive: "mastery"
+    });
   }
   return out;
 }
@@ -1463,6 +1478,7 @@ class Match {
         skinId: slot.skinId,
         accessoryId: slot.accessoryId,
         trailId: slot.trailId,
+        boomId: slot.boomId,
         isBot: slot.isBot,
         difficulty: slot.difficulty,
         alive: true,
@@ -2132,7 +2148,7 @@ class GameRunner {
     const used = new Set(seats.map((s) => s.characterId));
     this.slots = seats.map((s, i) => {
       this.seatOf.set(s.token, i);
-      return { name: s.name, characterId: s.characterId, skinId: s.skinId, accessoryId: s.accessoryId, trailId: s.trailId, isBot: false, accountId: s.token };
+      return { name: s.name, characterId: s.characterId, skinId: s.skinId, accessoryId: s.accessoryId, trailId: s.trailId, boomId: s.boomId, isBot: false, accountId: s.token };
     });
     if (opts.fillBots) {
       const free = CHARACTERS.filter((c) => !used.has(c.id));
@@ -2273,6 +2289,7 @@ class Lobby {
         skinId: c.skinId,
         accessoryId: c.accessoryId,
         trailId: c.trailId,
+        boomId: c.boomId,
         ready: mb.ready,
         connected: mb.connected,
         isHost: mb.token === r.hostToken
@@ -2454,7 +2471,7 @@ class Lobby {
       return this.error(c.token, "not_ready", why);
     const seats = r.members.map((mb) => {
       const cl = this.hooks.client(mb.token);
-      return { token: cl.token, name: cl.name, characterId: cl.characterId, skinId: cl.skinId, accessoryId: cl.accessoryId, trailId: cl.trailId };
+      return { token: cl.token, name: cl.name, characterId: cl.characterId, skinId: cl.skinId, accessoryId: cl.accessoryId, trailId: cl.trailId, boomId: cl.boomId };
     });
     const taken = new Set;
     for (const s of seats) {
@@ -2842,6 +2859,7 @@ function onMessage(conn, raw, state) {
     c.skinId = cosm(msg.skinId);
     c.accessoryId = cosm(msg.accessoryId);
     c.trailId = cosm(msg.trailId);
+    c.boomId = cosm(msg.boomId);
     send(token, { t: "welcome", you: c.id, v: PROTOCOL_VERSION });
     if (c.room)
       lobby.reconnect(c);
@@ -2885,6 +2903,7 @@ function onMessage(conn, raw, state) {
       c.skinId = cosm(msg.skinId);
       c.accessoryId = cosm(msg.accessoryId);
       c.trailId = cosm(msg.trailId);
+      c.boomId = cosm(msg.boomId);
       lobby.updateProfile(c);
       break;
     case "setSettings":
@@ -2923,7 +2942,7 @@ var server = createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", "http://x");
   if (url.pathname === "/health") {
     res.writeHead(200, { "content-type": "application/json", "access-control-allow-origin": "*" });
-    res.end(JSON.stringify({ ok: true, rooms: lobby.rooms.size, players: conns.size, push: push.enabled, v: PROTOCOL_VERSION }));
+    res.end(JSON.stringify({ ok: true, now: Date.now(), rooms: lobby.rooms.size, players: conns.size, push: push.enabled, v: PROTOCOL_VERSION }));
     return;
   }
   if (url.pathname === "/.well-known/assetlinks.json" && process.env.ANDROID_PACKAGE && process.env.ANDROID_SHA256) {

@@ -81,6 +81,7 @@ export class Match {
         skinId: slot.skinId,
         accessoryId: slot.accessoryId,
         trailId: slot.trailId,
+        boomId: slot.boomId,
         isBot: slot.isBot,
         difficulty: slot.difficulty,
         alive: true,

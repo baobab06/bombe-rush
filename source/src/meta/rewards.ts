@@ -17,6 +17,9 @@
  */
 import { DRAW_COLUMN, PLACE_COLUMNS, STAKES, VOID_COINS, activeEvents, type StakeId } from "./economy";
 import type { Profile } from "./profile";
+import { grantAll, type Granted } from "./grants";
+import { STREAK_BONUSES } from "./progress-config";
+import { applyRank, isRanked, type RankResult } from "./rank";
 
 /** Résumé de l'issue (pour l'historique et les statistiques). */
 export type Outcome = "win" | "place" | "loss" | "draw" | "abandon" | "void";
@@ -69,6 +72,12 @@ export interface CoinTransaction {
   before: number;
   after: number;
   at: number;
+  /** rang compétitif (absent si la partie n'est pas classée) */
+  rank?: RankResult;
+  /** série de victoires après la partie */
+  streak?: number;
+  /** bonus de série atteint (3, 5, 10 victoires d'affilée) */
+  streakBonus?: Granted[];
 }
 
 export interface ModifierInput {
@@ -176,6 +185,17 @@ export function settleMatch(p: Profile, ctx: MatchContext, placement: Placement,
   if (requested > 0) p.coinsEarned += requested;
   const outcome = outcomeOf(pl, base);
   p.winStreak = outcome === "win" ? (p.winStreak ?? 0) + 1 : outcome === "draw" || outcome === "void" ? p.winStreak ?? 0 : 0;
+  p.stats.bestWinStreak = Math.max(p.stats.bestWinStreak, p.winStreak);
+  // bonus de série : versé une fois quand la série atteint 3, 5 puis 10
+  let streakBonus: Granted[] | undefined;
+  const sb = outcome === "win" ? STREAK_BONUSES[p.winStreak] : undefined;
+  if (sb) {
+    const list = [{ kind: "coins" as const, amount: sb.coins }, { kind: "xp" as const, amount: sb.xp }, ...(sb.chest ? [{ kind: "chest" as const, tier: sb.chest }] : [])];
+    streakBonus = grantAll(p, list, [], `Série de ${p.winStreak} victoires`);
+  }
+  // rang : uniquement les parties classées, jamais pour une partie annulée
+  const column = pl.void ? 0 : columnOf(pl);
+  const rank = !pl.void && isRanked(ctx.online) ? applyRank(p, column, ctx.stake, pl.players, pl.place, now.getTime()) : undefined;
   p.settled.push(ctx.matchId);
   if (p.settled.length > MAX_REMEMBERED) p.settled.splice(0, p.settled.length - MAX_REMEMBERED);
   if (p.pending?.matchId === ctx.matchId) p.pending = null;
@@ -185,7 +205,7 @@ export function settleMatch(p: Profile, ctx: MatchContext, placement: Placement,
     stake: ctx.stake,
     place: pl.place,
     players: pl.players,
-    column: pl.void ? 0 : columnOf(pl),
+    column,
     base,
     modifiers,
     requested,
@@ -193,6 +213,9 @@ export function settleMatch(p: Profile, ctx: MatchContext, placement: Placement,
     before,
     after,
     at: now.getTime(),
+    rank,
+    streak: p.winStreak,
+    streakBonus,
   };
   p.ledger.push(tx);
   if (p.ledger.length > 30) p.ledger.splice(0, p.ledger.length - 30);

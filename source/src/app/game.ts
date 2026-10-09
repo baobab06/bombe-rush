@@ -1,7 +1,7 @@
 import { audio } from "../audio/audio";
 import { CHARACTERS, getCharacter, skinsOf } from "../core/characters";
 import { CHAOS_EVENTS } from "../core/chaos";
-import { ACCESSORIES, EMOTES, TRAILS } from "../core/cosmetics";
+import { ACCESSORIES, EMOTES, BOOMS, TRAILS } from "../core/cosmetics";
 import { lookOf } from "../render/bodies";
 import { DT, RULES } from "../core/rules";
 import { NO_INPUT, type Difficulty, type PlayerSlot, type SimEvent } from "../core/types";
@@ -22,6 +22,7 @@ export interface GameSetup {
   skinId?: string;
   accessoryId?: string;
   trailId?: string;
+  boomId?: string;
   playerName: string;
 }
 
@@ -33,6 +34,7 @@ function randomLook(characterId: string, flashy: boolean) {
     skinId: flashy || Math.random() < 0.6 ? pick(sk).id : sk[0].id,
     trailId: flashy || Math.random() < 0.5 ? pick(TRAILS).id : undefined,
     accessoryId: Math.random() < (flashy ? 0.4 : 0.2) ? pick(ACCESSORIES).id : undefined,
+    boomId: flashy || Math.random() < 0.35 ? pick(BOOMS.filter((b) => !b.exclusive)).id : undefined,
   };
 }
 
@@ -123,7 +125,7 @@ export class GameScreen {
       .map((c) => c.id)
       .sort(() => Math.random() - 0.5);
     const players: PlayerSlot[] = [
-      { name: setup.playerName, characterId: setup.characterId, skinId: setup.skinId, accessoryId: setup.accessoryId, trailId: setup.trailId, isBot: false },
+      { name: setup.playerName, characterId: setup.characterId, skinId: setup.skinId, accessoryId: setup.accessoryId, trailId: setup.trailId, boomId: setup.boomId, isBot: false },
       ...others.slice(0, setup.botCount).map((id) => ({
         name: getCharacter(id).name, characterId: id, ...randomLook(id, false), isBot: true, difficulty: setup.difficulty,
       })),

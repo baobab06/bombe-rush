@@ -102,6 +102,8 @@ export interface SkinDef {
   /** reflet doré qui balaie le corps / couleurs animées */
   special?: "shimmer" | "rainbow";
   desc?: string;
+  /** skin exclusif (non vendu en boutique) : comment il se débloque */
+  exclusive?: "mastery";
 }
 
 export const CHARACTERS: CharacterDef[] = [
@@ -235,6 +237,12 @@ function buildSkins(): SkinDef[] {
         eyes: t.eyes, special: t.special, desc: t.desc,
       });
     }
+    // skin de maîtrise (niveau 30 du personnage) : ses couleurs + finitions or
+    out.push({
+      id: `${c.id}-maitre`, characterId: c.id, name: "Maître", theme: "maitrise", rarity: "legend",
+      palette: { ...base.palette, accent: "#ffd23f" }, wear: ["crown"], pattern: "stripes", aura: "stars", eyes: "glow", special: "shimmer",
+      desc: `Exclusif : atteins le niveau 30 de maîtrise avec ${c.name}.`, exclusive: "mastery",
+    });
   }
   return out;
 }

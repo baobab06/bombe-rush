@@ -4,21 +4,24 @@
  * plus tard côté serveur pour valider les achats.
  */
 import { EMOTE_SLOTS, getEmote } from "../core/cosmetics";
-import { CATALOG, characterItemId, getItem, type CatalogItem, type ItemKind } from "./catalog";
-import { DAILY_REWARDS, FEATURED, MISSIONS, MISSIONS_PER_DAY, NAME_CHANGE_PRICE, NAME_MAX, NAME_MIN, STARTER_GIFT, type MissionDef } from "./economy";
+import { CATALOG, characterItemId, getItem, isBuyable, type CatalogItem, type ItemKind } from "./catalog";
+import { trustedNow } from "./clock";
+import { FEATURED, MISSIONS, MISSIONS_PER_DAY, NAME_CHANGE_PRICE, NAME_MAX, NAME_MIN, STARTER_GIFT, type MissionDef } from "./economy";
+import { grant, grantAll, type Granted } from "./grants";
+import { DAILY_MISSION_XP, LOGIN_REWARDS, type Reward } from "./progress-config";
 import type { Profile } from "./profile";
 
 // ----------------------------------------------------------------- dates
 export function dayKey(d = new Date()): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
-function dayDiff(a: string, b: string): number {
+export function dayDiff(a: string, b: string): number {
   const pa = a.split("-").map(Number);
   const pb = b.split("-").map(Number);
   return Math.round((Date.UTC(pb[0], pb[1] - 1, pb[2]) - Date.UTC(pa[0], pa[1] - 1, pa[2])) / 86400000);
 }
 /** Petit hasard déterministe (même sélection pour tout le monde le même jour). */
-function seeded(seedStr: string) {
+export function seeded(seedStr: string) {
   let h = 2166136261;
   for (let i = 0; i < seedStr.length; i++) h = Math.imul(h ^ seedStr.charCodeAt(i), 16777619);
   return () => {
@@ -55,7 +58,7 @@ export interface Featured {
 }
 export function featured(now = new Date()): Featured {
   const rnd = seeded("shop-" + dayKey(now));
-  const pool = CATALOG.filter((i) => !i.free && (i.kind !== "skin" || i.characterId !== "pingo"));
+  const pool = CATALOG.filter((i) => isBuyable(i) && (i.kind !== "skin" || i.characterId !== "pingo"));
   const picks: CatalogItem[] = [];
   // une pièce maîtresse épique/légendaire + des objets variés
   const big = pool.filter((i) => i.rarity === "legend" || i.rarity === "epic");
@@ -78,12 +81,13 @@ export function priceOf(id: string, now = new Date()): { price: number; full: nu
 }
 
 // ---------------------------------------------------------------- achat
-export type BuyResult = { ok: true; item: CatalogItem; price: number } | { ok: false; reason: "unknown" | "owned" | "coins" | "character"; missing?: number };
+export type BuyResult = { ok: true; item: CatalogItem; price: number } | { ok: false; reason: "unknown" | "owned" | "coins" | "character" | "exclusive"; missing?: number };
 
 export function buy(p: Profile, id: string, now = new Date()): BuyResult {
   const it = getItem(id);
   if (!it) return { ok: false, reason: "unknown" };
   if (owns(p, id)) return { ok: false, reason: "owned" };
+  if (it.exclusive) return { ok: false, reason: "exclusive" };
   if (it.kind === "skin" && !p.ownedCharacters.includes(it.characterId!)) return { ok: false, reason: "character" };
   const { price } = priceOf(id, now);
   if (p.coins < price) return { ok: false, reason: "coins", missing: price - p.coins };
@@ -106,6 +110,10 @@ export function isEquipped(p: Profile, id: string): boolean {
       return p.equipped.trail === id;
     case "emote":
       return p.equipped.emotes.includes(id);
+    case "boom":
+      return p.equipped.boom === id;
+    case "title":
+      return p.equipped.title === id;
     case "character":
       return p.characterId === it.characterId;
   }
@@ -145,6 +153,12 @@ export function equip(p: Profile, id: string, opts: { toggle?: boolean } = {}): 
       }
       break;
     }
+    case "boom":
+      p.equipped.boom = id;
+      break;
+    case "title":
+      p.equipped.title = id;
+      break;
     case "character":
       p.characterId = it.characterId!;
       break;
@@ -166,33 +180,38 @@ export function grantStarterGift(p: Profile): number {
   return STARTER_GIFT;
 }
 
-// ------------------------------------------------------ récompense du jour
+// --------------------------------------------- connexion quotidienne
 export interface DailyState {
   available: boolean;
-  /** jour de la série qui sera réclamé (0..6) */
+  /** jour du cycle qui sera (ou a été) réclamé aujourd'hui (0..6) */
   index: number;
-  reward: number;
+  rewards: Reward[];
+  /** jours déjà réclamés au total */
   streak: number;
 }
-export function dailyState(p: Profile, now = new Date()): DailyState {
-  const today = dayKey(now);
+/**
+ * Cycle de 7 jours (LOGIN_REWARDS). Rater un jour ne remet rien à zéro :
+ * on reprend le cycle là où on en était. Une seule fois par jour, et
+ * reculer l'heure du téléphone ne rouvre pas un jour passé (trustedNow).
+ */
+export function dailyState(p: Profile, now?: Date): DailyState {
+  const today = dayKey(trustedNow(p, now));
   const last = p.daily.last;
-  if (last === today) {
-    const idx = (p.daily.streak - 1 + DAILY_REWARDS.length) % DAILY_REWARDS.length;
-    return { available: false, index: idx, reward: DAILY_REWARDS[idx], streak: p.daily.streak };
+  const n = LOGIN_REWARDS.length;
+  const claimedToday = last !== null && (last === today || dayDiff(last, today) <= 0);
+  if (claimedToday) {
+    const idx = (Math.max(1, p.daily.streak) - 1) % n;
+    return { available: false, index: idx, rewards: LOGIN_REWARDS[idx], streak: p.daily.streak };
   }
-  const keep = last !== null && dayDiff(last, today) === 1;
-  const streak = keep ? p.daily.streak : 0;
-  const idx = streak % DAILY_REWARDS.length;
-  return { available: true, index: idx, reward: DAILY_REWARDS[idx], streak };
+  const idx = p.daily.streak % n;
+  return { available: true, index: idx, rewards: LOGIN_REWARDS[idx], streak: p.daily.streak };
 }
-export function claimDaily(p: Profile, now = new Date()): number {
+export function claimDaily(p: Profile, now?: Date): Granted[] | null {
   const st = dailyState(p, now);
-  if (!st.available) return 0;
-  p.daily = { last: dayKey(now), streak: st.streak + 1 };
-  p.coins += st.reward;
-  p.coinsEarned += st.reward;
-  return st.reward;
+  if (!st.available) return null;
+  p.daily = { last: dayKey(trustedNow(p, now)), streak: st.streak + 1 };
+  p.stats.loginDays++;
+  return grantAll(p, st.rewards, [], "Connexion du jour");
 }
 
 // ---------------------------------------------------------------- missions
@@ -203,8 +222,8 @@ export function missionLabel(d: MissionDef): string {
   return d.label.replace("{n}", String(d.goal));
 }
 /** Missions du jour (renouvelées à minuit). */
-export function ensureMissions(p: Profile, now = new Date()) {
-  const today = dayKey(now);
+export function ensureMissions(p: Profile, now?: Date) {
+  const today = dayKey(trustedNow(p, now));
   if (p.missions.day === today && p.missions.list.length) return p.missions.list;
   const rnd = seeded("missions-" + today + p.name);
   const pool = [...MISSIONS];
@@ -229,7 +248,7 @@ export interface MatchFacts {
   modeId: string;
 }
 /** Fait avancer les missions ; renvoie celles qui viennent d'être terminées. */
-export function progressMissions(p: Profile, f: MatchFacts, now = new Date()): MissionDef[] {
+export function progressMissions(p: Profile, f: MatchFacts, now?: Date): MissionDef[] {
   const done: MissionDef[] = [];
   for (const m of ensureMissions(p, now)) {
     const d = missionDef(m.id);
@@ -250,14 +269,17 @@ export function progressMissions(p: Profile, f: MatchFacts, now = new Date()): M
   }
   return done;
 }
-export function claimMission(p: Profile, id: string): number {
+/** Récupère une mission du jour terminée : pièces + XP, une seule fois. */
+export function claimMission(p: Profile, id: string): Granted[] | null {
   const m = p.missions.list.find((x) => x.id === id);
   const d = missionDef(id);
-  if (!m || !d || m.claimed || m.progress < d.goal) return 0;
+  if (!m || !d || m.claimed || m.progress < d.goal) return null;
   m.claimed = true;
-  p.coins += d.reward;
-  p.coinsEarned += d.reward;
-  return d.reward;
+  p.stats.missionsClaimed++;
+  const out: Granted[] = [];
+  grant(p, { kind: "coins", amount: d.reward }, out, "Mission du jour");
+  grant(p, { kind: "xp", amount: DAILY_MISSION_XP }, out, "Mission du jour");
+  return out;
 }
 export function missionsToClaim(p: Profile): number {
   return p.missions.list.filter((m) => !m.claimed && m.progress >= (missionDef(m.id)?.goal ?? Infinity)).length;

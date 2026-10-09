@@ -97,6 +97,7 @@ function onMessage(conn: WsConn, raw: string, state: { token: string | null; win
     c.skinId = cosm(msg.skinId);
     c.accessoryId = cosm(msg.accessoryId);
     c.trailId = cosm(msg.trailId);
+    c.boomId = cosm(msg.boomId);
     send(token, { t: "welcome", you: c.id, v: PROTOCOL_VERSION });
     if (c.room) lobby.reconnect(c);
     else send(token, { t: "room", room: null });
@@ -137,6 +138,7 @@ function onMessage(conn: WsConn, raw: string, state: { token: string | null; win
       c.skinId = cosm(msg.skinId);
       c.accessoryId = cosm(msg.accessoryId);
       c.trailId = cosm(msg.trailId);
+      c.boomId = cosm(msg.boomId);
       lobby.updateProfile(c);
       break;
     case "setSettings":
@@ -176,7 +178,7 @@ const server = createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", "http://x");
   if (url.pathname === "/health") {
     res.writeHead(200, { "content-type": "application/json", "access-control-allow-origin": "*" });
-    res.end(JSON.stringify({ ok: true, rooms: lobby.rooms.size, players: conns.size, push: push.enabled, v: PROTOCOL_VERSION }));
+    res.end(JSON.stringify({ ok: true, now: Date.now(), rooms: lobby.rooms.size, players: conns.size, push: push.enabled, v: PROTOCOL_VERSION }));
     return;
   }
   if (url.pathname === "/.well-known/assetlinks.json" && process.env.ANDROID_PACKAGE && process.env.ANDROID_SHA256) {

@@ -18,6 +18,7 @@ export interface Seat {
   skinId?: string;
   accessoryId?: string;
   trailId?: string;
+  boomId?: string;
 }
 
 const SNAPSHOT_EVERY = 3; // 60 Hz / 3 = 20 instantanés par seconde
@@ -50,7 +51,7 @@ export class GameRunner {
     const used = new Set(seats.map((s) => s.characterId));
     this.slots = seats.map((s, i) => {
       this.seatOf.set(s.token, i);
-      return { name: s.name, characterId: s.characterId, skinId: s.skinId, accessoryId: s.accessoryId, trailId: s.trailId, isBot: false, accountId: s.token };
+      return { name: s.name, characterId: s.characterId, skinId: s.skinId, accessoryId: s.accessoryId, trailId: s.trailId, boomId: s.boomId, isBot: false, accountId: s.token };
     });
     if (opts.fillBots) {
       const free = CHARACTERS.filter((c) => !used.has(c.id));

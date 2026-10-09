@@ -33,6 +33,8 @@ export interface PlayerSlot {
   /** accessoire et effet équipés (cosmétiques) */
   accessoryId?: string;
   trailId?: string;
+  /** effet d'explosion équipé (cosmétique) */
+  boomId?: string;
   isBot: boolean;
   difficulty?: Difficulty;
   /** identifiant réseau/compte, plus tard */
@@ -54,6 +56,8 @@ export interface PlayerState {
   skinId?: string;
   accessoryId?: string;
   trailId?: string;
+  /** effet d'explosion équipé (cosmétique) */
+  boomId?: string;
   isBot: boolean;
   difficulty?: Difficulty;
   alive: boolean;

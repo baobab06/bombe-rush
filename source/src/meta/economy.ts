@@ -88,8 +88,7 @@ export const placeName = (place: number) => (place === 1 ? "1er" : `${place}e`);
 /** médaille d'une place (le dernier a toujours 💀) */
 export const placeMedal = (place: number, players: number) => (place >= players && players > 1 ? "💀" : PLACE_MEDALS[Math.min(place, 3) - 1] ?? "💀");
 
-/** Expérience (progression de niveau) — indépendante des pièces. */
-export const MATCH_XP = { win: 80, draw: 40, participation: 20, second: 15, perKill: 15 };
+// Expérience, niveaux, maîtrise, coffres, rangs, succès : progress-config.ts
 
 /** Cadeau de bienvenue pour découvrir la boutique (donné une seule fois). */
 export const STARTER_GIFT = 1000;
@@ -98,9 +97,7 @@ export const NAME_CHANGE_PRICE = 300;
 export const NAME_MIN = 2;
 export const NAME_MAX = 16;
 
-// ------------------------------------------------------ récompense du jour
-/** Jour 1 → 7, puis on recommence. Rater un jour remet la série à zéro. */
-export const DAILY_REWARDS = [100, 150, 200, 300, 400, 500, 1000];
+// Récompense de connexion quotidienne (cycle de 7 jours) : LOGIN_REWARDS dans progress-config.ts
 
 // ----------------------------------------------------------------- missions
 export type MissionStat = "played" | "wins" | "kills" | "blocks" | "bonuses" | "bombs" | "survive" | "chaos";

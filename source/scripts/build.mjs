@@ -12,7 +12,7 @@ import { execFileSync } from "node:child_process";
 const args = new Set(process.argv.slice(2));
 
 if (args.has("--test")) {
-  for (const t of ["sim", "meta"]) {
+  for (const t of ["sim", "meta", "progress"]) {
     await esbuild.build({ entryPoints: [`tests/${t}.test.ts`], bundle: true, platform: "node", format: "esm", outfile: `dist/test/${t}.test.mjs`, logLevel: "warning" });
     execFileSync(process.execPath, [`dist/test/${t}.test.mjs`], { stdio: "inherit" });
   }

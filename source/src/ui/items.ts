@@ -3,7 +3,7 @@
  * Chaque type d'objet sait se dessiner tout seul à partir du catalogue.
  */
 import { RARITY_LABEL } from "../core/characters";
-import { getEmote, getTrail } from "../core/cosmetics";
+import { getBoom, getEmote, getTitle, getTrail } from "../core/cosmetics";
 import { fmt } from "../app/ctx";
 import { icon } from "./icons";
 import type { CatalogItem } from "../meta/catalog";
@@ -33,6 +33,12 @@ export function drawItemArt(cv: HTMLCanvasElement, item: CatalogItem, wearer: We
       break;
     case "trail":
       drawTrailArt(cv, item.id);
+      break;
+    case "boom":
+      drawBoomArt(cv, item.id);
+      break;
+    case "title":
+      drawTitleArt(cv, item.id, item.rarity);
       break;
     case "emote": {
       const e = getEmote(item.id)!;
@@ -64,6 +70,92 @@ export function drawItemArt(cv: HTMLCanvasElement, item: CatalogItem, wearer: We
       break;
     }
   }
+}
+
+/** Explosion : une déflagration figée à ses couleurs. */
+function drawBoomArt(cv: HTMLCanvasElement, id: string) {
+  const d = getBoom(id);
+  const ctx = cv.getContext("2d")!;
+  const w = cv.width;
+  const h = cv.height;
+  const s = Math.min(w, h) * 0.42;
+  const g = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, s * 1.05);
+  g.addColorStop(0, d.glow);
+  g.addColorStop(0.35, d.spark[0]);
+  g.addColorStop(0.7, d.ring);
+  g.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  for (let i = 0; i < 18; i++) {
+    const a = (i / 18) * Math.PI * 2;
+    const r = s * (i % 2 ? 0.62 : 1);
+    ctx.lineTo(w / 2 + Math.cos(a) * r, h / 2 + Math.sin(a) * r);
+  }
+  ctx.closePath();
+  ctx.fill();
+  const P = new Particles();
+  const sc = s / 1.3;
+  for (let i = 0; i < 14; i++) {
+    const a = (i / 14) * Math.PI * 2;
+    const r = 0.75 + (i % 3) * 0.18;
+    const kind = d.extra === "confetti" ? "confetti" : d.extra === "snow" ? "flake" : d.extra === "hearts" ? "heart" : d.extra === "bubbles" ? "bubble" : "twinkle";
+    P.spawn(i % 2 ? kind : "twinkle", w / 2 / sc + Math.cos(a) * r, h / 2 / sc + Math.sin(a) * r, { life: 1, size: 0.13, color: d.spark[i % d.spark.length], rot: i });
+  }
+  P.update(0.3);
+  P.draw(ctx, 0, 0, sc);
+}
+
+/** Titre : une banderole avec le texte. */
+function drawTitleArt(cv: HTMLCanvasElement, id: string, rarity: string) {
+  const t = getTitle(id);
+  const ctx = cv.getContext("2d")!;
+  const w = cv.width;
+  const h = cv.height;
+  const col: Record<string, [string, string]> = { common: ["#c9d6e3", "#8296ab"], rare: ["#6cc0ff", "#2a78c9"], epic: ["#c993ff", "#7a35c9"], legend: ["#ffe17a", "#d99a16"] };
+  const [a, b] = col[rarity] ?? col.common;
+  const bw = w * 0.86;
+  const bh = h * 0.3;
+  const x = (w - bw) / 2;
+  const y = h * 0.36;
+  ctx.fillStyle = b;
+  ctx.beginPath();
+  ctx.moveTo(x - w * 0.04, y + bh * 0.25);
+  ctx.lineTo(x + w * 0.08, y + bh * 0.25);
+  ctx.lineTo(x + w * 0.08, y + bh * 1.2);
+  ctx.lineTo(x - w * 0.04, y + bh * 1.2);
+  ctx.lineTo(x + w * 0.02, y + bh * 0.72);
+  ctx.closePath();
+  ctx.moveTo(x + bw + w * 0.04, y + bh * 0.25);
+  ctx.lineTo(x + bw - w * 0.08, y + bh * 0.25);
+  ctx.lineTo(x + bw - w * 0.08, y + bh * 1.2);
+  ctx.lineTo(x + bw + w * 0.04, y + bh * 1.2);
+  ctx.lineTo(x + bw - w * 0.02, y + bh * 0.72);
+  ctx.closePath();
+  ctx.fill();
+  const g = ctx.createLinearGradient(0, y, 0, y + bh);
+  g.addColorStop(0, a);
+  g.addColorStop(1, b);
+  ctx.fillStyle = g;
+  ctx.strokeStyle = "#1a1626";
+  ctx.lineWidth = w * 0.025;
+  ctx.beginPath();
+  ctx.roundRect(x, y, bw, bh, bh * 0.3);
+  ctx.fill();
+  ctx.stroke();
+  const text = (t?.name ?? "Titre").toUpperCase();
+  let fs = bh * 0.5;
+  ctx.font = `800 ${fs}px "Baloo 2", system-ui, sans-serif`;
+  while (ctx.measureText(text).width > bw * 0.88 && fs > 6) {
+    fs -= 1;
+    ctx.font = `800 ${fs}px "Baloo 2", system-ui, sans-serif`;
+  }
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.lineWidth = fs * 0.22;
+  ctx.strokeStyle = "#1a1626";
+  ctx.strokeText(text, w / 2, y + bh * 0.54);
+  ctx.fillStyle = "#fff";
+  ctx.fillText(text, w / 2, y + bh * 0.54);
 }
 
 /** Effet : une arabesque de particules à ses couleurs. */

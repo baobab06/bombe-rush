@@ -2,8 +2,15 @@
 import { CHARACTERS, SKINS, THEMES } from "../src/core/characters";
 import { ACCESSORIES, EMOTES, TRAILS } from "../src/core/cosmetics";
 import { CATALOG, getItem } from "../src/meta/catalog";
-import { DAILY_REWARDS, NAME_CHANGE_PRICE, PRICES, STARTER_GIFT } from "../src/meta/economy";
-import { defaultProfile } from "../src/meta/profile";
+import { NAME_CHANGE_PRICE, PRICES, STARTER_GIFT } from "../src/meta/economy";
+import { LOGIN_REWARDS } from "../src/meta/progress-config";
+import { defaultProfile as baseProfile } from "../src/meta/profile";
+/** Profils de test du barème : sans les pièces des niveaux gagnés (testées dans progress.test.ts). */
+const defaultProfile = () => {
+  const p = baseProfile();
+  p.levelRewardsUpTo = 1e9;
+  return p;
+};
 import { applyMatch } from "../src/meta/progression";
 import { beginMatch, isSettled, maxLoss, settleAbandoned, settleMatch, stakeTable } from "../src/meta/rewards";
 import { SaveSystem, memoryBackend, migrate } from "../src/meta/save";
@@ -76,10 +83,11 @@ check(featured(fixed).dealId === featured(new Date(2026, 9, 5, 20)).dealId, "mê
 console.log("Récompense quotidienne");
 const q = defaultProfile();
 const d1 = new Date(2026, 9, 5, 9);
-check(dailyState(q, d1).available && claimDaily(q, d1) === DAILY_REWARDS[0], "jour 1 réclamé");
-check(claimDaily(q, d1) === 0, "une seule fois par jour");
-check(claimDaily(q, new Date(2026, 9, 6, 9)) === DAILY_REWARDS[1], "jour 2 consécutif : récompense suivante");
-check(claimDaily(q, new Date(2026, 9, 9, 9)) === DAILY_REWARDS[0], "jour manqué : la série repart à zéro");
+const coinsOfDay = (i: number) => (LOGIN_REWARDS[i][0] as { amount: number }).amount;
+check(dailyState(q, d1).available && claimDaily(q, d1)?.[0].coins === coinsOfDay(0) && q.coins === coinsOfDay(0), "jour 1 réclamé");
+check(claimDaily(q, d1) === null, "une seule fois par jour");
+check(claimDaily(q, new Date(2026, 9, 6, 9))?.[0].coins === coinsOfDay(1), "jour 2 consécutif : récompense suivante");
+check(claimDaily(q, new Date(2026, 9, 9, 9))?.[0].coins === coinsOfDay(2), "jour manqué : on reprend le cycle là où on était (pas de remise à zéro)");
 
 console.log("Missions et fin de partie");
 const m = defaultProfile();
@@ -95,7 +103,8 @@ const claimable = m.missions.list.find((x) => x.progress >= 1 && !x.claimed && s
 if (claimable) {
   const c1 = m.coins;
   const got = claimMission(m, claimable.id);
-  check(got > 0 && m.coins === c1 + got && claimMission(m, claimable.id) === 0, "mission terminée : réclamée une seule fois");
+  const gc = got?.reduce((a, g) => a + g.coins, 0) ?? 0;
+  check(!!got && gc > 0 && m.coins === c1 + gc && claimMission(m, claimable.id) === null, "mission terminée : réclamée une seule fois");
 }
 
 console.log("Récompense selon le classement");
@@ -168,7 +177,7 @@ check(vd.coins === 50 && isSettled(vd, "v"), "partie annulée (exclu par l'hôte
 const st1 = defaultProfile();
 applyMatch(st1, P(true, 1), { matchId: "s1", stake: "easy", modeId: "classic" }, fixed);
 applyMatch(st1, P(true, 1), { matchId: "s2", stake: "easy", modeId: "classic" }, fixed);
-check(st1.winStreak === 2 && st1.wins === 2, "série de victoires comptée (prête pour un bonus)");
+check(st1.winStreak === 2 && st1.wins === 2, "série de victoires comptée");
 applyMatch(st1, P(false, 2), { matchId: "s3", stake: "easy", modeId: "classic" }, fixed);
 check(st1.winStreak === 0, "… remise à zéro si on ne finit pas 1er");
 
@@ -199,7 +208,8 @@ const s2 = save.load();
 check(s2.coins === s1.coins && owns(s2, "acc-cap") && s2.equipped.accessory === "acc-cap", "pièces, achats et équipement relus à l'identique");
 const v1 = migrate({ version: 1 as never, coins: 320, ownedSkins: ["renard-or", "inconnu"], equippedSkins: { renard: "renard-or" }, characterId: "renard", name: "Guigui" } as never);
 check(v1.coins === 320 && owns(v1, "renard-or") && !v1.owned.includes("inconnu") && equippedSkin(v1, "renard") === "renard-or", "profil V1 migré (skins achetés gardés)");
-const bad = migrate({ coins: -5, equipped: { accessory: "acc-halo", trail: "fx-fire", emotes: ["emo-party"] } } as never);
+const bad = migrate({ coins: -5, equipped: { accessory: "acc-halo", trail: "fx-fire", emotes: ["emo-party"], boom: "boom-cosmic", title: "title-elite" } } as never);
+check(bad.equipped.boom === "boom-classic" && bad.equipped.title === "title-rookie", "explosion / titre non possédés : retirés");
 check(bad.coins === 0 && bad.equipped.accessory === null && bad.equipped.trail === "fx-dust" && bad.equipped.emotes.length === 2, "sauvegarde trafiquée : remise d'aplomb");
 check(countOwned(defaultProfile()).owned > 0, "compteur de collection");
 

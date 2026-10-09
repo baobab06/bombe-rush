@@ -5,7 +5,10 @@
  */
 import { audio } from "../audio/audio";
 import { CHARACTERS, RARITY_ORDER, getCharacter, getSkin } from "../core/characters";
-import { CATALOG, getItem, type ItemKind } from "../meta/catalog";
+import { CATALOG, getItem, isBuyable, type ItemKind } from "../meta/catalog";
+import { masteryOf, nextMasteryStep } from "../meta/mastery";
+import { MASTERY_MAX, masteryXp } from "../meta/progress-config";
+import { rewardChip } from "./rewards";
 import { equip, equippedSkin, isEquipped, owns, usable } from "../meta/store";
 import { icon } from "../ui/icons";
 import { itemCard } from "../ui/items";
@@ -19,6 +22,8 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "accessory", label: "Accessoires" },
   { id: "trail", label: "Effets" },
   { id: "emote", label: "Emotes" },
+  { id: "boom", label: "Explosions" },
+  { id: "title", label: "Titres" },
 ];
 
 const $ = (id: string) => document.getElementById(id)!;
@@ -50,6 +55,12 @@ export class Locker {
     this.stage.set(this.look(), skin.free ? null : skin.rarity);
     this.stage.setMode(this.tab === "trail" ? "run" : "idle");
     this.stage.idleEmotes = p.equipped.emotes;
+    this.stage.boomPreview = this.tab === "boom" ? p.equipped.boom : null;
+    // maîtrise du personnage
+    const m = masteryOf(p, c.id);
+    const nx = nextMasteryStep(p, c.id);
+    const max = m.level >= MASTERY_MAX;
+    $("charMasteryBox").innerHTML = `<span class="cm-l">Maîtrise <span class="lvl">${m.level}</span></span><span class="xpbar"><i style="width:${max ? 100 : (m.xp / masteryXp(m.level)) * 100}%"></i></span><small>${max ? "MAX" : `${fmt(m.xp)} / ${fmt(masteryXp(m.level))}`}</small>${nx ? `<span class="cm-next">Niv. ${nx.level} : ${nx.rewards.map(rewardChip).join("")}</span>` : ""}`;
 
     // personnages
     const row = $("charRow");
@@ -131,19 +142,24 @@ export class Locker {
         this.ctx.lookChanged();
         audio.play("equip");
         if (it.kind === "emote") this.stage.showEmote(it.id);
+        else if (it.kind === "title") this.ctx.toast(`🏷️ Titre équipé : ${it.name}`, "good");
         else this.stage.flash();
         this.render();
       });
       grid.appendChild(card);
     });
     // vers la boutique
-    const missing = list.filter((i) => !owns(p, i.id)).length;
+    const missing = list.filter((i) => !owns(p, i.id) && isBuyable(i)).length;
+    const locked = list.filter((i) => !owns(p, i.id) && !isBuyable(i)).length;
     const more = document.createElement("button");
     more.className = "item more";
-    more.innerHTML = `${icon("shop")}<span>${missing ? `${missing} de plus<br>en boutique` : "Boutique"}</span>`;
+    more.innerHTML = missing
+      ? `${icon("shop")}<span>${missing} de plus<br>en boutique</span>`
+      : `${icon("collection")}<span>${locked ? `${locked} à débloquer<br>(collection)` : "Collection"}</span>`;
     more.addEventListener("click", () => {
       this.ctx.click();
-      this.ctx.openShop(undefined, this.tab);
+      if (missing) this.ctx.openShop(undefined, this.tab);
+      else this.ctx.go("collection");
     });
     grid.appendChild(more);
     if (this.tab === "emote") {

@@ -21,6 +21,7 @@ export interface LobbyPlayer {
   skinId?: string;
   accessoryId?: string;
   trailId?: string;
+  boomId?: string;
   ready: boolean;
   connected: boolean;
   isHost: boolean;
@@ -39,7 +40,7 @@ export interface RoomView {
 }
 
 export type ClientMsg =
-  | { t: "hello"; v: number; token: string; name: string; characterId: string; skinId?: string; accessoryId?: string; trailId?: string }
+  | { t: "hello"; v: number; token: string; name: string; characterId: string; skinId?: string; accessoryId?: string; trailId?: string; boomId?: string }
   | { t: "ping" }
   | { t: "createRoom" }
   | { t: "peek"; code: string }
@@ -47,7 +48,7 @@ export type ClientMsg =
   | { t: "leaveRoom" }
   | { t: "setReady"; ready: boolean }
   | { t: "setName"; name: string }
-  | { t: "setLook"; characterId: string; skinId?: string; accessoryId?: string; trailId?: string }
+  | { t: "setLook"; characterId: string; skinId?: string; accessoryId?: string; trailId?: string; boomId?: string }
   | { t: "emote"; id: string }
   | { t: "setSettings"; modeId?: string; mapId?: string; fillBots?: boolean }
   | { t: "kick"; playerId: string }

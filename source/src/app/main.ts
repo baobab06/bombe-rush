@@ -29,13 +29,25 @@ import { ItemBrowser } from "./browser";
 import { Modal, Wallet, fmt, type AppCtx, type ScreenId } from "./ctx";
 import { Locker } from "./locker";
 import { OnlineController } from "./online";
-import { openDaily, openMissions } from "./rewards";
+import { openDaily, showGranted } from "./rewards";
+import { MissionsScreen } from "./missions-screen";
+import { ProfileScreen } from "./profile-screen";
+import { RankScreen } from "./rank-screen";
+import { ChestsScreen } from "./chests-screen";
+import { achievementsToClaim, checkAchievements } from "../meta/achievements";
+import { chestCount, nextLevelReward, rewardText, type Granted } from "../meta/grants";
+import { masteryOf } from "../meta/mastery";
+import { rankProgress } from "../meta/rank";
+import { ensureWeekly, weeklyToClaim } from "../meta/weekly";
+import { setServerTime } from "../meta/clock";
+import { getTitle } from "../core/cosmetics";
+import { CHESTS, levelXp, masteryXp, MASTERY_MAX } from "../meta/progress-config";
 import { GameScreen, type GameResult, type StandingRow } from "./game";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
-const SCREENS: ScreenId[] = ["home", "setup", "chars", "settings", "pause", "results", "private", "lobby", "boot", "welcome", "invite", "shop", "collection"];
-const MENU_SCREENS: ScreenId[] = ["setup", "chars", "settings", "private", "lobby", "welcome", "invite", "shop", "collection"];
+const SCREENS: ScreenId[] = ["home", "setup", "chars", "settings", "pause", "results", "private", "lobby", "boot", "welcome", "invite", "shop", "collection", "missions", "profile", "rank", "chests"];
+const MENU_SCREENS: ScreenId[] = ["setup", "chars", "settings", "private", "lobby", "welcome", "invite", "shop", "collection", "missions", "profile", "rank", "chests"];
 
 class App implements AppCtx {
   private save = new SaveSystem();
@@ -57,6 +69,10 @@ class App implements AppCtx {
   private resStage: Stage;
   private identStages: Record<"welcome" | "invite", Stage>;
   private dailyShown = false;
+  private missionsScr: MissionsScreen;
+  private profileScr: ProfileScreen;
+  private rankScr: RankScreen;
+  private chestsScr: ChestsScreen;
 
   constructor() {
     hydrateIcons();
@@ -82,6 +98,17 @@ class App implements AppCtx {
     this.shop = new ItemBrowser($("shopBrowser"), "shop", this);
     this.coll = new ItemBrowser($("collBrowser"), "collection", this);
     this.locker = new Locker(this);
+    this.missionsScr = new MissionsScreen(this, () => this.renderBadges());
+    this.profileScr = new ProfileScreen(this, () => this.renderBadges(), {
+      rename: () => this.askRename(),
+      titles: () => {
+        this.coll.open(undefined, "title");
+        this.go("collection");
+      },
+      rank: () => this.go("rank"),
+    });
+    this.rankScr = new RankScreen(this);
+    this.chestsScr = new ChestsScreen(this, () => this.renderBadges());
     this.homeStage = new Stage($<HTMLCanvasElement>("homeStage"), { y: 0.58, scale: 1.05 });
     this.resStage = new Stage($<HTMLCanvasElement>("resStage"), { y: 0.56 });
     this.identStages = {
@@ -89,6 +116,11 @@ class App implements AppCtx {
       invite: new Stage($<HTMLCanvasElement>("inviteHero"), { y: 0.5 }),
     };
     ensureMissions(this._profile);
+    ensureWeekly(this._profile);
+    // succès déjà mérités par les anciens profils (débloqués sans fenêtre)
+    checkAchievements(this._profile);
+    this.persist();
+    this.syncServerTime();
     this.applySettings();
     this.wire();
     this.wireOnline();
@@ -219,7 +251,12 @@ class App implements AppCtx {
     if (id === "setup") this.renderSetup();
     if (id === "chars") this.locker.open();
     if (id === "shop" && prev !== "shop") this.shop.open(this.shopTarget?.id, this.shopTarget?.tab);
-    if (id === "collection") this.coll.open();
+    if (id === "collection" && prev !== "collection") this.coll.open(this.collTab ?? undefined, this.collTab ?? undefined);
+    this.collTab = null;
+    if (id === "missions") this.missionsScr.render();
+    if (id === "profile") this.profileScr.render();
+    if (id === "rank") this.rankScr.render();
+    if (id === "chests") this.chestsScr.render();
     this.shopTarget = null;
     if (id === "settings") this.renderSettings();
     if (id === "private") this.renderPrivate();
@@ -234,6 +271,26 @@ class App implements AppCtx {
     this.wallet.sync();
     this.startStages();
     if (id === "home") this.afterHome();
+  }
+
+  private collTab: string | null = null;
+
+  /** Heure du serveur (si joignable) : les renouvellements ne dépendent plus de l'horloge du téléphone. */
+  private syncServerTime() {
+    const base = serverBase();
+    if (!base) return;
+    const ctl = new AbortController();
+    const to = window.setTimeout(() => ctl.abort(), 9000);
+    const t0 = Date.now();
+    fetch(`${base}/health`, { signal: ctl.signal, cache: "no-store" })
+      .then((r) => r.json())
+      .then((j: { now?: number }) => {
+        if (typeof j.now !== "number") return;
+        setServerTime(this._profile, j.now + (Date.now() - t0) / 2, Date.now());
+        this.persist();
+      })
+      .catch(() => {})
+      .finally(() => window.clearTimeout(to));
   }
 
   private startStages() {
@@ -288,7 +345,11 @@ class App implements AppCtx {
     nav("btnCollection", "collection");
     nav("btnSettings", "settings");
     nav("homeNameplate", "chars");
-    nav("homeProfile", "settings");
+    nav("homeProfile", "profile");
+    nav("btnRank", "rank");
+    nav("btnMissions", "missions");
+    nav("btnChests", "chests");
+    nav("btnChestsTop", "chests");
     $("btnShop").addEventListener("click", () => {
       this.click();
       this.openShop(undefined, "featured");
@@ -296,10 +357,6 @@ class App implements AppCtx {
     $("btnDaily").addEventListener("click", () => {
       this.click();
       openDaily(this, () => this.renderBadges());
-    });
-    $("btnMissions").addEventListener("click", () => {
-      this.click();
-      openMissions(this, () => this.renderBadges());
     });
     $("btnRandomMap").addEventListener("click", () => {
       this.click();
@@ -421,7 +478,12 @@ class App implements AppCtx {
   }
 
   persist() {
+    // succès : vérifiés à chaque sauvegarde (achat, coffre, mission, partie…)
+    const fresh = checkAchievements(this._profile);
     this.save.save(this._profile);
+    if (fresh.length && this.screen !== "game" && this.screen !== "boot")
+      fresh.forEach((a, i) => window.setTimeout(() => this.toast(`🏅 Succès débloqué : ${a.name} — récupère ta récompense dans le Profil !`, "good"), 300 + i * 1300));
+    if (fresh.length) this.renderBadges();
   }
 
   // ------------------------------------------------------------------ accueil
@@ -430,6 +492,17 @@ class App implements AppCtx {
     $("homeName").textContent = p.name;
     $("homeLevel").textContent = String(p.level);
     $("homeXpBar").style.width = `${(p.xp / xpToNext(p.level)) * 100}%`;
+    $("homeXpNum").textContent = `${fmt(p.xp)}/${fmt(xpToNext(p.level))}`;
+    $("homeTitle").textContent = getTitle(p.equipped.title)?.name ?? "";
+    const nx = nextLevelReward(p);
+    $("homeNext").innerHTML = nx ? `🎁 Niv. ${nx.level} : <b>${nx.rewards.map(rewardText).join(" + ")}</b>` : "";
+    const rp = rankProgress(p.rank.points);
+    $("homeRankIco").textContent = rp.rank.icon;
+    $("homeRank").textContent = rp.rank.name;
+    $("homeRankBar").style.width = `${rp.ratio * 100}%`;
+    $("btnRank").style.setProperty("--rc", rp.rank.color);
+    const ms = masteryOf(p, p.characterId);
+    $("charMastery").textContent = `Maîtrise ${ms.level}`;
     const c = getCharacter(p.characterId);
     const skin = getSkin(c.id, this.equippedSkin(c.id));
     drawPortrait($<HTMLCanvasElement>("homeAvatar"), p.characterId, skin.id, 1, 0, p.equipped.accessory);
@@ -460,10 +533,18 @@ class App implements AppCtx {
     const daily = dailyState(p).available;
     $("dailyDot").hidden = !daily;
     $("btnDaily").classList.toggle("has", daily);
-    const n = missionsToClaim(p);
+    const n = missionsToClaim(p) + weeklyToClaim(p);
     $("missionDot").hidden = !n;
     $("missionDot").textContent = String(n);
     $("btnMissions").classList.toggle("has", n > 0);
+    const a = achievementsToClaim(p);
+    $("profileDot").hidden = !a;
+    $("profileDot").textContent = String(a);
+    const ch = chestCount(p);
+    $("chestDot").hidden = !ch;
+    $("chestDot").textContent = String(ch);
+    $("btnChestsTop").classList.toggle("has", ch > 0);
+    $("chestCount").textContent = ch ? `× ${ch}` : "";
   }
 
   /** Arrivée sur l'accueil : cadeau de bienvenue, puis récompense du jour. */
@@ -650,6 +731,7 @@ class App implements AppCtx {
       skinId: this.equippedSkin(p.characterId),
       accessoryId: p.equipped.accessory ?? undefined,
       trailId: p.equipped.trail,
+      boomId: p.equipped.boom,
       playerName: "Toi",
     });
     this.startStake();
@@ -689,6 +771,7 @@ class App implements AppCtx {
     skinId: this.equippedSkin(this._profile.characterId),
     accessoryId: this._profile.equipped.accessory ?? undefined,
     trailId: this._profile.equipped.trail,
+    boomId: this._profile.equipped.boom,
   }));
   private notifAsked = false;
 
@@ -1373,8 +1456,13 @@ class App implements AppCtx {
         audio.play("thud");
       }
     }, 350);
-    for (const [i, d] of (summary?.missionsDone ?? []).entries())
-      window.setTimeout(() => this.toast(`🎯 Mission terminée : ${d.label.replace("{n}", String(d.goal))} — réclame ta récompense !`, "good"), 2600 + i * 1200);
+    const notes = [
+      ...(summary?.missionsDone ?? []).map((d) => `🎯 Mission du jour terminée : ${d.label.replace("{n}", String(d.goal))}`),
+      ...(summary?.weeklyDone ?? []).map((d) => `📆 Mission de la semaine terminée : ${d.label.replace("{n}", String(d.goal))}`),
+      ...(summary?.achievements ?? []).map((a) => `🏅 Succès débloqué : ${a.name} !`),
+    ];
+    notes.forEach((t, i) => window.setTimeout(() => this.screen === "results" && this.toast(t, "good"), 2600 + i * 1300));
+    this.renderProgress(summary);
     if (summary) this.animateXp(summary);
   }
 
@@ -1476,6 +1564,43 @@ class App implements AppCtx {
     requestAnimationFrame(tick);
   }
 
+  /** Maîtrise, rang, série et récompenses gagnées pendant la partie. */
+  private renderProgress(s: RewardSummary | null) {
+    const box = $("resProg");
+    const gr = $("resGrants");
+    box.innerHTML = "";
+    gr.innerHTML = "";
+    if (!s) return;
+    const chips: string[] = [];
+    if (s.mastery) {
+      const m = s.mastery;
+      const c = getCharacter(m.characterId);
+      const max = m.levelAfter >= MASTERY_MAX;
+      chips.push(
+        `<div class="rp mast${m.levelAfter > m.levelBefore ? " up" : ""}"><small>Maîtrise ${c.name}</small><b><span class="lvl">${m.levelAfter}</span>${m.levelAfter > m.levelBefore ? " ⬆️" : ""}</b><span class="xpbar"><i style="width:${max ? 100 : (m.xpAfter / masteryXp(m.levelAfter)) * 100}%"></i></span><em>+${m.xp}</em></div>`,
+      );
+    }
+    const rk = s.tx.rank;
+    if (rk) {
+      const rp = rankProgress(rk.after);
+      const sgn = rk.delta > 0 ? `+${rk.delta}` : rk.delta < 0 ? `−${-rk.delta}` : "±0";
+      chips.push(
+        `<div class="rp rank${rk.tierAfter > rk.tierBefore ? " up" : rk.tierAfter < rk.tierBefore ? " down" : ""}" style="--rc:${rp.rank.color}"><small>Rang</small><b>${rp.rank.icon} ${rp.rank.name}</b><span class="xpbar"><i style="width:${rp.ratio * 100}%"></i></span><em class="${rk.delta < 0 ? "neg" : ""}">${sgn} pts${rk.protected ? " 🛡️" : ""}</em></div>`,
+      );
+    } else chips.push(`<div class="rp rank off"><small>Rang</small><b>Non classée</b><em>partie en ligne</em></div>`);
+    const st = s.tx.streak ?? 0;
+    chips.push(`<div class="rp streak${st >= 3 ? " hot" : ""}"><small>Série</small><b>🔥 ${st}</b><em>${st ? `victoire${st > 1 ? "s" : ""} d'affilée` : "remise à zéro"}</em></div>`);
+    box.innerHTML = chips.join("");
+    if (s.granted.length) {
+      const items = s.granted.filter((g) => g.reward.kind !== "xp");
+      gr.innerHTML = items
+        .map((g, i) => `<span class="rg" style="animation-delay:${2.2 + i * 0.25}s" title="${esc(g.source ?? "")}">${g.icon} ${esc(g.label)}${g.source ? ` <small>${esc(g.source)}</small>` : ""}</span>`)
+        .join("");
+      const chest = s.granted.find((g) => g.chest);
+      if (chest) window.setTimeout(() => this.screen === "results" && this.toast(`🎁 ${CHESTS[chest.chest!].name} gagné ! Ouvre-le dans COFFRES`, "good"), 2400);
+    }
+  }
+
   private animateXp(s: RewardSummary) {
     const bar = $("resXpBar");
     const lvl = $("resLevel");
@@ -1493,7 +1618,8 @@ class App implements AppCtx {
         bar.style.width = "100%";
         window.setTimeout(() => {
           lvl.textContent = String(s.levelAfter);
-          up.textContent = `NIVEAU ${s.levelAfter} !`;
+          const lvlCoins = s.granted.filter((g) => g.source?.startsWith("Niveau") && g.reward.kind === "coins").reduce((a, g) => a + g.coins, 0);
+          up.textContent = `NIVEAU ${s.levelAfter} !${lvlCoins ? ` +${fmt(lvlCoins)} 🪙` : ""}`;
           up.hidden = false;
           audio.play("levelup");
           bar.style.transition = "none";
