@@ -25,7 +25,7 @@ export interface Snapshot {
   bombs: [number, number, number, number, number, number, number[], number][];
   bonuses: [number, string, number, number, number, number][];
   pending: [number, number, number][];
-  chaos: { pending: [string, number, number[]] | null; active: [string, number, number[]][] } | null;
+  chaos: { pending: [string, number, number[]] | null; active: [string, number, number[]][]; nextAt: number; fog: boolean; rangeBonus: number; fuseMul: number } | null;
   events: SimEvent[];
 }
 
@@ -55,6 +55,10 @@ export function encodeSnapshot(m: Match, acks: number[], events: SimEvent[]): Sn
       ? {
           pending: m.chaos.pending ? [m.chaos.pending.def.id, r2(m.chaos.pendingLeft), m.chaos.pending.zone] : null,
           active: m.chaos.active.map((a) => [a.def.id, r2(a.timer), a.zone]),
+          nextAt: m.chaos.nextAt,
+          fog: m.fog,
+          rangeBonus: m.rangeBonus,
+          fuseMul: m.fuseMul,
         }
       : null,
     events,
@@ -109,5 +113,9 @@ export function applySnapshot(m: Match, s: Snapshot, keep = -1): void {
     m.chaos.pending = s.chaos.pending ? { def: def(s.chaos.pending[0]), zone: s.chaos.pending[2], timer: 0, data: {} } : null;
     m.chaos.pendingLeft = s.chaos.pending ? s.chaos.pending[1] : 0;
     m.chaos.active = s.chaos.active.map(([id, timer, zone]) => ({ def: def(id), zone, timer, data: {} }));
+    m.chaos.nextAt = s.chaos.nextAt;
+    m.fog = s.chaos.fog;
+    m.rangeBonus = s.chaos.rangeBonus;
+    m.fuseMul = s.chaos.fuseMul;
   }
 }

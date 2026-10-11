@@ -20,8 +20,6 @@ export interface MapDef {
   theme: string;
   layout: string[];
   blockDensity: number; // 0..1 sur les cases '.'
-  bonusChance: number; // 0..1 par bloc
-  bonusWeights: Record<string, number>;
   /** distance (en cases) dégagée autour de chaque spawn */
   spawnClear: number;
   /** portée de bombe au départ (sert à garantir une cachette au spawn) */

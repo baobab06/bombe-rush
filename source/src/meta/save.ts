@@ -71,6 +71,7 @@ export function migrate(data: Partial<Profile> & { ownedSkins?: string[]; versio
     rank: { ...base.rank, ...(data.rank ?? {}) },
     stats: { ...base.stats, ...(data.stats ?? {}) },
     clock: { ...base.clock, ...(data.clock ?? {}) },
+    ads: { ...base.ads, ...(data.ads ?? {}) },
   };
   // v1 : les skins achetés étaient dans ownedSkins
   const owned = new Set<string>([...(data.owned ?? []), ...(data.ownedSkins ?? [])]);
@@ -115,6 +116,9 @@ export function migrate(data: Partial<Profile> & { ownedSkins?: string[]; versio
   p.stats.bestWinStreak = Math.max(p.stats.bestWinStreak, Math.floor(Number(data.winStreak) || 0));
   if (data.stats === undefined) p.stats.loginDays = Math.max(p.stats.loginDays, Math.floor(Number(p.daily.streak) || 0));
   if (!Number.isFinite(p.clock.max)) p.clock.max = 0;
+  if (!Array.isArray(p.ads.doubled)) p.ads.doubled = [];
+  for (const k of ["coins", "freeChest", "lastAdAt", "gamesSinceAd"] as const) if (!Number.isFinite(p.ads[k]) || p.ads[k] < 0) p.ads[k] = 0;
+  if (p.ads.personalized !== true && p.ads.personalized !== false) p.ads.personalized = null;
   if (!Number.isFinite(p.clock.offset) || Math.abs(p.clock.offset) > 400 * 86400000) p.clock.offset = 0;
   for (const k of ["coins", "coinsEarned", "level", "xp"] as const) if (!Number.isFinite(p[k]) || p[k] < 0) p[k] = base[k];
   p.coins = Math.floor(p.coins);

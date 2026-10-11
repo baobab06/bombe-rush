@@ -55,7 +55,7 @@ export class ProfileScreen {
       <div class="prof-lvl"><span class="lvl">${p.level}</span><span class="xpbar"><i style="width:${(p.xp / levelXp(p.level)) * 100}%"></i></span><small>${fmt(p.xp)} / ${fmt(levelXp(p.level))} XP</small></div>
       <button class="prof-rank" id="profRank" style="--rc:${rp.rank.color}"><span>${rp.rank.icon}</span><b>${rp.rank.name}</b><small>${fmt(p.rank.points)} pts</small></button>
       <div class="prof-streak"><span>🔥 Série <b>${p.winStreak}</b></span><span>Record <b>${Math.max(p.stats.bestWinStreak, p.winStreak)}</b></span></div>
-      <button class="btn-link" id="profRename">Changer de pseudo</button>`;
+      <div class="prof-links"><button class="chip" id="profColl">🎒 Collection</button><button class="chip" id="profRename">✏️ Pseudo</button></div>`;
     card.querySelector<HTMLElement>("#profName")!.textContent = p.name;
     drawPortrait(card.querySelector("canvas")!, p.characterId, equippedSkin(p, p.characterId), 1, 0, p.equipped.accessory);
     card.querySelector("#profTitle")!.addEventListener("click", () => {
@@ -65,6 +65,10 @@ export class ProfileScreen {
     card.querySelector("#profRank")!.addEventListener("click", () => {
       this.ctx.click();
       this.actions.rank();
+    });
+    card.querySelector("#profColl")!.addEventListener("click", () => {
+      this.ctx.click();
+      this.ctx.go("collection");
     });
     card.querySelector("#profRename")!.addEventListener("click", () => {
       this.ctx.click();

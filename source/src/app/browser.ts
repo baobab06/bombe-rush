@@ -122,8 +122,9 @@ export class ItemBrowser {
     if (this.tab === "skin") {
       for (const c of CHARACTERS) {
         const b = document.createElement("button");
-        b.className = c.id === this.charFilter ? "sel" : "";
-        b.title = c.name;
+        const own = p.ownedCharacters.includes(c.id);
+        b.className = (c.id === this.charFilter ? "sel" : "") + (own ? "" : " locked") + (c.id === p.characterId ? " cur" : "");
+        b.title = own ? c.name : `${c.name} (à débloquer)`;
         b.setAttribute("aria-label", `Skins de ${c.name}`);
         const cv = document.createElement("canvas");
         cv.width = cv.height = 72;

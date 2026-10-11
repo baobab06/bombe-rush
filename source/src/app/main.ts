@@ -27,9 +27,11 @@ import { hydrateIcons, icon } from "../ui/icons";
 import { Stage } from "../ui/stage";
 import { ItemBrowser } from "./browser";
 import { Modal, Wallet, fmt, type AppCtx, type ScreenId } from "./ctx";
-import { Locker } from "./locker";
 import { OnlineController } from "./online";
 import { openDaily, showGranted } from "./rewards";
+import { maybeInterstitial, watchRewarded } from "./ads-ui";
+import { ads } from "../ads/service";
+import { doubleAmount, noteGamePlayed } from "../meta/ad-rewards";
 import { MissionsScreen } from "./missions-screen";
 import { ProfileScreen } from "./profile-screen";
 import { RankScreen } from "./rank-screen";
@@ -46,8 +48,8 @@ import { GameScreen, type GameResult, type StandingRow } from "./game";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
-const SCREENS: ScreenId[] = ["home", "setup", "chars", "settings", "pause", "results", "private", "lobby", "boot", "welcome", "invite", "shop", "collection", "missions", "profile", "rank", "chests"];
-const MENU_SCREENS: ScreenId[] = ["setup", "chars", "settings", "private", "lobby", "welcome", "invite", "shop", "collection", "missions", "profile", "rank", "chests"];
+const SCREENS: ScreenId[] = ["home", "setup", "settings", "pause", "results", "private", "lobby", "boot", "welcome", "invite", "shop", "collection", "missions", "profile", "rank", "chests"];
+const MENU_SCREENS: ScreenId[] = ["setup", "settings", "private", "lobby", "welcome", "invite", "shop", "collection", "missions", "profile", "rank", "chests"];
 
 class App implements AppCtx {
   private save = new SaveSystem();
@@ -64,7 +66,6 @@ class App implements AppCtx {
   readonly modal = new Modal();
   private shop: ItemBrowser;
   private coll: ItemBrowser;
-  private locker: Locker;
   private homeStage: Stage;
   private resStage: Stage;
   private identStages: Record<"welcome" | "invite", Stage>;
@@ -90,14 +91,13 @@ class App implements AppCtx {
       }
     };
     this.game.onHud = () => this.updateHud();
-    this.game.onBanner = (k, t) => this.banner(k, t);
+    this.game.onBanner = (k, t, h) => this.banner(k, t, h);
     this.game.controls.onPause = () => {
       if (this.screen === "game") this.pause();
       else if (this.screen === "pause") this.resume();
     };
     this.shop = new ItemBrowser($("shopBrowser"), "shop", this);
     this.coll = new ItemBrowser($("collBrowser"), "collection", this);
-    this.locker = new Locker(this);
     this.missionsScr = new MissionsScreen(this, () => this.renderBadges());
     this.profileScr = new ProfileScreen(this, () => this.renderBadges(), {
       rename: () => this.askRename(),
@@ -184,6 +184,10 @@ class App implements AppCtx {
     const app = androidApp();
     (window as unknown as { __bombeRushBack: () => boolean }).__bombeRushBack = () => {
       if (document.querySelector(".reveal")) return true;
+      if (this.chestsScr.cinematicOpen) {
+        this.chestsScr.closeCinematic();
+        return true;
+      }
       if (this.modal.isOpen) {
         if ($("modal").dataset.closable !== "0") this.modal.close();
         return true;
@@ -239,6 +243,8 @@ class App implements AppCtx {
     const prev = this.screen;
     this.screen = id;
     if (this.modal.isOpen) this.modal.close();
+    // quitter pendant l'ouverture d'un coffre : la récompense est déjà enregistrée
+    if (id !== "chests") this.chestsScr?.closeCinematic();
     $("emoteWheel").hidden = true;
     for (const s of SCREENS) $(s).hidden = s !== id;
     const inGame = id === "game" || id === "pause";
@@ -249,7 +255,6 @@ class App implements AppCtx {
     $("veil").classList.toggle("dim", MENU_SCREENS.includes(id));
     if (id === "home") this.renderHome();
     if (id === "setup") this.renderSetup();
-    if (id === "chars") this.locker.open();
     if (id === "shop" && prev !== "shop") this.shop.open(this.shopTarget?.id, this.shopTarget?.tab);
     if (id === "collection" && prev !== "collection") this.coll.open(this.collTab ?? undefined, this.collTab ?? undefined);
     this.collTab = null;
@@ -294,7 +299,7 @@ class App implements AppCtx {
   }
 
   private startStages() {
-    for (const st of [this.homeStage, this.resStage, this.identStages.welcome, this.identStages.invite, this.locker.stage]) st.start();
+    for (const st of [this.homeStage, this.resStage, this.identStages.welcome, this.identStages.invite]) st.start();
   }
 
   private back() {
@@ -340,23 +345,37 @@ class App implements AppCtx {
         this.click();
         this.go(to);
       });
-    nav("btnPlay", "setup");
-    nav("btnChars", "chars");
-    nav("btnCollection", "collection");
+    nav("btnPlaySetup", "setup");
     nav("btnSettings", "settings");
-    nav("homeNameplate", "chars");
     nav("homeProfile", "profile");
-    nav("btnRank", "rank");
     nav("btnMissions", "missions");
     nav("btnChests", "chests");
-    nav("btnChestsTop", "chests");
+    nav("btnMyCollection", "collection");
+    // JOUER : partie immédiate avec le mode choisi et les derniers réglages
+    $("btnPlay").addEventListener("click", () => {
+      this.click();
+      this.setupState = { ...this._profile.lastSetup };
+      this.launch();
+    });
+    $("homeModes").querySelectorAll<HTMLButtonElement>("button").forEach((b) =>
+      b.addEventListener("click", () => {
+        audio.play("tab");
+        this._profile.lastSetup.modeId = b.dataset.mode!;
+        this.setupState.modeId = b.dataset.mode!;
+        this.persist();
+        this.renderHome();
+      }),
+    );
     $("btnShop").addEventListener("click", () => {
       this.click();
       this.openShop(undefined, "featured");
     });
     $("btnDaily").addEventListener("click", () => {
       this.click();
-      openDaily(this, () => this.renderBadges());
+      openDaily(this, () => {
+        this.renderBadges();
+        if (this.screen === "missions") this.missionsScr.render();
+      });
     });
     $("btnRandomMap").addEventListener("click", () => {
       this.click();
@@ -394,8 +413,11 @@ class App implements AppCtx {
         this.go("private", false);
       } else this.toMenu();
     });
-    $("btnAgain").addEventListener("click", () => {
+    $("btnAgain").addEventListener("click", async () => {
       this.click();
+      // pub éventuelle ENTRE deux parties (fréquence limitée, jamais en combat)
+      if (!this.game.online) await maybeInterstitial(this, this.sessionGames);
+      if (this.screen !== "results") return;
       if (this.game.online) {
         // retour au salon : l'hôte relance quand tout le monde est prêt
         this.game.startDemo();
@@ -406,9 +428,11 @@ class App implements AppCtx {
       this.startStake();
       this.go("game");
     });
-    $("btnMenu").addEventListener("click", () => {
+    $("btnMenu").addEventListener("click", async () => {
       this.click();
       if (this.game.online || this.online.room) this.online.leaveRoom();
+      else await maybeInterstitial(this, this.sessionGames);
+      if (this.screen !== "results") return;
       this.toMenu();
     });
     // segments
@@ -427,6 +451,12 @@ class App implements AppCtx {
     bind("setMusic", "music");
     bind("setSfx", "sfx");
     bind("setVibe", "vibration");
+    $<HTMLInputElement>("setAdsPerso").addEventListener("change", (e) => {
+      const v = (e.target as HTMLInputElement).checked;
+      this._profile.ads.personalized = v;
+      ads.setConsent(v);
+      this.persist();
+    });
     $("btnRename").addEventListener("click", () => {
       this.click();
       this.askRename();
@@ -492,48 +522,51 @@ class App implements AppCtx {
     $("homeName").textContent = p.name;
     $("homeLevel").textContent = String(p.level);
     $("homeXpBar").style.width = `${(p.xp / xpToNext(p.level)) * 100}%`;
-    $("homeXpNum").textContent = `${fmt(p.xp)}/${fmt(xpToNext(p.level))}`;
     $("homeTitle").textContent = getTitle(p.equipped.title)?.name ?? "";
     const nx = nextLevelReward(p);
     $("homeNext").innerHTML = nx ? `🎁 Niv. ${nx.level} : <b>${nx.rewards.map(rewardText).join(" + ")}</b>` : "";
     const rp = rankProgress(p.rank.points);
     $("homeRankIco").textContent = rp.rank.icon;
-    $("homeRank").textContent = rp.rank.name;
-    $("homeRankBar").style.width = `${rp.ratio * 100}%`;
-    $("btnRank").style.setProperty("--rc", rp.rank.color);
-    const ms = masteryOf(p, p.characterId);
-    $("charMastery").textContent = `Maîtrise ${ms.level}`;
+    $("homeRankIco").title = `Rang ${rp.rank.name}`;
     const c = getCharacter(p.characterId);
     const skin = getSkin(c.id, this.equippedSkin(c.id));
     drawPortrait($<HTMLCanvasElement>("homeAvatar"), p.characterId, skin.id, 1, 0, p.equipped.accessory);
     this.homeStage.set({ characterId: c.id, skinId: skin.id, accessoryId: p.equipped.accessory, trailId: p.equipped.trail }, skin.free ? null : skin.rarity);
     this.homeStage.idleEmotes = p.equipped.emotes;
-    $("heroName").textContent = c.name;
-    $("heroSkin").textContent = `${skin.name} · ${c.tagline}`;
-    const mode = MODES.find((m) => m.id === p.lastSetup.modeId)?.name ?? "Classique";
-    const map = MAPS.find((m) => m.id === p.lastSetup.mapId)?.name ?? "Carte aléatoire";
+    // mode de jeu (choix rapide)
+    const modeId = MODES.some((m) => m.id === p.lastSetup.modeId) ? p.lastSetup.modeId : "classic";
+    $("homeModes").querySelectorAll<HTMLButtonElement>("button").forEach((b) => {
+      b.classList.toggle("sel", b.dataset.mode === modeId);
+      b.setAttribute("aria-checked", String(b.dataset.mode === modeId));
+    });
+    const map = MAPS.find((m) => m.id === p.lastSetup.mapId)?.name ?? "Carte au hasard";
     const sid = (p.lastSetup.difficulty as StakeId) in STAKES ? (p.lastSetup.difficulty as StakeId) : "normal";
     const tbl = stakeTable(sid, p.lastSetup.botCount + 1);
-    $("playSub").innerHTML = `${mode} · ${map} · ${STAKES[sid].label} <span class="ps-win">🥇 ${signed(tbl[0].amount)}</span> <span class="ps-loss">💀 ${signed(tbl[tbl.length - 1].amount)}</span>`;
-    const cc = countOwned(p);
-    $("collCount").textContent = `${cc.owned}/${cc.total}`;
+    const bots = p.lastSetup.botCount;
+    const ev = activeEvents();
+    const allEv = ev.find((e) => !e.modeId);
+    $("playSub").innerHTML = `${allEv ? `<span class="ps-ev" title="${esc(allEv.name)}">${allEv.icon} ×${String(allEv.coinMultiplier).replace(".", ",")}</span> ` : ""}${STAKES[sid].label} · ${bots} bot${bots > 1 ? "s" : ""} · ${map} <span class="ps-win">🥇 ${signed(tbl[0].amount)}</span> <span class="ps-loss">💀 ${signed(tbl[tbl.length - 1].amount)}</span>`;
     const deal = featured();
     const dp = priceOf(deal.dealId);
     $("shopRibbon").hidden = !dp.deal;
     $("shopRibbon").textContent = `-${Math.round((1 - dp.price / dp.full) * 100)}%`;
-    const ev = activeEvents();
-    const chip = $("homeEvent");
-    chip.hidden = !ev.length;
-    if (ev.length) chip.innerHTML = `${ev[0].icon} <b>${ev[0].name}</b> · ${ev[0].desc}`;
+    // événement en cours : petite étiquette sur le mode concerné
+    const tag = $("homeEvent");
+    const chaosEv = ev.find((e) => e.modeId === "chaos");
+    tag.hidden = !chaosEv;
+    if (chaosEv) {
+      tag.textContent = `×${String(chaosEv.coinMultiplier).replace(".", ",")}`;
+      tag.title = `${chaosEv.name} : ${chaosEv.desc}`;
+    }
     this.renderBadges();
   }
 
   private renderBadges() {
     const p = this._profile;
     const daily = dailyState(p).available;
-    $("dailyDot").hidden = !daily;
     $("btnDaily").classList.toggle("has", daily);
-    const n = missionsToClaim(p) + weeklyToClaim(p);
+    $("dailyDot").hidden = !daily;
+    const n = missionsToClaim(p) + weeklyToClaim(p) + (daily ? 1 : 0);
     $("missionDot").hidden = !n;
     $("missionDot").textContent = String(n);
     $("btnMissions").classList.toggle("has", n > 0);
@@ -543,8 +576,7 @@ class App implements AppCtx {
     const ch = chestCount(p);
     $("chestDot").hidden = !ch;
     $("chestDot").textContent = String(ch);
-    $("btnChestsTop").classList.toggle("has", ch > 0);
-    $("chestCount").textContent = ch ? `× ${ch}` : "";
+    $("btnChests").classList.toggle("has", ch > 0);
   }
 
   /** Arrivée sur l'accueil : cadeau de bienvenue, puis récompense du jour. */
@@ -711,6 +743,8 @@ class App implements AppCtx {
   }
 
   private lastSummary: RewardSummary | null = null;
+  /** parties terminées depuis l'ouverture du jeu (pubs entre deux parties) */
+  private sessionGames = 0;
   private lastTx: CoinTransaction | null = null;
 
   /** L'issue est connue : UNE transaction, enregistrée tout de suite. */
@@ -718,6 +752,10 @@ class App implements AppCtx {
     const summary = applyMatch(this._profile, r, this.currentStake());
     this.lastSummary = summary;
     this.lastTx = summary?.tx ?? null;
+    if (summary) {
+      noteGamePlayed(this._profile);
+      this.sessionGames++;
+    }
     this.persist();
   }
 
@@ -749,6 +787,8 @@ class App implements AppCtx {
     $<HTMLInputElement>("setMusic").checked = st.music;
     $<HTMLInputElement>("setSfx").checked = st.sfx;
     $<HTMLInputElement>("setVibe").checked = st.vibration;
+    $("adsSettings").hidden = !ads.enabled;
+    $<HTMLInputElement>("setAdsPerso").checked = this._profile.ads.personalized === true;
     const p = this._profile;
     const cc = countOwned(p);
     const rows: [string, string][] = [
@@ -1366,6 +1406,20 @@ class App implements AppCtx {
     timer.textContent = h.timer;
     timer.classList.toggle("hot", h.hot);
     $("hudChaos").hidden = !h.chaos;
+    const ci = h.chaosInfo;
+    if (ci) {
+      const sig = JSON.stringify(ci);
+      const box = $("hudChaos");
+      if (box.dataset.sig !== sig) {
+        box.dataset.sig = sig;
+        const nxt = ci.next === null ? "" : ci.next <= 3 ? `<em class="hc-soon">malus dans ${ci.next} s</em>` : `<em>malus dans ${ci.next} s</em>`;
+        const rows = [
+          ...(ci.warn ? [`<span class="hc-row warn">${ci.warn.emoji} ${ci.warn.left} s</span>`] : []),
+          ...ci.active.map((a) => `<span class="hc-row">${a.emoji} ${a.left} s</span>`),
+        ];
+        box.innerHTML = `<b>💀 CHAOS</b>${nxt}${rows.join("")}`;
+      }
+    }
     const alive = h.players.filter((p) => p.alive).length;
     $("hudAlive").textContent = `${alive} en vie`;
     const pw = $("hudPowers");
@@ -1379,10 +1433,12 @@ class App implements AppCtx {
     }
   }
 
-  private banner(kicker: string, text: string) {
+  private banner(kicker: string, text: string, hint?: string) {
     const b = $("banner");
     $("bannerKicker").textContent = kicker;
     $("bannerText").textContent = text;
+    $("bannerHint").textContent = hint ?? "";
+    b.classList.toggle("malus", kicker.includes("MALUS"));
     b.hidden = true;
     void b.offsetWidth;
     b.hidden = false;
@@ -1439,6 +1495,7 @@ class App implements AppCtx {
     const mmss = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
     $("resFacts").innerHTML = [`💣 <b>${r.bombsPlaced}</b> bombes`, `💥 <b>${r.kills}</b> élim.`, `🧱 <b>${r.blocksDestroyed}</b> blocs`, `⏱️ <b>${mmss(r.survivalTime)}</b>`].map((t) => `<span>${t}</span>`).join("");
     this.animateStake(tx, tier);
+    this.renderDouble(tx);
     // célébration selon la place
     window.setTimeout(() => {
       if (this.screen !== "results") return;
@@ -1464,6 +1521,28 @@ class App implements AppCtx {
     notes.forEach((t, i) => window.setTimeout(() => this.screen === "results" && this.toast(t, "good"), 2600 + i * 1300));
     this.renderProgress(summary);
     if (summary) this.animateXp(summary);
+  }
+
+  /** Vidéo récompensée « doubler les gains » (seulement si une régie est branchée). */
+  private renderDouble(tx: CoinTransaction | null) {
+    const b = $<HTMLButtonElement>("btnDouble");
+    const amt = ads.enabled ? doubleAmount(this._profile, tx) : 0;
+    b.hidden = !amt;
+    b.disabled = false;
+    if (!amt || !tx) return;
+    $("doubleAmt").textContent = `+${fmt(amt)}`;
+    b.onclick = async () => {
+      if (b.disabled) return;
+      b.disabled = true;
+      this.click();
+      const before = this._profile.coins;
+      const got = await watchRewarded(this, "double", tx);
+      if (got) {
+        this.wallet.earn(this.fx, b, got.reduce((a, g) => a + g.coins, 0), before);
+        this.toast(`📺 Gains doublés : +${fmt(amt)} 🪙`, "good");
+        b.hidden = true;
+      } else b.disabled = false;
+    };
   }
 
   /** Classement final : médaille, portrait, pseudo ; le joueur est mis en avant. */

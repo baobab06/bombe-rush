@@ -124,6 +124,7 @@ export type SimEvent =
   | { t: "chaosWarn"; id: string; label: string; emoji: string; seconds: number }
   | { t: "chaosStart"; id: string; label: string; emoji: string; via?: string }
   | { t: "chaosEnd"; id: string }
+  | { t: "chaosSkip" }
   | { t: "eruption"; x: number; y: number }
   | { t: "matchEnd"; winner: number };
 

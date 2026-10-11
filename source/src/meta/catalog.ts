@@ -30,12 +30,12 @@ export interface CatalogItem {
 
 export const CATEGORIES: { id: ItemKind; label: string; short: string }[] = [
   { id: "skin", label: "Skins", short: "Skins" },
+  { id: "character", label: "Personnages", short: "Persos" },
   { id: "accessory", label: "Accessoires", short: "Accessoires" },
   { id: "trail", label: "Effets", short: "Effets" },
   { id: "emote", label: "Emotes", short: "Emotes" },
   { id: "boom", label: "Explosions", short: "Explosions" },
   { id: "title", label: "Titres", short: "Titres" },
-  { id: "character", label: "Personnages", short: "Persos" },
 ];
 
 function build(): CatalogItem[] {

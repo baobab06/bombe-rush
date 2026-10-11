@@ -240,6 +240,67 @@ var BOMB_KINDS = {
 };
 var BOMB_WARN = Math.max(...Object.values(BOMB_KINDS).map((k) => k.warn));
 
+// src/core/loot.ts
+var LOOT = {
+  dropChance: 0.42,
+  weights: { bomb: 34, flame: 30, speed: 18, shield: 18 },
+  maxOnBoard: 6,
+  maxPerMatch: { bomb: 14, flame: 12, speed: 6, shield: 5 },
+  quadrantLead: 3,
+  boostExtraOnBoard: 6
+};
+
+class LootTable {
+  w;
+  h;
+  cfg;
+  perType = {};
+  perQuadrant = [0, 0, 0, 0];
+  homes;
+  constructor(w, h, spawns = [], cfg = LOOT) {
+    this.w = w;
+    this.h = h;
+    this.cfg = cfg;
+    const set = new Set(spawns.map(([x, y]) => this.quadrant(x, y)));
+    this.homes = set.size >= 2 ? [...set] : [0, 1, 2, 3];
+  }
+  quadrant(x, y) {
+    return (x < (this.w - 1) / 2 ? 0 : 1) + (y < (this.h - 1) / 2 ? 0 : 2);
+  }
+  available() {
+    const out = {};
+    for (const [id, wgt] of Object.entries(this.cfg.weights)) {
+      const max = this.cfg.maxPerMatch[id];
+      if (wgt > 0 && (max === undefined || (this.perType[id] ?? 0) < max))
+        out[id] = wgt;
+    }
+    return out;
+  }
+  roll(rng, x, y, onBoard, boost = false) {
+    const lucky = rng.chance(this.cfg.dropChance);
+    if (!boost && !lucky)
+      return null;
+    if (onBoard >= this.cfg.maxOnBoard + (boost ? this.cfg.boostExtraOnBoard : 0))
+      return null;
+    const q = this.quadrant(x, y);
+    if (!boost && this.homes.includes(q)) {
+      const min = Math.min(...this.homes.map((h) => this.perQuadrant[h]));
+      if (this.perQuadrant[q] - min >= this.cfg.quadrantLead)
+        return null;
+    }
+    const pool = this.available();
+    if (!Object.keys(pool).length)
+      return null;
+    const type = rng.weighted(pool);
+    this.record(type, x, y);
+    return type;
+  }
+  record(type, x, y) {
+    this.perType[type] = (this.perType[type] ?? 0) + 1;
+    this.perQuadrant[this.quadrant(x, y)]++;
+  }
+}
+
 // src/core/types.ts
 var TILE = { FLOOR: 0, WALL: 1, BLOCK: 2 };
 var TERRAIN = {
@@ -253,40 +314,64 @@ var NO_INPUT = { mx: 0, my: 0, bomb: false, ability: false };
 var FIRE = { L: 1, R: 2, U: 4, D: 8, CENTER: 16 };
 
 // src/core/chaos.ts
+var CHAOS_SCHEDULE = {
+  first: 15,
+  every: 5,
+  maxActive: 3,
+  maxZoneShare: 0.2,
+  rampPerEvent: 0.06,
+  rampMax: 0.6
+};
 var burnZone = (m, run, breakBlocks) => {
   for (const i of run.zone)
     m.ignite(i % m.grid.w, Math.floor(i / m.grid.w), breakBlocks);
 };
+function walkableCount(m) {
+  const g = m.grid;
+  let n = 0;
+  for (let y = 0;y < g.h; y++)
+    for (let x = 0;x < g.w; x++)
+      if (!g.blocksMove(x, y))
+        n++;
+  return n;
+}
+var ramp = (m) => 1 + Math.min(CHAOS_SCHEDULE.rampMax, (m.chaos?.count ?? 0) * CHAOS_SCHEDULE.rampPerEvent);
+function pickRect(m, run, wantW, wantH) {
+  const g = m.grid;
+  const budget = Math.max(4, Math.floor(walkableCount(m) * CHAOS_SCHEDULE.maxZoneShare));
+  let w = Math.min(wantW, g.w - 2);
+  let h = Math.min(wantH, g.h - 2);
+  while (w * h > budget * 1.6 && (w > 2 || h > 2)) {
+    if (w >= h)
+      w--;
+    else
+      h--;
+  }
+  const x0 = 1 + m.rng.int(Math.max(1, g.w - 1 - w));
+  const y0 = 1 + m.rng.int(Math.max(1, g.h - 1 - h));
+  run.zone = [];
+  for (let y = y0;y < y0 + h; y++)
+    for (let x = x0;x < x0 + w; x++)
+      if (g.inside(x, y) && g.tile(x, y) !== TILE.WALL)
+        run.zone.push(g.idx(x, y));
+  run.zone = run.zone.slice(0, budget);
+  run.data.cx = x0 + (w - 1) / 2;
+  run.data.cy = y0 + (h - 1) / 2;
+}
 var CHAOS_EVENTS = [
   {
-    id: "bombRain",
-    label: "PLUIE DE BOMBES",
-    emoji: "\uD83D\uDCA3",
-    countdown: 3,
-    duration: 4,
+    id: "zone",
+    label: "ZONE INTERDITE",
+    emoji: "\uD83D\uDEAB",
+    hint: "Sors de la zone rouge !",
+    danger: true,
+    countdown: 2.5,
+    duration: 3,
     weight: 3,
-    start(_m, run) {
-      run.data.next = 0;
-    },
-    tick(m, run, dt) {
-      run.data.next -= dt;
-      if (run.data.next > 0)
-        return;
-      run.data.next = 0.38;
-      const [c] = m.randomFreeCells(1, true);
-      if (c)
-        m.spawnNeutralBomb(c[0], c[1], BOMB_KINDS.rain.fuse, 2);
-    }
-  },
-  {
-    id: "flameStorm",
-    label: "TEMPÊTE DE FLAMMES",
-    emoji: "\uD83D\uDD25",
-    countdown: 3,
-    duration: 2.5,
-    weight: 3,
+    cooldown: 10,
     prepare(m, run) {
-      run.zone = m.randomFreeCells(12, true).map(([x, y]) => m.grid.idx(x, y));
+      const big = walkableCount(m) > 90;
+      pickRect(m, run, big ? 4 : 3, 3);
     },
     start(m, run) {
       burnZone(m, run, false);
@@ -296,16 +381,152 @@ var CHAOS_EVENTS = [
     }
   },
   {
+    id: "fog",
+    label: "BROUILLARD",
+    emoji: "\uD83C\uDF2B️",
+    hint: "Tu ne vois plus que près de toi",
+    danger: false,
+    countdown: 0,
+    duration: 6,
+    weight: 2,
+    cooldown: 15,
+    start(m) {
+      m.fog = true;
+    },
+    end(m) {
+      m.fog = false;
+    }
+  },
+  {
+    id: "slow",
+    label: "RALENTISSEMENT",
+    emoji: "\uD83D\uDC0C",
+    hint: "Tout le monde avance au ralenti",
+    danger: false,
+    countdown: 0,
+    duration: 5,
+    weight: 2,
+    cooldown: 12,
+    start(m) {
+      m.speedMul = 0.6;
+    },
+    end(m) {
+      m.speedMul = 1;
+    }
+  },
+  {
+    id: "bombRain",
+    label: "PLUIE DE BOMBES",
+    emoji: "\uD83D\uDCA3",
+    hint: "Des bombes tombent du ciel !",
+    danger: true,
+    countdown: 2,
+    duration: 4,
+    weight: 3,
+    cooldown: 10,
+    start(_m, run) {
+      run.data.next = 0;
+    },
+    tick(m, run, dt) {
+      run.data.next -= dt;
+      if (run.data.next > 0)
+        return;
+      run.data.next = Math.max(0.24, 0.4 / ramp(m));
+      const cells = m.randomFreeCells(8, true);
+      const far = cells.find(([x, y]) => m.players.every((p) => !p.alive || Math.abs(Math.floor(p.x) - x) + Math.abs(Math.floor(p.y) - y) >= 2));
+      const c = far ?? cells[0];
+      if (c)
+        m.spawnNeutralBomb(c[0], c[1], BOMB_KINDS.rain.fuse, 2);
+    }
+  },
+  {
+    id: "flameStorm",
+    label: "SOL INSTABLE",
+    emoji: "\uD83D\uDD73️",
+    hint: "Les cases marquées vont s'effondrer en flammes",
+    danger: true,
+    countdown: 2.5,
+    duration: 2.5,
+    weight: 3,
+    cooldown: 10,
+    prepare(m, run) {
+      const budget = Math.floor(walkableCount(m) * CHAOS_SCHEDULE.maxZoneShare);
+      const n = Math.min(budget, Math.round(9 * ramp(m)));
+      run.zone = m.randomFreeCells(n, true).map(([x, y]) => m.grid.idx(x, y));
+    },
+    start(m, run) {
+      burnZone(m, run, false);
+    },
+    tick(m, run) {
+      burnZone(m, run, false);
+    }
+  },
+  {
+    id: "overheat",
+    label: "SURCHAUFFE",
+    emoji: "\uD83C\uDF21️",
+    hint: "Nouvelles bombes : +1 portée, mèche plus courte",
+    danger: false,
+    countdown: 0,
+    duration: 6,
+    weight: 2,
+    cooldown: 15,
+    start(m) {
+      m.rangeBonus = 1;
+      m.fuseMul = 0.8;
+    },
+    end(m) {
+      m.rangeBonus = 0;
+      m.fuseMul = 1;
+    }
+  },
+  {
+    id: "megaBlast",
+    label: "EXPLOSION GÉANTE",
+    emoji: "\uD83D\uDCA5",
+    hint: "Éloigne-toi de la zone !",
+    danger: true,
+    countdown: 3,
+    duration: 0.9,
+    weight: 1,
+    cooldown: 20,
+    prepare(m, run) {
+      const g = m.grid;
+      const small = walkableCount(m) < 110;
+      const cx = 3 + m.rng.int(Math.max(1, g.w - 6));
+      const cy = 3 + m.rng.int(Math.max(1, g.h - 6));
+      run.zone = [];
+      for (let y = cy - 2;y <= cy + 2; y++)
+        for (let x = cx - 2;x <= cx + 2; x++) {
+          if (small && Math.abs(x - cx) + Math.abs(y - cy) > 2)
+            continue;
+          if (g.inside(x, y) && g.tile(x, y) !== TILE.WALL)
+            run.zone.push(g.idx(x, y));
+        }
+      run.data.cx = cx;
+      run.data.cy = cy;
+    },
+    start(m, run) {
+      burnZone(m, run, true);
+    },
+    tick(m, run) {
+      burnZone(m, run, false);
+    }
+  },
+  {
     id: "overload",
     label: "SURCHARGE",
     emoji: "⚡",
+    hint: "Chaque bloc lâche un bonus",
+    danger: false,
     countdown: 0,
     duration: 8,
-    weight: 2,
+    weight: 0,
+    cooldown: 20,
     start(m) {
       m.bonusBoost = true;
       for (const [x, y] of m.randomFreeCells(4, true))
-        m.spawnBonus(m.rng.weighted(m.config.map.bonusWeights), x, y);
+        m.spawnBonus(m.rng.weighted(LOOT.weights), x, y);
     },
     end(m) {
       m.bonusBoost = false;
@@ -315,9 +536,12 @@ var CHAOS_EVENTS = [
     id: "speedChaos",
     label: "SPEED CHAOS",
     emoji: "\uD83C\uDFC3",
+    hint: "Tout le monde court plus vite",
+    danger: false,
     countdown: 0,
     duration: 7,
-    weight: 2,
+    weight: 0,
+    cooldown: 20,
     start(m) {
       m.speedMul = 1.6;
     },
@@ -329,91 +553,74 @@ var CHAOS_EVENTS = [
     id: "shields",
     label: "BOUCLIERS",
     emoji: "\uD83D\uDEE1️",
+    hint: "Des boucliers apparaissent",
+    danger: false,
     countdown: 0,
     duration: 0.1,
-    weight: 2,
+    weight: 0,
+    cooldown: 20,
     start(m) {
       for (const [x, y] of m.randomFreeCells(3, true))
         m.spawnBonus("shield", x, y);
     }
-  },
-  {
-    id: "megaBlast",
-    label: "EXPLOSION GÉANTE",
-    emoji: "\uD83D\uDCA5",
-    countdown: 3,
-    duration: 0.9,
-    weight: 2,
-    prepare(m, run) {
-      const g = m.grid;
-      const cx = 3 + m.rng.int(g.w - 6);
-      const cy = 3 + m.rng.int(g.h - 6);
-      run.zone = [];
-      for (let y = cy - 2;y <= cy + 2; y++)
-        for (let x = cx - 2;x <= cx + 2; x++)
-          if (g.inside(x, y) && g.tile(x, y) !== TILE.WALL)
-            run.zone.push(g.idx(x, y));
-      run.data.cx = cx;
-      run.data.cy = cy;
-    },
-    start(m, run) {
-      burnZone(m, run, true);
-    },
-    tick(m, run) {
-      burnZone(m, run, false);
-    }
   }
 ];
-var RANDOM_EVENT = { id: "random", label: "ÉVÉNEMENT ALÉATOIRE", emoji: "\uD83C\uDFB2", weight: 2 };
-var CHAOS_TIMING = {
-  firstEvent: [9, 13],
-  gap: [11, 17]
-};
+var chaosDef = (id) => CHAOS_EVENTS.find((e) => e.id === id);
 
 class ChaosDirector {
   m;
-  nextIn;
+  nextAt = CHAOS_SCHEDULE.first;
   pending = null;
   pendingLeft = 0;
   active = [];
   count = 0;
+  lastAt = {};
+  lastId = "";
   constructor(m) {
     this.m = m;
-    const [a, b] = CHAOS_TIMING.firstEvent;
-    this.nextIn = a + m.rng.next() * (b - a);
+  }
+  get nextIn() {
+    return Math.max(0, this.nextAt - this.m.time);
   }
   dangerZones() {
     if (!this.pending)
       return [];
     return this.pending.zone.map((i) => [i, this.pendingLeft]);
   }
+  get dangerBusy() {
+    return !!this.pending || this.active.some((r) => r.def.danger);
+  }
+  candidates() {
+    const t = this.m.time;
+    const busy = this.dangerBusy;
+    const activeIds = new Set(this.active.map((r) => r.def.id));
+    return CHAOS_EVENTS.filter((e) => e.weight > 0 && e.id !== this.lastId && !activeIds.has(e.id) && !(busy && e.danger) && t - (this.lastAt[e.id] ?? -1e9) >= e.cooldown);
+  }
   pick() {
-    const m = this.m;
+    const list = this.candidates();
+    if (!list.length)
+      return null;
     const pool = {};
-    for (const e of CHAOS_EVENTS)
+    for (const e of list)
       pool[e.id] = e.weight;
-    pool[RANDOM_EVENT.id] = RANDOM_EVENT.weight;
-    const id = m.rng.weighted(pool);
-    if (id === RANDOM_EVENT.id) {
-      const inner = {};
-      for (const e of CHAOS_EVENTS)
-        inner[e.id] = 1;
-      const innerId = m.rng.weighted(inner);
-      return { def: CHAOS_EVENTS.find((e) => e.id === innerId), via: RANDOM_EVENT.id };
-    }
-    return { def: CHAOS_EVENTS.find((e) => e.id === id) };
+    const id = this.m.rng.weighted(pool);
+    return list.find((e) => e.id === id) ?? null;
   }
   trigger(id) {
-    const def = CHAOS_EVENTS.find((e) => e.id === id);
+    const def = chaosDef(id);
     if (def)
-      this.launch({ def });
+      this.launch(def);
   }
-  launch({ def, via }) {
+  launch(def) {
     const m = this.m;
-    const run = { def, zone: [], timer: def.duration, data: {}, via };
+    const run = { def, zone: [], timer: def.duration, data: {} };
     this.count++;
+    this.lastAt[def.id] = m.time;
+    this.lastId = def.id;
     def.prepare?.(m, run);
     if (def.countdown > 0) {
+      if (this.pending)
+        this.begin(this.pending);
       this.pending = run;
       this.pendingLeft = def.countdown;
       m.events.push({ t: "chaosWarn", id: def.id, label: def.label, emoji: def.emoji, seconds: def.countdown });
@@ -447,14 +654,18 @@ class ChaosDirector {
       m.events.push({ t: "chaosEnd", id: run.def.id });
     }
     this.active = this.active.filter((r) => r.timer > 0);
-    if (this.pending || this.active.length || m.aliveCount <= 1)
+    if (m.time + 0.000001 < this.nextAt)
       return;
-    this.nextIn -= dt;
-    if (this.nextIn > 0)
+    this.nextAt += CHAOS_SCHEDULE.every;
+    if (m.aliveCount <= 1)
       return;
-    const [a, b] = CHAOS_TIMING.gap;
-    this.nextIn = a + m.rng.next() * (b - a);
-    this.launch(this.pick());
+    if (this.active.length + (this.pending ? 1 : 0) >= CHAOS_SCHEDULE.maxActive) {
+      m.events.push({ t: "chaosSkip" });
+      return;
+    }
+    const def = this.pick();
+    if (def)
+      this.launch(def);
   }
 }
 
@@ -503,8 +714,6 @@ var BEACH = {
     "#############"
   ],
   blockDensity: 1,
-  bonusChance: 0.5,
-  bonusWeights: { bomb: 60, flame: 18, speed: 12, shield: 10 },
   spawnClear: 1,
   startRange: 1,
   available: true
@@ -530,8 +739,6 @@ var FOREST = {
     "#############"
   ],
   blockDensity: 1,
-  bonusChance: 0.5,
-  bonusWeights: { bomb: 60, flame: 18, speed: 12, shield: 10 },
   spawnClear: 1,
   startRange: 1,
   available: true
@@ -557,8 +764,6 @@ var ICE = {
     "#############"
   ],
   blockDensity: 1,
-  bonusChance: 0.5,
-  bonusWeights: { bomb: 60, flame: 18, speed: 12, shield: 10 },
   spawnClear: 1,
   startRange: 1,
   available: true
@@ -584,8 +789,6 @@ var VOLCANO = {
     "#############"
   ],
   blockDensity: 1,
-  bonusChance: 0.5,
-  bonusWeights: { bomb: 60, flame: 18, speed: 12, shield: 10 },
   spawnClear: 1,
   startRange: 1,
   available: true
@@ -1414,8 +1617,7 @@ function generateArena(map, playerCount, seed) {
       if (decision.has(k))
         continue;
       const block = rng.chance(map.blockDensity);
-      const bonus = block && rng.chance(map.bonusChance) ? rng.weighted(map.bonusWeights) : null;
-      decision.set(k, { block, bonus });
+      decision.set(k, { block, bonus: null });
     }
   for (let y = 0;y < height; y++)
     for (let x = 0;x < width; x++) {
@@ -1461,6 +1663,10 @@ class Match {
   nextId = 1;
   speedMul = 1;
   bonusBoost = false;
+  loot;
+  rangeBonus = 0;
+  fuseMul = 1;
+  fog = false;
   chaos = null;
   vents = [];
   constructor(config) {
@@ -1503,6 +1709,7 @@ class Match {
         stats: { bombsPlaced: 0, kills: 0, blocksDestroyed: 0, bonusesPicked: 0, survivalTime: 0 }
       };
     });
+    this.loot = new LootTable(this.grid.w, this.grid.h, arena.spawns.slice(0, config.players.length));
     this.buildSuddenDeathOrder();
     for (let y = 0;y < this.grid.h; y++)
       for (let x = 0;x < this.grid.w; x++)
@@ -1617,9 +1824,9 @@ class Match {
       ownerId: p.id,
       tx,
       ty,
-      fuse: RULES.bombFuse,
-      fuseTotal: RULES.bombFuse,
-      range: p.range,
+      fuse: RULES.bombFuse * this.fuseMul,
+      fuseTotal: RULES.bombFuse * this.fuseMul,
+      range: p.range + this.rangeBonus,
       passable
     };
     this.bombs.set(bomb.id, bomb);
@@ -1758,8 +1965,10 @@ class Match {
     if (this.players[by])
       this.players[by].stats.blocksDestroyed++;
     this.events.push({ t: "blockDestroyed", x, y });
-    if (!g.hiddenBonus[i] && this.bonusBoost)
-      g.hiddenBonus[i] = this.rng.weighted(this.config.map.bonusWeights);
+    if (g.hiddenBonus[i])
+      this.loot.record(g.hiddenBonus[i], x, y);
+    else
+      g.hiddenBonus[i] = this.loot.roll(this.rng, x, y, this.bonuses.size, this.bonusBoost);
     const hidden = g.hiddenBonus[i];
     if (hidden) {
       g.hiddenBonus[i] = null;
@@ -2115,7 +2324,11 @@ function encodeSnapshot(m, acks, events) {
     pending: m.pendingDrops.map(([x, y, l]) => [x, y, r2(l)]),
     chaos: m.chaos ? {
       pending: m.chaos.pending ? [m.chaos.pending.def.id, r2(m.chaos.pendingLeft), m.chaos.pending.zone] : null,
-      active: m.chaos.active.map((a) => [a.def.id, r2(a.timer), a.zone])
+      active: m.chaos.active.map((a) => [a.def.id, r2(a.timer), a.zone]),
+      nextAt: m.chaos.nextAt,
+      fog: m.fog,
+      rangeBonus: m.rangeBonus,
+      fuseMul: m.fuseMul
     } : null,
     events
   };

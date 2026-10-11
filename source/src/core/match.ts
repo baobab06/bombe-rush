@@ -1,5 +1,6 @@
 import { BONUSES } from "./bonuses";
 import { DIRS, Grid } from "./grid";
+import { LootTable } from "./loot";
 import { getMode, type ModeDef } from "./modes";
 import { movePlayer } from "./movement";
 import { Rng } from "./rng";
@@ -61,6 +62,13 @@ export class Match {
   speedMul = 1;
   /** mode Chaos : chaque bloc détruit lâche un bonus */
   bonusBoost = false;
+  /** butin des blocs (probabilités et quotas : core/loot.ts) */
+  loot: LootTable;
+  /** mode Chaos « Surchauffe » : portée en plus et mèche raccourcie pour les nouvelles bombes */
+  rangeBonus = 0;
+  fuseMul = 1;
+  /** mode Chaos « Brouillard » : visibilité réduite (affichage) */
+  fog = false;
   /** état du mode Chaos (null en Classique) */
   chaos: import("./chaos").ChaosDirector | null = null;
   /** cheminées volcaniques : [x, y, décalage de phase] */
@@ -106,6 +114,7 @@ export class Match {
         stats: { bombsPlaced: 0, kills: 0, blocksDestroyed: 0, bonusesPicked: 0, survivalTime: 0 },
       };
     });
+    this.loot = new LootTable(this.grid.w, this.grid.h, arena.spawns.slice(0, config.players.length));
     this.buildSuddenDeathOrder();
     for (let y = 0; y < this.grid.h; y++)
       for (let x = 0; x < this.grid.w; x++)
@@ -225,9 +234,9 @@ export class Match {
       ownerId: p.id,
       tx,
       ty,
-      fuse: RULES.bombFuse,
-      fuseTotal: RULES.bombFuse,
-      range: p.range,
+      fuse: RULES.bombFuse * this.fuseMul,
+      fuseTotal: RULES.bombFuse * this.fuseMul,
+      range: p.range + this.rangeBonus,
       passable,
     };
     this.bombs.set(bomb.id, bomb);
@@ -370,8 +379,9 @@ export class Match {
     g.tiles[i] = TILE.FLOOR;
     if (this.players[by]) this.players[by].stats.blocksDestroyed++;
     this.events.push({ t: "blockDestroyed", x, y });
-    // mode Chaos « Surcharge » : chaque bloc détruit lâche un bonus
-    if (!g.hiddenBonus[i] && this.bonusBoost) g.hiddenBonus[i] = this.rng.weighted(this.config.map.bonusWeights);
+    // butin : tiré maintenant (core/loot.ts) ; un bonus déjà placé (tests, éditeur) est respecté
+    if (g.hiddenBonus[i]) this.loot.record(g.hiddenBonus[i]!, x, y);
+    else g.hiddenBonus[i] = this.loot.roll(this.rng, x, y, this.bonuses.size, this.bonusBoost);
     const hidden = g.hiddenBonus[i];
     if (hidden) {
       g.hiddenBonus[i] = null;

@@ -22,7 +22,7 @@
       <div class="powers" id="hudPowers"></div>
     </div>
   </div>
-  <div id="banner" hidden><span id="bannerKicker">⚠️</span><strong id="bannerText">MORT SUBITE !</strong></div>
+  <div id="banner" hidden><span id="bannerKicker">⚠️</span><strong id="bannerText">MORT SUBITE !</strong><em id="bannerHint"></em></div>
   <div id="netOverlay" hidden><div><b>📶 Connexion perdue</b><span>Reconnexion en cours… ta place est gardée.</span></div></div>
   <div id="rotateHint" hidden>
     <div class="phone"><i></i></div>
@@ -72,45 +72,43 @@
     </div>
   </section>
 
-  <!-- Accueil -->
+  <!-- Accueil : logo + pièces + réglages / personnage + JOUER / boutique, coffres, missions -->
   <section class="screen home" id="home" hidden>
     <header class="home-top">
-      <button class="profile" id="homeProfile" aria-label="Profil">
-        <canvas class="avatar" id="homeAvatar" width="96" height="96"></canvas>
-        <span class="pinfo">
-          <span class="pname"><b id="homeName">Joueur</b><em class="ptitle" id="homeTitle"></em></span>
-          <span class="lvl-row"><span class="lvl" id="homeLevel">1</span><span class="xpbar"><i id="homeXpBar"></i></span><small class="xp-num" id="homeXpNum"></small></span>
-          <span class="next-rw" id="homeNext"></span>
-        </span>
-        <span class="dot" id="profileDot" hidden>!</span>
-      </button>
-      <button class="rank-chip" id="btnRank" aria-label="Rang"><span class="rk-ico" id="homeRankIco">🥉</span><span class="rk-txt"><b id="homeRank">Bronze</b><span class="xpbar"><i id="homeRankBar"></i></span></span></button>
-      <div class="event-chip" id="homeEvent" hidden></div>
+      <div class="home-logo logo"><span class="logo-a">BOMBE</span><span class="logo-b">RUSH</span></div>
       <div class="top-r">
-        <button class="round-btn r-gift" id="btnDaily" aria-label="Récompense du jour"><i data-icon="gift"></i><span class="dot" id="dailyDot" hidden>!</span></button>
-        <button class="round-btn r-chest" id="btnChestsTop" aria-label="Coffres"><span class="emo-ico">🎁</span><span class="dot" id="chestDot" hidden>1</span></button>
         <div class="wallet" data-wallet><i class="coin"></i><b data-coins>0</b><button class="wallet-plus" data-go="shop" aria-label="Boutique"><i data-icon="plus"></i></button></div>
+        <button class="round-btn r-gear" id="btnSettings" aria-label="Paramètres"><i data-icon="gear"></i></button>
       </div>
     </header>
     <div class="home-body">
       <div class="home-hero">
-        <div class="home-logo logo"><span class="logo-a">BOMBE</span><span class="logo-b">RUSH</span></div>
         <canvas class="stage" id="homeStage" aria-label="Ton personnage"></canvas>
-        <button class="nameplate" id="homeNameplate"><b id="heroName">Flamme</b><span id="heroSkin">Classique</span></button>
+        <button class="hero-card" id="homeProfile" aria-label="Profil">
+          <canvas class="avatar" id="homeAvatar" width="96" height="96"></canvas>
+          <span class="hc-info">
+            <span class="pname"><b id="homeName">Joueur</b><em class="ptitle" id="homeTitle"></em></span>
+            <span class="lvl-row"><span class="lvl" id="homeLevel">1</span><span class="xpbar"><i id="homeXpBar"></i></span><span class="hc-rank" id="homeRankIco" title="Rang">🥉</span></span>
+            <span class="next-rw" id="homeNext"></span>
+          </span>
+          <span class="dot" id="profileDot" hidden>!</span>
+        </button>
       </div>
       <div class="home-menu">
-        <button class="btn btn-play" id="btnPlay"><i data-icon="play"></i><span class="lbl">JOUER</span><small id="playSub">Classique · 3 bots</small></button>
-        <button class="btn btn-blue btn-private" id="btnPrivate"><i data-icon="users"></i><span>PARTIE PRIVÉE</span></button>
-        <div class="tiles">
-          <button class="tile t-orange" id="btnChars"><i data-icon="hero"></i><span>PERSONNAGE</span><small id="charMastery"></small></button>
-          <button class="tile t-pink" id="btnShop"><i data-icon="shop"></i><span>BOUTIQUE</span><em class="ribbon" id="shopRibbon" hidden>PROMO</em></button>
-          <button class="tile t-purple" id="btnCollection"><i data-icon="collection"></i><span>COLLECTION</span><small id="collCount"></small></button>
-          <button class="tile t-green" id="btnMissions"><i data-icon="missions"></i><span>MISSIONS</span><span class="dot" id="missionDot" hidden>1</span></button>
-          <button class="tile t-gold" id="btnChests"><span class="emo-ico">🎁</span><span>COFFRES</span><small id="chestCount"></small></button>
-          <button class="tile t-teal" id="btnSettings"><i data-icon="gear"></i><span>PARAMÈTRES</span></button>
+        <div class="mode-switch" id="homeModes" role="radiogroup" aria-label="Mode de jeu">
+          <button data-mode="classic" role="radio"><span>🎮 CLASSIQUE</span></button>
+          <button data-mode="chaos" role="radio"><span>💀 CHAOS</span><em class="ev-tag" id="homeEvent" hidden></em></button>
         </div>
+        <button class="btn btn-play" id="btnPlay"><i data-icon="play"></i><span class="lbl">JOUER</span></button>
+        <button class="play-setup" id="btnPlaySetup"><span id="playSub">Normal · 3 bots · Forêt</span><i data-icon="gear"></i></button>
+        <button class="btn btn-blue btn-private" id="btnPrivate"><i data-icon="users"></i><span>JOUER ENTRE AMIS</span></button>
       </div>
     </div>
+    <nav class="home-dock">
+      <button class="dock t-pink" id="btnShop"><i data-icon="shop"></i><span>BOUTIQUE</span><em class="ribbon" id="shopRibbon" hidden>PROMO</em></button>
+      <button class="dock t-gold" id="btnChests"><span class="emo-ico">🎁</span><span>COFFRES</span><span class="dot" id="chestDot" hidden>1</span></button>
+      <button class="dock t-green" id="btnMissions"><i data-icon="missions"></i><span>MISSIONS</span><span class="dot" id="missionDot" hidden>1</span></button>
+    </nav>
   </section>
 
   <!-- Préparation de partie -->
@@ -196,26 +194,9 @@
     </div>
   </section>
 
-  <!-- Personnage (vestiaire) -->
-  <section class="screen" id="chars" hidden>
-    <header class="bar"><button class="back" data-back aria-label="Retour"><i data-icon="back"></i></button><h2>Personnage</h2><div class="wallet" data-wallet><i class="coin"></i><b data-coins>0</b><button class="wallet-plus" data-go="shop" aria-label="Boutique"><i data-icon="plus"></i></button></div></header>
-    <div class="locker">
-      <div class="locker-stage panel">
-        <canvas class="stage" id="charStage" aria-label="Aperçu du personnage"></canvas>
-        <div class="hero-text"><b id="charName">Flamme</b><span id="charTag">Renard malin</span></div>
-        <div class="char-mastery" id="charMasteryBox"></div>
-      </div>
-      <div class="locker-side">
-        <div class="char-row" id="charRow"></div>
-        <nav class="tabs" id="lockerTabs"></nav>
-        <div class="grid" id="lockerGrid"></div>
-      </div>
-    </div>
-  </section>
-
   <!-- Boutique -->
   <section class="screen" id="shop" hidden>
-    <header class="bar"><button class="back" data-back aria-label="Retour"><i data-icon="back"></i></button><h2>Boutique</h2><span class="bar-note" id="shopTimer"></span><div class="wallet" data-wallet><i class="coin"></i><b data-coins>0</b></div></header>
+    <header class="bar"><button class="back" data-back aria-label="Retour"><i data-icon="back"></i></button><h2>Boutique</h2><span class="bar-note" id="shopTimer"></span><button class="chip bar-chip" id="btnMyCollection">🎒 Ma collection</button><div class="wallet" data-wallet><i class="coin"></i><b data-coins>0</b></div></header>
     <div class="browser" id="shopBrowser"></div>
   </section>
 
@@ -229,6 +210,8 @@
   <section class="screen" id="missions" hidden>
     <header class="bar"><button class="back" data-back aria-label="Retour"><i data-icon="back"></i></button><h2>Missions</h2><div class="wallet" data-wallet><i class="coin"></i><b data-coins>0</b></div></header>
     <div class="mis-wrap">
+      <button class="daily-card" id="btnDaily"><span class="dc-ico">🎁</span><span class="dc-txt"><b>Connexion du jour</b><small id="dailyInfo">Un cadeau chaque jour</small></span><span class="dc-go">VOIR</span><span class="dot" id="dailyDot" hidden>!</span></button>
+      <div class="ad-row" id="adRow" hidden></div>
       <nav class="tabs" id="missionTabs">
         <button class="tab sel" data-tab="daily">Du jour <span class="dot" id="misDotD" hidden>1</span></button>
         <button class="tab" data-tab="weekly">De la semaine <span class="dot" id="misDotW" hidden>1</span></button>
@@ -275,6 +258,10 @@
         <label class="toggle"><span>Musique</span><input type="checkbox" id="setMusic"><i></i></label>
         <label class="toggle"><span>Effets sonores</span><input type="checkbox" id="setSfx"><i></i></label>
         <label class="toggle"><span>Vibration</span><input type="checkbox" id="setVibe"><i></i></label>
+        <div id="adsSettings" hidden>
+          <label class="toggle"><span>Publicités personnalisées</span><input type="checkbox" id="setAdsPerso"><i></i></label>
+          <p class="hint">Les vidéos sont facultatives. Désactivé = publicités non personnalisées uniquement.</p>
+        </div>
         <dl class="keys">
           <dt>Tactile</dt><dd>Joystick à gauche (là où tu poses le pouce), bombe et bouclier à droite.</dd>
           <dt>Clavier</dt><dd>Flèches / ZQSD · Espace : bombe · E : bouclier · 1-4 : emotes · Échap : pause</dd>
@@ -331,6 +318,7 @@
           <div class="sr-amount"><i class="coin"></i><span id="resDelta">+0</span></div>
           <div class="sr-mods" id="resMods"></div>
           <p class="sr-note" id="resNote"></p>
+          <button class="btn btn-purple small ad-double" id="btnDouble" hidden><span>📺 DOUBLER</span><i class="coin"></i><span id="doubleAmt">+0</span></button>
         </div>
         <div class="res-level">
           <span class="lvl" id="resLevel">1</span>

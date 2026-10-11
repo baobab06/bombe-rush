@@ -21,6 +21,9 @@ Render redéploie tout seul en 2-3 minutes.
 | Prix par rareté, missions du jour, événements, promo du jour | `src/meta/economy.ts` |
 | **Progression** : XP par place (`XP_BY_PLACE`), courbe des niveaux (`levelXp`), récompenses de niveau (`LEVEL_REWARDS`), maîtrise (`masteryXp`, `masteryRewards`), missions de la semaine, connexion quotidienne (`LOGIN_REWARDS`), séries (`STREAK_BONUSES`), coffres (`CHESTS`, probabilités, doublons), rangs (`RANKS`, `RANK_RULES`), succès (`ACHIEVEMENTS`) | `src/meta/progress-config.ts` |
 | Explosions et titres (cosmétiques) | `src/core/cosmetics.ts` |
+| **Butin des blocs** : chance par bloc, poids de chaque bonus, max visibles, quotas par partie, équilibre entre coins (`LOOT`) | `src/core/loot.ts` |
+| **Malus du mode CHAOS** : 1er à 15 s puis toutes les 5 s (`CHAOS_SCHEDULE`), liste, durées, alertes, recharges (`CHAOS_EVENTS`) | `src/core/chaos.ts` |
+| **Publicités** : plafonds, fréquence entre deux parties, identifiants (`ADS`) — activation : `docs/PUBLICITES.md` | `src/ads/config.ts` |
 | Personnages et skins (un thème = une entrée dans `THEMES`, créé pour tous les persos) | `src/core/characters.ts` |
 | Accessoires, effets (traînées), emotes | `src/core/cosmetics.ts` |
 | Règles d'achat / équipement / missions (fonctions pures, testées) | `src/meta/store.ts` |

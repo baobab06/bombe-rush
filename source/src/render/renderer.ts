@@ -596,6 +596,7 @@ export class Renderer {
 
     ctx.restore();
     this.drawLight(m.config.map.theme);
+    this.drawFog(m, dt);
 
     if (this.flash > 0.01) {
       ctx.fillStyle = `rgba(255,236,190,${this.flash * (this.reducedMotion ? 0.3 : 1)})`;
@@ -629,6 +630,48 @@ export class Renderer {
     } else if (m.time < 0.7) {
       this.bigText("GO !", 1 + m.time * 0.6, 1 - m.time / 0.7);
     }
+  }
+
+  /** Malus « Brouillard » : on ne voit plus qu'autour de soi (les zones annoncées restent visibles). */
+  private fogK = 0;
+  private drawFog(m: Match, dt: number) {
+    this.fogK += ((m.fog ? 1 : 0) - this.fogK) * Math.min(1, dt * 3);
+    if (this.fogK < 0.02) return;
+    const ctx = this.ctx;
+    const s = this.s;
+    const me = m.players[this.localPlayer];
+    const cx = me && me.alive ? this.ox + me.x * s : this.ox + (m.grid.w * s) / 2;
+    const cy = me && me.alive ? this.oy + me.y * s : this.oy + (m.grid.h * s) / 2;
+    const r = s * (me && me.alive ? 2.4 : 4);
+    const far = Math.hypot(this.viewW, this.viewH);
+    const k = this.fogK;
+    const g = ctx.createRadialGradient(cx, cy, r * 0.55, cx, cy, r * 1.35);
+    g.addColorStop(0, "rgba(40,36,70,0)");
+    g.addColorStop(1, `rgba(36,32,64,${0.94 * k})`);
+    ctx.save();
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, this.viewW, this.viewH);
+    // volutes qui bougent
+    ctx.globalAlpha = 0.18 * k;
+    ctx.fillStyle = "#b9b4e0";
+    for (let i = 0; i < 6; i++) {
+      const a = this.time * 0.15 + i;
+      const x = cx + Math.cos(a * 1.3 + i) * far * 0.25;
+      const y = cy + Math.sin(a + i * 2) * far * 0.15;
+      if (Math.hypot(x - cx, y - cy) < r * 1.2) continue;
+      ctx.beginPath();
+      ctx.ellipse(x, y, s * 2.2, s * 1.1, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    // équité : les zones annoncées restent visibles à travers le brouillard
+    const ch = m.chaos;
+    if (ch?.pending) {
+      ctx.strokeStyle = `rgba(255,70,70,${0.6 + 0.4 * Math.abs(Math.sin(this.time * 10))})`;
+      ctx.lineWidth = Math.max(2, s * 0.08);
+      for (const i of ch.pending.zone) ctx.strokeRect(this.ox + (i % m.grid.w) * s + 3, this.oy + Math.floor(i / m.grid.w) * s + 3, s - 6, s - 6);
+    }
+    ctx.restore();
   }
 
   private bigText(text: string, scale: number, alpha: number, color = "#ffd23f") {

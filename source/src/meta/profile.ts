@@ -91,6 +91,8 @@ export interface Profile {
   stats: ExtraStats;
   /** niveaux dont la récompense a déjà été donnée */
   levelRewardsUpTo: number;
+  /** publicités : plafonds du jour, parties doublées, consentement */
+  ads: import("./ad-rewards").AdState;
   /** horloge : plus grande date vue (l'heure ne peut pas reculer) + décalage avec le serveur */
   clock: { max: number; offset: number };
   /** cadeau de bienvenue de la V2 déjà donné */
@@ -142,6 +144,7 @@ export function defaultProfile(): Profile {
     stats: { bestWinStreak: 0, expertWins: 0, hardWins: 0, chaosPlayed: 0, onlinePlayed: 0, chestsOpened: 0, missionsClaimed: 0, loginDays: 0 },
     levelRewardsUpTo: 1,
     clock: { max: 0, offset: 0 },
+    ads: { day: "", coins: 0, freeChest: 0, doubled: [], lastAdAt: 0, gamesSinceAd: 0, personalized: null },
     starterGift: false,
     seen: [],
     settled: [],

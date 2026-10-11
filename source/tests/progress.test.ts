@@ -15,6 +15,8 @@ import { settleAbandoned, beginMatch } from "../src/meta/rewards";
 import { SaveSystem, memoryBackend, migrate } from "../src/meta/save";
 import { buy, claimDaily, claimMission, dailyState, ensureMissions, equip, isEquipped, owns } from "../src/meta/store";
 import { claimWeekly, ensureWeekly, weekKey } from "../src/meta/weekly";
+import { coinsAdLeft, doubleAmount, freeChestAdLeft, grantAdReward, interstitialDue, noteGamePlayed, noteInterstitialShown } from "../src/meta/ad-rewards";
+import { ADS } from "../src/ads/config";
 
 let failures = 0;
 function check(cond: boolean, msg: string) {
@@ -273,6 +275,33 @@ console.log("13. Ancienne sauvegarde migrée");
   check(old.coins === 900 && old.level === 12 && old.xp < levelXp(12) && owns(old, "acc-cap"), "pièces, niveau et achats gardés");
   check(old.levelRewardsUpTo === 12 && old.stats.bestWinStreak === 4 && old.equipped.boom === "boom-classic" && old.rank.points === 0, "nouveaux champs initialisés sans récompense rétroactive");
   check(LEVEL_REWARDS[10].length > 0, "table des récompenses de niveau");
+}
+
+console.log("Publicités (règles)");
+{
+  const p = defaultProfile();
+  const c0 = p.coins;
+  for (let i = 0; i < 7; i++) grantAdReward(p, "coins", null, day(5));
+  check(p.coins === c0 + ADS.rewarded.coins.amount * ADS.rewarded.coins.perDay && coinsAdLeft(p, day(5)) === 0, `pièces par vidéo plafonnées à ${ADS.rewarded.coins.perDay}/jour`);
+  check(coinsAdLeft(p, day(6)) === ADS.rewarded.coins.perDay, "le plafond se renouvelle le lendemain");
+  check(!!grantAdReward(p, "freeChest", null, day(6)) && grantAdReward(p, "freeChest", null, day(6)) === null && p.chests.common >= 1 && freeChestAdLeft(p, day(6)) === 0, "coffre gratuit : une fois par jour");
+  const s = applyMatch(p, O(1), C("normal"), day(6))!;
+  const amt = doubleAmount(p, s.tx);
+  const before = p.coins;
+  check(amt === s.tx.applied && !!grantAdReward(p, "double", s.tx, day(6)) && p.coins === before + amt, `doubler une victoire : +${amt}`);
+  check(grantAdReward(p, "double", s.tx, day(6)) === null && doubleAmount(p, s.tx) === 0, "jamais deux fois pour la même partie");
+  const lost = applyMatch(p, O(4), C("normal"), day(6))!;
+  check(doubleAmount(p, lost.tx) === 0, "rien à doubler après une perte");
+  // pubs entre deux parties
+  const q = defaultProfile();
+  check(!interstitialDue(q, 1, 1e12), "pas de pub pendant les premières parties");
+  for (let i = 0; i < 3; i++) noteGamePlayed(q);
+  check(interstitialDue(q, 5, 1e12), "après 3 parties : pub possible");
+  noteInterstitialShown(q, 1e12);
+  for (let i = 0; i < 3; i++) noteGamePlayed(q);
+  check(!interstitialDue(q, 8, 1e12 + 60000), "délai minimum entre deux pubs respecté");
+  check(interstitialDue(q, 8, 1e12 + ADS.interstitial.minSecondsBetween * 1000), "… puis de nouveau possible");
+  check(ADS.webPublisherId === "", "aucun faux identifiant de production dans le projet");
 }
 
 console.log(failures ? `\n${failures} échec(s)` : "\nTout est vert ✅");

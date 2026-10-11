@@ -85,7 +85,7 @@ export class GameScreen {
 
   onFinished: ((r: GameResult) => void) | null = null;
   onHud: (() => void) | null = null;
-  onBanner: ((kicker: string, text: string) => void) | null = null;
+  onBanner: ((kicker: string, text: string, hint?: string) => void) | null = null;
 
   private acc = 0;
   private last = 0;
@@ -467,18 +467,21 @@ export class GameScreen {
         case "wallDrop":
           audio.play("thud", near(e.x + 0.5, e.y + 0.5) * 0.5);
           break;
-        case "chaosWarn":
+        case "chaosWarn": {
+          const def = CHAOS_EVENTS.find((d) => d.id === e.id);
           audio.play("alarm");
-          this.onBanner?.("⚠️ CHAOS IMMINENT !", `${e.emoji} ${e.label}`);
+          haptics.pulse(60);
+          this.onBanner?.(`⚠️ MALUS DANS ${Math.ceil(e.seconds)} s`, `${e.emoji} ${e.label}`, def?.hint);
           break;
+        }
         case "chaosStart": {
           const def = CHAOS_EVENTS.find((d) => d.id === e.id);
           if (def && def.countdown > 0) {
             audio.play("explode", 1);
             haptics.explosionNear();
           } else {
-            audio.play("levelup");
-            this.onBanner?.(e.via ? "🎲 ÉVÉNEMENT ALÉATOIRE" : "💀 CHAOS", `${e.emoji} ${e.label} !`);
+            audio.play("alarm");
+            this.onBanner?.("💀 MALUS CHAOS", `${e.emoji} ${e.label} !`, def?.hint);
           }
           break;
         }
@@ -551,6 +554,14 @@ export class GameScreen {
       timer: `${mm}:${String(ss).padStart(2, "0")}`,
       hot: m.suddenDeath,
       chaos: m.config.modeId === "chaos",
+      /** mode Chaos : prochain malus et effets en cours (HUD) */
+      chaosInfo: m.chaos
+        ? {
+            next: m.phase === "playing" ? Math.ceil(m.chaos.nextIn) : null,
+            warn: m.chaos.pending ? { emoji: m.chaos.pending.def.emoji, label: m.chaos.pending.def.label, left: Math.ceil(m.chaos.pendingLeft) } : null,
+            active: m.chaos.active.filter((r) => r.def.duration > 0.5).map((r) => ({ id: r.def.id, emoji: r.def.emoji, label: r.def.label, left: Math.ceil(r.timer) })),
+          }
+        : null,
       players: m.players.map((p) => ({ color: lookOf(p.characterId, p.skinId).palette.main, alive: p.alive, me: p.id === me.id, name: p.name })),
       powers: [
         { type: "bomb", color: BONUS_COLORS.bomb[0], label: "bombes", value: me.maxBombs },

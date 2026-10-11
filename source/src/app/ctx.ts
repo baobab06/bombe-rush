@@ -6,7 +6,7 @@ import type { Profile } from "../meta/profile";
 import type { UiFx } from "../ui/fx";
 
 export type ScreenId =
-  | "home" | "setup" | "chars" | "settings" | "pause" | "results" | "game" | "private" | "lobby" | "boot" | "welcome" | "invite" | "shop" | "collection" | "missions" | "profile" | "rank" | "chests";
+  | "home" | "setup" | "settings" | "pause" | "results" | "game" | "private" | "lobby" | "boot" | "welcome" | "invite" | "shop" | "collection" | "missions" | "profile" | "rank" | "chests";
 
 export interface AppCtx {
   readonly profile: Profile;
@@ -91,7 +91,8 @@ export class Wallet {
   /** Porte-monnaie visible à l'écran (cible des pièces qui volent). */
   target(): Element | null {
     const list = [...document.querySelectorAll<HTMLElement>("[data-wallet]")];
-    return list.find((w) => w.offsetParent !== null) ?? null;
+    // une couche au premier plan (cinématique) a priorité
+    return list.find((w) => w.dataset.walletTop !== undefined && w.offsetParent !== null) ?? list.find((w) => w.offsetParent !== null) ?? null;
   }
 
   /**

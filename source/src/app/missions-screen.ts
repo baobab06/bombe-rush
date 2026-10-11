@@ -6,11 +6,15 @@ import { audio } from "../audio/audio";
 import { trustedNow } from "../meta/clock";
 import type { Granted } from "../meta/grants";
 import { DAILY_MISSION_XP, type Reward } from "../meta/progress-config";
-import { claimMission, ensureMissions, missionDef, missionLabel, missionsToClaim } from "../meta/store";
+import { claimMission, dailyState, ensureMissions, missionDef, missionLabel, missionsToClaim } from "../meta/store";
 import { claimWeekly, ensureWeekly, weekLeft, weeklyDef, weeklyLabel, weeklyRewards, weeklyToClaim } from "../meta/weekly";
 import { icon } from "../ui/icons";
 import { fmt, type AppCtx } from "./ctx";
 import { coinsOf, rewardChip } from "./rewards";
+import { ads } from "../ads/service";
+import { ADS } from "../ads/config";
+import { coinsAdLeft, freeChestAdLeft } from "../meta/ad-rewards";
+import { watchRewarded } from "./ads-ui";
 
 const $ = (id: string) => document.getElementById(id)!;
 
@@ -39,6 +43,10 @@ export class MissionsScreen {
     ensureWeekly(p);
     this.ctx.persist();
     const now = trustedNow(p);
+    const ds = dailyState(p);
+    $("dailyInfo").textContent = ds.available ? `Jour ${ds.index + 1}/7 · ton cadeau t'attend !` : `Jour ${ds.index + 1}/7 récupéré · reviens demain`;
+    $("btnDaily").classList.toggle("has", ds.available);
+    $("dailyDot").hidden = !ds.available;
     $("missionTabs").querySelectorAll<HTMLButtonElement>("button").forEach((b) => b.classList.toggle("sel", b.dataset.tab === this.tab));
     const nd = missionsToClaim(p);
     const nw = weeklyToClaim(p);
@@ -49,6 +57,7 @@ export class MissionsScreen {
     const mid = new Date(now);
     mid.setHours(24, 0, 0, 0);
     $("missionTimer").textContent = this.tab === "daily" ? `Nouvelles missions dans ${dur(mid.getTime() - now.getTime())}` : `Nouvelles missions dans ${dur(weekLeft(now))}`;
+    this.renderAds();
     const list = $("missionList");
     list.innerHTML = "";
     const rows =
@@ -107,5 +116,41 @@ export class MissionsScreen {
         ? "Les missions avancent toutes seules en jouant (solo et en ligne). Chaque mission rapporte des pièces et de l'XP."
         : "Missions plus longues, plus grosses récompenses (parfois un coffre). Renouvelées chaque lundi.";
     list.appendChild(note);
+  }
+
+  /** Vidéos récompensées facultatives (seulement si une régie est branchée). */
+  private renderAds() {
+    const row = $("adRow");
+    row.hidden = !ads.enabled;
+    if (!ads.enabled) return;
+    const p = this.ctx.profile;
+    const c = coinsAdLeft(p);
+    const ch = freeChestAdLeft(p);
+    row.innerHTML = "";
+    const mk = (id: string, html: string, left: number, run: () => Promise<void>) => {
+      const b = document.createElement("button");
+      b.className = "ad-card";
+      b.id = id;
+      b.disabled = left <= 0;
+      b.innerHTML = html;
+      b.addEventListener("click", async () => {
+        if (b.disabled) return;
+        b.disabled = true;
+        this.ctx.click();
+        await run();
+        this.render();
+      });
+      row.appendChild(b);
+    };
+    mk("btnAdCoins", `<span class="ac-ico">📺</span><span><b>+${ADS.rewarded.coins.amount} pièces</b><small>${c > 0 ? `Regarde une vidéo · encore ${c} aujourd'hui` : "Reviens demain"}</small></span>`, c, async () => {
+      const before = p.coins;
+      const got = await watchRewarded(this.ctx, "coins");
+      if (got) this.ctx.wallet.earn(this.ctx.fx, $("adRow"), coinsOf(got), before);
+    });
+    mk("btnAdChest", `<span class="ac-ico">🎁</span><span><b>Coffre commun gratuit</b><small>${ch > 0 ? "Regarde une vidéo · 1 par jour" : "Déjà récupéré aujourd'hui"}</small></span>`, ch, async () => {
+      const got = await watchRewarded(this.ctx, "freeChest");
+      if (got) this.ctx.toast("🎁 Coffre commun ajouté : ouvre-le dans COFFRES !", "good");
+      this.onChange();
+    });
   }
 }

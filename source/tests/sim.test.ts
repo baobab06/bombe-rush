@@ -7,6 +7,8 @@ import { FOREST } from "../src/maps/forest";
 import { MAPS } from "../src/maps";
 import { TERRAIN } from "../src/core/types";
 import { BotBrain } from "../src/ai/bot";
+import { LOOT, LootTable } from "../src/core/loot";
+import { Rng } from "../src/core/rng";
 import { DT } from "../src/core/rules";
 
 let failures = 0;
@@ -127,6 +129,73 @@ for (const map of MAPS) {
   check(m.grid.isHazard(3, 3), "Volcan : la lave est infranchissable");
 }
 
+console.log("Butin aléatoire (core/loot.ts)");
+{
+  // parties entre bots : bonus jamais superposés, jamais dans un mur/bloc/bombe, quotas respectés
+  let bad = 0, total = 0, maxBoard = 0;
+  const firstSeq: string[] = [];
+  const typeTotals: Record<string, number> = {};
+  const quadSpread: number[] = [];
+  for (let sd = 1; sd <= 24; sd++) {
+    const m = new Match({ seed: sd * 7919, map: MAPS[sd % 4], modeId: "classic", players: Array.from({ length: 4 }, (_, i) => ({ name: "B" + i, characterId: "renard", isBot: true, difficulty: "normal" as Difficulty })) });
+    const brains = m.players.map((p) => new BotBrain(p.id, "normal", sd));
+    const seq: string[] = [];
+    let guard = 0;
+    while (m.phase !== "over" && guard++ < 60 * 200) {
+      m.step(brains.map((b) => b.update(m, DT)));
+      for (const e of m.events) if (e.t === "bonusSpawn") {
+        seq.push(e.type);
+        total++;
+        const g = m.grid;
+        if (g.tile(e.x, e.y) !== TILE.FLOOR) bad++;
+      }
+      const cells = new Set<number>();
+      for (const b of m.bonuses.values()) {
+        const i = m.grid.idx(b.tx, b.ty);
+        if (cells.has(i) || m.grid.bombAt[i] >= 0) bad++;
+        cells.add(i);
+      }
+      maxBoard = Math.max(maxBoard, m.bonuses.size);
+    }
+    for (const [k, v] of Object.entries(m.loot.perType)) {
+      typeTotals[k] = (typeTotals[k] ?? 0) + v;
+      if (v > (LOOT.maxPerMatch[k] ?? Infinity)) bad++;
+    }
+    quadSpread.push(Math.max(...m.loot.perQuadrant) - Math.min(...m.loot.perQuadrant));
+    firstSeq.push(seq.slice(0, 4).join("-"));
+  }
+  check(bad === 0, `${total} bonus apparus sur 24 parties : jamais superposés, ni dans un mur, un bloc ou une bombe, quotas respectés`);
+  check(maxBoard <= LOOT.maxOnBoard, `au plus ${LOOT.maxOnBoard} bonus visibles en même temps (max observé ${maxBoard})`);
+  check(new Set(firstSeq).size >= 18, `ordre différent d'une partie à l'autre (${new Set(firstSeq).size}/24 débuts différents)`);
+  check(Object.keys(typeTotals).length === 4, `les 4 bonus apparaissent : ${Object.entries(typeTotals).map(([k, v]) => `${k} ${v}`).join(", ")}`);
+  check(Math.max(...quadSpread) <= 12, `équilibre entre les coins (écart max ${Math.max(...quadSpread)})`);
+  // tirages bruts : proportions conformes aux poids
+  const t = new LootTable(13, 11, [[1, 1], [11, 9]], { ...LOOT, maxPerMatch: {}, maxOnBoard: 1e9, quadrantLead: 1e9 });
+  const rng = new Rng(42);
+  const n: Record<string, number> = {};
+  let drops = 0;
+  for (let i = 0; i < 20000; i++) {
+    const r = t.roll(rng, 3, 3, 0);
+    if (r) {
+      n[r] = (n[r] ?? 0) + 1;
+      drops++;
+    }
+  }
+  const tw = Object.values(LOOT.weights).reduce((a, b) => a + b, 0);
+  check(Math.abs(drops / 20000 - LOOT.dropChance) < 0.015, `taux de bonus par bloc ≈ ${Math.round(LOOT.dropChance * 100)} % (${Math.round((drops / 20000) * 100)} %)`);
+  check(Object.entries(LOOT.weights).every(([k, w]) => Math.abs((n[k] ?? 0) / drops - w / tw) < 0.02), "répartition conforme aux poids configurés");
+  // 2 joueurs : les coins vides ne bloquent pas le butin des joueurs
+  const duo = new LootTable(13, 11, [[1, 1], [11, 9]]);
+  const r2 = new Rng(3);
+  let got = 0;
+  for (let i = 0; i < 60; i++) if (duo.roll(r2, 2, 2, 0)) got++;
+  check(got <= LOOT.quadrantLead, `duo : un joueur qui casse tout dans son coin est limité tant que l'autre n'a rien (${got})`);
+  for (let i = 0; i < 60; i++) duo.roll(r2, 10, 8, 0);
+  let got2 = 0;
+  for (let i = 0; i < 60; i++) if (duo.roll(r2, 2, 2, 0)) got2++;
+  check(got2 > 0, "… puis il reprend quand l'autre joueur a aussi reçu ses bonus");
+}
+
 console.log("Mode Chaos");
 {
   const mk = () => {
@@ -148,9 +217,77 @@ console.log("Mode Chaos");
         if (e.t === "chaosWarn") warned++;
       }
     }
-    check(seen.length >= 3 && seen.length <= 8, `des événements arrivent régulièrement sans être trop fréquents (${seen.length} en 70 s : ${seen.join(", ")})`);
-    check(m.chaos!.count >= 3, "le directeur compte les événements");
-    check(warned >= 1 || !seen.some((id) => ["bombRain", "flameStorm", "megaBlast"].includes(id)), "les gros événements sont précédés d'une alerte");
+    check(seen.length >= 3, `des malus arrivent régulièrement (${seen.length} en 70 s : ${seen.join(", ")})`);
+    check(m.chaos!.count >= 10, `≈ un malus toutes les 5 s après 15 s (${m.chaos!.count} déclenchés)`);
+    check(warned >= 1, "les malus dangereux sont précédés d'une alerte");
+    check(seen.every((id) => !["overload", "shields", "speedChaos"].includes(id)), "uniquement des malus (plus de bonus dans la rotation)");
+  }
+  {
+    // chronologie exacte : rien avant 15 s, puis 15, 20, 25, 30 s
+    const m = mk();
+    const at: number[] = [];
+    for (let i = 0; i < 60 * 31; i++) {
+      for (const p of m.players) p.shieldTime = 99;
+      m.step(idle(m));
+      for (const e of m.events) if (e.t === "chaosStart" || e.t === "chaosWarn" || e.t === "chaosSkip") at.push(Math.round(m.time * 100) / 100);
+    }
+    const slots = [...new Set(at.filter((t) => Math.abs(t - Math.round(t / 5) * 5) < 0.05).map((t) => Math.round(t)))];
+    check(at.every((t) => t >= 15 - 1e-6) && slots.join() === "15,20,25,30", `malus à 15, 20, 25, 30 s (${slots.join(", ")}) — rien avant 15 s`);
+    // jamais deux dangers en même temps
+    let both = 0;
+    const m2 = mk();
+    for (let i = 0; i < 60 * 90; i++) {
+      for (const p of m2.players) p.shieldTime = 99;
+      m2.step(idle(m2));
+      const dangers = (m2.chaos!.pending ? 1 : 0) + m2.chaos!.active.filter((r) => r.def.danger).length;
+      if (dangers > 1) both++;
+      if (m2.chaos!.active.length + (m2.chaos!.pending ? 1 : 0) > 3) both++;
+    }
+    check(both === 0, "jamais deux malus dangereux à la fois, 3 effets maximum");
+  }
+  {
+    // pause : le temps de jeu (et donc les malus) s'arrête si la simulation n'avance pas
+    const m = mk();
+    for (let i = 0; i < 60 * 14; i++) m.step(idle(m));
+    const t = m.time;
+    check(m.chaos!.count === 0 && Math.abs(t - 14) < 0.05, "à 14 s : aucun malus");
+  }
+  {
+    const m = mk();
+    m.chaos!.trigger("fog");
+    run(m, DT);
+    check(m.fog, "Brouillard actif");
+    run(m, 6.1);
+    check(!m.fog, "puis la visibilité revient");
+    m.chaos!.trigger("slow");
+    run(m, DT);
+    check(m.speedMul < 1, "Ralentissement : tout le monde avance moins vite");
+    run(m, 5.1);
+    check(m.speedMul === 1, "… puis la vitesse revient");
+    m.chaos!.trigger("overheat");
+    run(m, DT);
+    const p0 = m.players[0];
+    const r0 = p0.range;
+    m.tryPlaceBomb(p0);
+    const b = [...m.bombs.values()].find((x) => x.ownerId === 0)!;
+    check(!!b && b.range === r0 + 1 && b.fuse < 1.4, `Surchauffe : bombe portée +1 et mèche plus courte (${b?.fuse.toFixed(2)} s)`);
+    m.chaos!.trigger("zone");
+    const z = m.chaos!.pending!.zone.slice();
+    check(z.length >= 4 && z.length <= 0.2 * 99 + 1, `Zone interdite : ${z.length} cases annoncées`);
+    run(m, 2.4);
+    check(z.every((i) => m.grid.fire[i] === 0), "Zone interdite : rien ne brûle pendant l'alerte");
+    run(m, 0.2);
+    check(z.every((i) => m.grid.tiles[i] === TILE.BLOCK || m.grid.fire[i] > 0), "… puis la zone brûle");
+  }
+  {
+    // le mode Classique n'a aucun malus
+    const m = new Match({ seed: 9, map: FOREST, modeId: "classic", players: [0, 1].map((i) => ({ name: "P" + i, characterId: "renard", isBot: false })) });
+    m.phase = "playing";
+    for (let i = 0; i < 60 * 40; i++) {
+      for (const p of m.players) p.shieldTime = 99;
+      m.step(idle(m));
+    }
+    check(!m.chaos && !m.fog && m.speedMul === 1, "mode Classique : aucun malus");
   }
   {
     const m = mk();
@@ -188,7 +325,7 @@ console.log("Mode Chaos");
     m.chaos!.trigger("flameStorm");
     const z = m.chaos!.pending!.zone.slice();
     run(m, 3.1);
-    check(z.length > 0 && z.every((i) => m.grid.fire[i] > 0), "Tempête de flammes : les zones annoncées brûlent");
+    check(z.length > 0 && z.every((i) => m.grid.fire[i] > 0), "Sol instable : les cases annoncées brûlent");
   }
   {
     // déterminisme : deux parties identiques = mêmes événements

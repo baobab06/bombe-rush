@@ -147,8 +147,8 @@ export function generateArena(map: MapDef, playerCount: number, seed: number): A
       const k = canon(x, y);
       if (decision.has(k)) continue;
       const block = rng.chance(map.blockDensity);
-      const bonus = block && rng.chance(map.bonusChance) ? rng.weighted(map.bonusWeights) : null;
-      decision.set(k, { block, bonus });
+      // le butin n'est plus décidé ici : il est tiré quand le bloc est détruit (core/loot.ts)
+      decision.set(k, { block, bonus: null });
     }
 
   for (let y = 0; y < height; y++)
