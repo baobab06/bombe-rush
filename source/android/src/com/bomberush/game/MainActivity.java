@@ -23,6 +23,8 @@ import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.window.OnBackInvokedCallback;
+import android.window.OnBackInvokedDispatcher;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -123,6 +125,16 @@ public class MainActivity extends Activity {
 
         setContentView(web);
         hideSystemUi();
+        // Android 13+ (obligatoire avec la cible API 36 : onBackPressed n'est plus appelé)
+        if (Build.VERSION.SDK_INT >= 33) {
+            getOnBackInvokedDispatcher().registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT,
+                new OnBackInvokedCallback() {
+                    @Override
+                    public void onBackInvoked() {
+                        handleBack();
+                    }
+                });
+        }
         web.loadUrl(startUrl(getIntent()));
     }
 
@@ -211,12 +223,21 @@ public class MainActivity extends Activity {
         super.onDestroy();
     }
 
-    /** Bouton retour : le jeu décide (fermer une fenêtre, pause, écran précédent…). */
+    /** Bouton retour (Android 7 à 12). */
     @Override
     @SuppressWarnings("deprecation")
     public void onBackPressed() {
         if (web == null) {
             super.onBackPressed();
+            return;
+        }
+        handleBack();
+    }
+
+    /** Bouton retour : le jeu décide (fermer une fenêtre, pause, écran précédent…), sinon l'appli passe en arrière-plan. */
+    private void handleBack() {
+        if (web == null) {
+            moveTaskToBack(true);
             return;
         }
         web.evaluateJavascript("(function(){try{return window.__bombeRushBack?window.__bombeRushBack():false}catch(e){return false}})()",

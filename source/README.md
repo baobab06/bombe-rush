@@ -11,6 +11,13 @@ Sur GitHub, « Add file » → « Upload files » → glisse **`index.html`** et
 **`server.mjs`** (tirés de `deploy/www/` et `deploy/`) → « Commit changes ».
 Render redéploie tout seul en 2-3 minutes.
 
+### Publication Google Play
+- `android/build-aab.sh` → `dist/release/BombeRush-<version>-unsigned.aab` (format App Bundle, validé par bundletool)
+  + `BombeRush-<version>-release-TEST.apk` (APK universel tiré du .aab, signé avec la clé de test).
+- Le .aab est signé sur le PC du propriétaire avec SA clé d'importation : `android/publication/` (scripts Windows + guide).
+- Version : `android:versionCode` / `android:versionName` dans `android/AndroidManifest.xml` (cible API 36).
+- Politique de confidentialité : `public/confidentialite.html` → https://bombe-rush.onrender.com/confidentialite.html
+
 ### Où changer les chiffres (sans toucher au reste)
 | Quoi | Fichier |
 |---|---|

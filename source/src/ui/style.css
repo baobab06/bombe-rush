@@ -1279,3 +1279,9 @@ button:focus-visible, input:focus-visible + i { outline: 3px solid var(--coin); 
 .ad-test p { color: var(--muted); font-weight: 700; }
 .ad-test .ad-cd { display: block; font-family: var(--display); font-size: 2.4em; margin: 1cqh 0 2cqh; }
 .consent-txt { text-align: left !important; line-height: 1.45; }
+#hud.chaos .pw small { display: none; }
+#hud.chaos .powers { flex-direction: row; flex-wrap: wrap; justify-content: flex-end; }
+#hud.chaos .hud-r { gap: 1.4cqh; }
+#hud.chaos .chaos-badge { padding: .6cqh 1.6cqh .8cqh; font-size: max(10.5px, .66em); }
+#hud .hud-l .powers { align-items: flex-start; flex-direction: column; flex-wrap: nowrap; }
+#hud .hud-l .pw { padding: .4cqh 2.4cqh .4cqh .6cqh; }
