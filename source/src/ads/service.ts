@@ -24,6 +24,11 @@ export interface AdProvider {
   readonly name: "none" | "android" | "h5" | "test";
   /** une pub récompensée peut être demandée (la régie peut quand même ne rien avoir) */
   readonly rewardedSupported: boolean;
+  /** le consentement est géré par la régie elle-même (formulaire Google UMP dans l'appli) */
+  readonly nativeConsent?: boolean;
+  /** bouton « choix de confidentialité » à proposer (Europe) */
+  privacyOptionsRequired?(): boolean;
+  showPrivacyOptions?(): void;
   showRewarded(placement: RewardedPlacement): Promise<RewardedStatus>;
   showInterstitial(): Promise<InterstitialStatus>;
   setConsent(personalized: boolean): void;
@@ -45,6 +50,9 @@ interface NativeAds {
   showRewarded(adUnit: string, callbackId: string): void;
   showInterstitial(adUnit: string, callbackId: string): void;
   setConsent(personalized: boolean): void;
+  configure?(rewardedUnit: string, interstitialUnit: string): void;
+  privacyOptionsRequired?(): boolean;
+  showPrivacyOptions?(): void;
 }
 function androidProvider(native: NativeAds): AdProvider {
   const waiting = new Map<string, (s: string) => void>();
@@ -52,6 +60,12 @@ function androidProvider(native: NativeAds): AdProvider {
     waiting.get(id)?.(s);
     waiting.delete(id);
   };
+  // identifiants des blocs d'annonces → l'appli précharge les pubs
+  try {
+    native.configure?.(ADS.android.rewarded, ADS.android.interstitial);
+  } catch {
+    /* ancienne appli */
+  }
   let n = 0;
   const call = (fn: (cb: string) => void, timeoutMs = 90000) =>
     new Promise<string>((resolve) => {
@@ -75,6 +89,21 @@ function androidProvider(native: NativeAds): AdProvider {
   return {
     name: "android",
     rewardedSupported: true,
+    nativeConsent: true,
+    privacyOptionsRequired: () => {
+      try {
+        return !!native.privacyOptionsRequired?.();
+      } catch {
+        return false;
+      }
+    },
+    showPrivacyOptions: () => {
+      try {
+        native.showPrivacyOptions?.();
+      } catch {
+        /* pont absent */
+      }
+    },
     async showRewarded() {
       if (!native.isReady("rewarded")) return "unavailable";
       const s = await call((id) => native.showRewarded(ADS.android.rewarded, id));
@@ -253,6 +282,17 @@ class AdService {
 
   setConsent(personalized: boolean) {
     this.provider.setConsent(personalized);
+  }
+
+  /** Consentement géré par le formulaire officiel de Google (appli Android) */
+  get nativeConsent(): boolean {
+    return !!this.provider.nativeConsent;
+  }
+  privacyOptionsRequired(): boolean {
+    return !!this.provider.privacyOptionsRequired?.();
+  }
+  showPrivacyOptions() {
+    this.provider.showPrivacyOptions?.();
   }
 }
 

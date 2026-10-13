@@ -451,6 +451,10 @@ class App implements AppCtx {
     bind("setMusic", "music");
     bind("setSfx", "sfx");
     bind("setVibe", "vibration");
+    $("btnAdsPrivacy").addEventListener("click", () => {
+      this.click();
+      ads.showPrivacyOptions();
+    });
     $<HTMLInputElement>("setAdsPerso").addEventListener("change", (e) => {
       const v = (e.target as HTMLInputElement).checked;
       this._profile.ads.personalized = v;
@@ -787,7 +791,8 @@ class App implements AppCtx {
     $<HTMLInputElement>("setMusic").checked = st.music;
     $<HTMLInputElement>("setSfx").checked = st.sfx;
     $<HTMLInputElement>("setVibe").checked = st.vibration;
-    $("adsSettings").hidden = !ads.enabled;
+    $("adsSettings").hidden = !ads.enabled || ads.nativeConsent;
+    $("adsPrivacy").hidden = !ads.nativeConsent || !ads.privacyOptionsRequired();
     $<HTMLInputElement>("setAdsPerso").checked = this._profile.ads.personalized === true;
     const p = this._profile;
     const cc = countOwned(p);

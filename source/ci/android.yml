@@ -1,0 +1,52 @@
+# Compile l'appli Android AVEC AdMob (projet source/android-gradle) à chaque mise à jour.
+# Les fichiers produits (.aab et .apk NON signés) et le journal de compilation sont
+# publiés sur la branche « android-builds » de ce dépôt.
+name: Android (AdMob)
+on:
+  push:
+    branches: [main]
+    paths:
+      - "source/android-gradle/**"
+      - "source/android/res/**"
+      - "www/index.html"
+      - ".github/workflows/android.yml"
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: android-build
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.14.3"
+      - name: Compiler (.aab + .apk non signés)
+        id: build
+        continue-on-error: true
+        working-directory: source/android-gradle
+        run: |
+          set -o pipefail
+          gradle --no-daemon --stacktrace -PwwwDir="$GITHUB_WORKSPACE/www" :app:bundleRelease :app:assembleRelease 2>&1 | tee "$GITHUB_WORKSPACE/build.log"
+      - name: Publier les résultats sur la branche android-builds
+        if: always()
+        run: |
+          mkdir -p out
+          cp build.log out/ 2>/dev/null || true
+          cp source/android-gradle/app/build/outputs/bundle/release/*.aab out/ 2>/dev/null || true
+          cp source/android-gradle/app/build/outputs/apk/release/*.apk out/ 2>/dev/null || true
+          echo "${{ steps.build.outcome }} ${{ github.sha }} $(date -u +%FT%TZ)" > out/STATUS
+          cd out
+          git init -q
+          git checkout -q -b android-builds
+          git add -A
+          git -c user.name="bombe-rush-ci" -c user.email="ci@users.noreply.github.com" commit -qm "build ${{ github.sha }}"
+          git push -q -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" android-builds

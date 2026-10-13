@@ -14,6 +14,8 @@ import type { AppCtx } from "./ctx";
 /** Demande le consentement (pubs personnalisées ou non) une seule fois. */
 export function ensureAdConsent(ctx: AppCtx): Promise<void> {
   const p = ctx.profile;
+  // appli Android : le formulaire de consentement officiel de Google (UMP) s'en charge
+  if (ads.nativeConsent) return Promise.resolve();
   if (p.ads.personalized !== null) {
     ads.setConsent(p.ads.personalized);
     return Promise.resolve();

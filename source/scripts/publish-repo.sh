@@ -26,6 +26,9 @@ services:
       - key: STATIC_DIR
         value: ./www
 YAML
+# compilation automatique de l'appli Android avec AdMob (GitHub Actions)
+mkdir -p .github/workflows
+cp "$ROOT/ci/android.yml" .github/workflows/android.yml
 mkdir source
 (cd "$ROOT" && git ls-files -co --exclude-standard | grep -v -E '^(deploy/|dist/)' | while read -r f; do mkdir -p "$REPO/source/$(dirname "$f")"; cp "$f" "$REPO/source/$f"; done)
 cat > README.md <<'MD'
