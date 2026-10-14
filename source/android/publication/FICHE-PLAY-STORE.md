@@ -72,18 +72,35 @@ Résultat attendu : PEGI 7 environ, à confirmer par le questionnaire.
 
 - Recommandé : **13 ans et plus**.
 - Si tu coches aussi des tranches de moins de 13 ans, le jeu entre dans le programme
-  **« Familles »** de Google, qui a des règles plus strictes (publicités, données, contenu). Le jeu
-  actuel n'a ni pub ni collecte, donc c'est possible, mais l'examen est plus exigeant.
+  **« Familles »** de Google, qui a des règles plus strictes (publicités, données, contenu). La version 1.0.0
+  n'a ni pub ni collecte, donc c'est possible. Mais la 1.1.0 contient AdMob : avec un public de moins de 13 ans,
+  il faudrait des réglages AdMob spéciaux (contenus adaptés aux enfants, pas de pubs personnalisées).
   Décide selon ton vrai public.
 
 ## Sécurité des données
 
-- **L'appli collecte ou partage-t-elle des données ?** **Oui** (partie privée en ligne uniquement) :
+### Version 1.0.0 (sans publicités)
+- **L'appli collecte ou partage-t-elle des données ?** **Oui**, uniquement pour les parties privées en ligne :
   - Type : **Infos personnelles → Autres infos** (pseudo de jeu choisi par le joueur).
   - Collectée : oui · Partagée : **non** · **Traitée de manière éphémère** : oui (en mémoire, le temps de la partie).
   - Obligatoire ou facultatif : **facultatif** (seulement pour jouer en ligne).
   - Finalité : **Fonctionnalité de l'appli**.
 - Données chiffrées pendant le transfert : **Oui** (HTTPS / WSS).
-- Demande de suppression : aucune donnée n'est conservée sur le serveur ; la suppression des données
-  de l'application sur le téléphone efface la progression.
+- Demande de suppression : aucune donnée n'est conservée sur le serveur. Supprimer les données de
+  l'application sur le téléphone efface la progression.
 - Publicités : **Non** · Identifiant publicitaire : **Non utilisé**.
+
+### Version 1.1.0 et suivantes (avec AdMob)
+À mettre à jour **avant** d'envoyer la version 1.1.0 :
+- **Annonces** : « Mon application contient des annonces » → **Oui**.
+- **Identifiant publicitaire** (Contenu de l'application) : **Oui**, utilisé pour la **publicité** (et l'analyse / la prévention
+  de la fraude par AdMob).
+- **Sécurité des données** : garde la ligne « pseudo » ci-dessus et ajoute ce que le SDK Google Mobile Ads collecte et **partage** avec Google.
+  Ce sont les déclarations recommandées par Google pour AdMob. Vérifie-les sur
+  https://developers.google.com/admob/android/privacy/play-data-disclosure :
+  - **Position → Position approximative** (déduite de l'adresse IP) : collectée et partagée, finalités Publicité, Analyse, Prévention des fraudes.
+  - **Activité dans l'appli → Interactions avec l'appli** (interactions avec les annonces) : collectée et partagée, mêmes finalités.
+  - **Infos et performances de l'appli → Diagnostics** (temps de lancement, ralentissements…) : collectés et partagés, mêmes finalités.
+  - **Identifiants de l'appareil ou autres** (identifiant publicitaire, identifiant « App set ») : collectés et partagés, mêmes finalités.
+  - Toutes ces données sont chiffrées en transit (TLS). Elles sont collectées automatiquement par le SDK. Seul l'identifiant publicitaire peut être réinitialisé ou supprimé par le joueur dans les réglages Android.
+- La politique de confidentialité est déjà à jour (section « Publicités »).

@@ -33,7 +33,14 @@
   pub signalée « PUB DE TEST ») ou `?ads=test-none` (aucune pub disponible).
   Ce mode ne fonctionne pas sur le site en ligne.
 
-## Pourquoi AdMob n'est pas encore actif
+## État au 14 octobre 2026 (version 1.1.0)
+
+L'appli Android **contient maintenant AdMob**. C'est un projet Gradle (`android-gradle/`), compilé
+automatiquement par GitHub Actions (`ci/android.yml`, branche `android-builds`). Elle contient le pont natif
+`window.BombeRushAds` (`AdsBridge.java`), le formulaire de consentement UMP et les **identifiants de test**
+officiels de Google. Pour passer aux vraies pubs, voir `android/publication/PUBS-ADMOB.md`.
+
+## Historique : pourquoi AdMob n'était pas actif avant la 1.1
 
 AdMob a besoin de son **SDK Android officiel** (Google Mobile Ads), qui
 s'ajoute avec Gradle et ses dépendances. L'APK actuel est construit sans
