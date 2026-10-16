@@ -1,6 +1,8 @@
 package com.bomberush.game;
 
 import android.app.Activity;
+import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
 import android.webkit.JavascriptInterface;
@@ -39,6 +41,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public class AdsBridge {
     private static final String TAG = "BombeRushAds";
+    // Identifiants de TEST officiels de Google (fonctionnent avec n'importe quel identifiant d'application)
+    private static final String TEST_REWARDED = "ca-app-pub-3940256099942544/5224354917";
+    private static final String TEST_INTERSTITIAL = "ca-app-pub-3940256099942544/1033173712";
     private final Activity act;
     private final WebView web;
     private final ConsentInformation consent;
@@ -143,10 +148,29 @@ public class AdsBridge {
     }
 
     // --------------------------------------------------------- appelé par le jeu
+    /**
+     * Vraies pubs seulement si l'appli vient du Google Play Store. Un APK installé à la main
+     * (APK de test du développeur) affiche les pubs de TEST de Google : le développeur ne
+     * risque jamais de cliquer sur ses propres pubs (interdit par AdMob).
+     */
+    private boolean installedFromPlay() {
+        try {
+            PackageManager pm = act.getPackageManager();
+            String installer;
+            if (Build.VERSION.SDK_INT >= 30) installer = pm.getInstallSourceInfo(act.getPackageName()).getInstallingPackageName();
+            else installer = pm.getInstallerPackageName(act.getPackageName());
+            return "com.android.vending".equals(installer);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     @JavascriptInterface
     public void configure(String rewardedUnitId, String interstitialUnitId) {
-        rewardedUnit = rewardedUnitId != null && rewardedUnitId.startsWith("ca-app-pub-") ? rewardedUnitId : null;
-        interstitialUnit = interstitialUnitId != null && interstitialUnitId.startsWith("ca-app-pub-") ? interstitialUnitId : null;
+        boolean real = installedFromPlay();
+        if (!real) Log.i(TAG, "appli hors Play Store : pubs de TEST");
+        rewardedUnit = rewardedUnitId != null && rewardedUnitId.startsWith("ca-app-pub-") ? (real ? rewardedUnitId : TEST_REWARDED) : null;
+        interstitialUnit = interstitialUnitId != null && interstitialUnitId.startsWith("ca-app-pub-") ? (real ? interstitialUnitId : TEST_INTERSTITIAL) : null;
         act.runOnUiThread(() -> {
             loadRewarded();
             loadInterstitial();

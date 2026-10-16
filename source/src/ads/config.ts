@@ -14,14 +14,15 @@ export const ADS = {
   /** Web : mode test de l'API Ad Placement (à garder "on" tant que le compte n'est pas validé) */
   webTestMode: true,
   /**
-   * Application Android : identifiants AdMob. Ceux-ci sont les identifiants
-   * de TEST officiels publiés par Google (ils n'affichent que des pubs de test).
-   * À remplacer par les vôtres uniquement pour la version publiée.
+   * Application Android : VRAIS identifiants AdMob du compte Bombe Rush.
+   * Sécurité : l'appli n'affiche les vraies pubs que si elle a été installée
+   * depuis Google Play ; un APK installé à la main utilise les pubs de TEST
+   * de Google (voir AdsBridge.java).
    */
   android: {
-    appId: "ca-app-pub-3940256099942544~3347511713",
-    rewarded: "ca-app-pub-3940256099942544/5224354917",
-    interstitial: "ca-app-pub-3940256099942544/1033173712",
+    appId: "ca-app-pub-8702007304042641~8404560974",
+    rewarded: "ca-app-pub-8702007304042641/4862655803",
+    interstitial: "ca-app-pub-8702007304042641/9926535369",
   },
 
   /** Pubs récompensées (toujours au choix du joueur) */

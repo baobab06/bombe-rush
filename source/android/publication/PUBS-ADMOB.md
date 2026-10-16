@@ -1,12 +1,22 @@
 # Bombe Rush — Activer les vraies publicités (AdMob)
 
-La version **1.1.0** de l'appli contient déjà AdMob, le SDK officiel de Google :
+La version **1.1.1** de l'appli contient AdMob, le SDK officiel de Google :
 - vidéos récompensées (+100 pièces, coffre gratuit, doubler ses gains) ;
 - une pub entre deux parties, au maximum toutes les 3 parties et toutes les 4 minutes, jamais pendant un combat ;
 - le formulaire de consentement officiel de Google pour l'Europe ;
 - le bouton « Choix de confidentialité » dans les Paramètres.
 
-Pour l'instant, elle utilise les **identifiants de TEST de Google** : elle n'affiche que des pubs « Test Ad » et ne rapporte rien.
+**Depuis la 1.1.1, ce sont tes VRAIS identifiants** (compte AdMob `pub-8702007304042641`) :
+| | Identifiant |
+|---|---|
+| Application | `ca-app-pub-8702007304042641~8404560974` |
+| Vidéo avec récompense | `ca-app-pub-8702007304042641/4862655803` |
+| Interstitiel (entre deux parties) | `ca-app-pub-8702007304042641/9926535369` |
+
+**Sécurité intégrée** : l'appli n'affiche les vraies pubs que si elle a été installée **depuis Google Play**.
+Un APK installé à la main (comme `BombeRush-1.1.1-pubs-TEST.apk`) affiche les pubs « Test Ad » de Google :
+tu peux cliquer dessus sans risque pour ton compte AdMob.
+(Le bloc « Interstitiel avec récompense » créé par erreur n'est pas utilisé : tu peux le laisser.)
 
 ## 1. Créer le compte AdMob (toi)
 1. https://admob.google.com → se connecter avec ton compte Google → accepter les conditions.
@@ -16,7 +26,7 @@ Pour l'instant, elle utilise les **identifiants de TEST de Google** : elle n'aff
 4. Dans l'application, **Blocs d'annonces → Ajouter** :
    - **Avec récompense** (nom : « Video recompensee », récompense : 1 « bonus ») ;
    - **Interstitiel** (nom : « Entre deux parties »).
-5. Envoie-moi les **3 identifiants** :
+5. ✅ Fait — les **3 identifiants** :
    - ID de l'application : `ca-app-pub-XXXXXXXXXXXXXXXX~YYYYYYYYYY`
    - ID du bloc récompensé : `ca-app-pub-XXXXXXXXXXXXXXXX/ZZZZZZZZZZ`
    - ID du bloc interstitiel : `ca-app-pub-XXXXXXXXXXXXXXXX/WWWWWWWWWW`

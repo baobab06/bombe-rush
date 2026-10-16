@@ -33,7 +33,13 @@
   pub signalée « PUB DE TEST ») ou `?ads=test-none` (aucune pub disponible).
   Ce mode ne fonctionne pas sur le site en ligne.
 
-## État au 14 octobre 2026 (version 1.1.0)
+## État au 16 octobre 2026 (version 1.1.1)
+
+Les **vrais identifiants AdMob** du compte Bombe Rush sont en place (`src/ads/config.ts`,
+`android-gradle/gradle.properties`). Les vraies pubs ne s'affichent que si l'appli est installée
+depuis Google Play ; un APK installé à la main utilise les pubs de test de Google (`AdsBridge.installedFromPlay`).
+
+## Version 1.1.0 (14 octobre 2026)
 
 L'appli Android **contient maintenant AdMob**. C'est un projet Gradle (`android-gradle/`), compilé
 automatiquement par GitHub Actions (`ci/android.yml`, branche `android-builds`). Elle contient le pont natif
