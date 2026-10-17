@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Défis entre amis</string>
+    <!-- Serveur ouvert au lancement (modifiable dans l'appli). Remplacé par DEFIS_SERVER à la compilation. -->
+    <string name="server_url">https://defis-entre-amis.onrender.com</string>
+</resources>

@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Défis entre amis</title>
+<style>
+  :root { --bg: #f6f5ff; --card: #fff; --ink: #1c1a33; --muted: #6b6889; --line: #e4e1f5; --brand: #5b4bff; --bad: #d4314c; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #12111f; --card: #1d1b30; --ink: #f1f0ff; --muted: #a3a0c2; --line: #2f2c4a; --brand: #8b7fff; --bad: #ff6b81; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.45 system-ui, sans-serif; padding: 32px 16px; }
+  .wrap { max-width: 480px; margin: 0 auto; }
+  h1 { text-align: center; margin: 8px 0; }
+  .logo { font-size: 64px; text-align: center; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 16px; margin-top: 16px; }
+  label { font-weight: 600; font-size: 0.9rem; display: block; margin-bottom: 6px; }
+  input { width: 100%; font: inherit; padding: 12px 14px; border-radius: 12px; border: 1.5px solid var(--line); background: var(--bg); color: var(--ink); }
+  button { width: 100%; margin-top: 12px; min-height: 48px; border: 0; border-radius: 12px; font: inherit; font-weight: 650; background: var(--brand); color: #fff; }
+  button.ghost { background: var(--line); color: var(--ink); }
+  .muted { color: var(--muted); font-size: 0.85rem; }
+  #msg { color: var(--bad); text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="logo">🏆</div>
+  <h1>Défis entre amis</h1>
+  <p id="msg"></p>
+  <div class="card">
+    <label for="server">Adresse du serveur</label>
+    <input id="server" type="url" inputmode="url" autocapitalize="off" autocorrect="off" placeholder="https://defis-entre-amis.onrender.com">
+    <p class="muted">Celle de ton service Render, ou http://192.168.x.x:8080 pour un serveur lancé sur ton ordinateur (même Wi-Fi).</p>
+    <button id="save">Se connecter</button>
+    <button id="retry" class="ghost">Réessayer</button>
+  </div>
+  <p class="muted" id="ver" style="text-align:center"></p>
+</div>
+<script>
+  const bridge = window.DefisAndroid;
+  const input = document.getElementById("server");
+  document.getElementById("msg").textContent = decodeURIComponent(location.hash.slice(1));
+  if (bridge) {
+    input.value = bridge.getServer();
+    document.getElementById("ver").textContent = "Version " + bridge.version();
+  }
+  document.getElementById("save").onclick = () => bridge && bridge.setServer(input.value);
+  document.getElementById("retry").onclick = () => bridge && bridge.setServer(bridge.getServer());
+</script>
+</body>
+</html>

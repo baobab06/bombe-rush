@@ -19,6 +19,12 @@ joueurs, invite le second avec le code, puis lance un challenge en
 **« Jours rapides de 5 min (test) »** : on parcourt une journée, sa clôture et
 le rattrapage en quelques minutes.
 
+## Appli Android (APK)
+
+`apk/DefisEntreAmis.apk` — voir `apk/LISEZMOI.md` pour l'installer et le
+recompiler (`./android/build-apk.sh`). L'APK ouvre le serveur du jeu dans une
+fenêtre plein écran : il faut donc d'abord mettre le serveur en ligne.
+
 ## Mettre en ligne (Render)
 
 Le `render.yaml` à la racine du dépôt concerne Bombe Rush ; on ne le touche pas.
@@ -26,6 +32,7 @@ Créer à la main un **second service web** sur Render :
 
 | Réglage | Valeur |
 |---|---|
+| Name | `defis-entre-amis` (l'APK ouvre cette adresse par défaut) |
 | Root Directory | `defis` |
 | Build Command | *(vide)* |
 | Start Command | `node server.mjs` |
@@ -62,7 +69,7 @@ Variables : `PORT`, `DATA_FILE`, `ALLOW_FAST_DAYS=0` pour masquer les jours rapi
 | Connexion | pseudo + **code de récupération** (à copier dans les réglages) | Google / Apple |
 | Notifications | dans l'app (cloche 🔔), sans heures calmes | push FCM / APNs, heures calmes 22 h–8 h |
 | Données | un fichier JSON | vraie base (PostgreSQL…) |
-| Appli | web installable (PWA) | Android 10+ / iOS 16+ (Capacitor, comme Bombe Rush) |
+| Appli | web (PWA) + APK Android (WebView) | Android 10+ / iOS 16+, publiées sur les stores |
 | Âge | case « au moins 15 ans » | à décider (13 / 15 ans selon le pays) |
 | Examen des « suspects » | marqués, pas d'écran d'admin | écran de modération |
 
@@ -98,5 +105,7 @@ lib/app.mjs        règles serveur : comptes, groupes, challenges, tentatives, s
 lib/store.mjs      sauvegarde JSON
 server.mjs         API HTTP + fichiers statiques
 public/            appli web (aucune compilation)
+android/           projet Android (WebView) + script de compilation
+apk/               APK prêt à installer
 test/              tests node:test + joueurs automatiques
 ```

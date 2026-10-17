@@ -221,6 +221,7 @@ function renderOnboarding() {
           store.set("token", restore.value.trim());
           try { await api("GET", "/api/home"); route(); } catch { store.del("token"); toast("Code inconnu"); }
         } }, "OK"))),
+      window.DefisAndroid ? null : h("a.btn.ghost.block", { href: "/apk/DefisEntreAmis.apk", download: "" }, "📱 Télécharger l'appli Android"),
       h("p.small.muted.center", "Version alpha · ", h("a", { href: "#/privacy", onclick: (e) => { e.preventDefault(); showPrivacy(); } }, "Confidentialité"))));
 }
 
@@ -445,7 +446,8 @@ function tabGroup(v, me, isAdmin) {
         h("p.small.muted.center", "Valable jusqu'au ", fmtTime(inv.expiresAt)),
         h("button.btn.block", { onclick: async () => {
           const text = `Rejoins « ${v.group.name} » sur Défis entre amis : ${link}`;
-          if (navigator.share) navigator.share({ text }).catch(() => {});
+          if (window.DefisAndroid) window.DefisAndroid.share(text);
+          else if (navigator.share) navigator.share({ text }).catch(() => {});
           else { await navigator.clipboard?.writeText(link); toast("Lien copié"); }
         } }, "Partager le lien"),
       ] : h("p.muted", "Code expiré."),
@@ -611,6 +613,9 @@ async function renderSettings() {
       h("p.small.muted", "Garde ce code secret : il permet de retrouver ton compte sur un autre téléphone."),
       h("button.btn.ghost.block", { onclick: async () => { await navigator.clipboard?.writeText(store.get("token")); toast("Code copié"); } }, "Copier mon code de récupération")),
     h("div.card.stack",
+      window.DefisAndroid
+        ? h("button.btn.ghost.block", { onclick: () => window.DefisAndroid.openSetup() }, "Changer de serveur")
+        : h("a.btn.ghost.block", { href: "/apk/DefisEntreAmis.apk", download: "" }, "Télécharger l'appli Android"),
       h("button.btn.ghost.block", { onclick: showPrivacy }, "Politique de confidentialité"),
       h("button.btn.danger.block", { onclick: async () => {
         if (!confirm("Supprimer définitivement ton compte ? Tes données personnelles seront effacées.")) return;
@@ -636,6 +641,13 @@ async function renderNotifs() {
     list.length ? h("div.list", list.map((n) => h("div.clickable", { style: `cursor:pointer;${n.read ? "" : "font-weight:650"}`, onclick: () => n.groupId && go(`/g/${n.groupId}`) },
       h("div", n.text), h("div.small.muted", fmtTime(n.createdAt))))) : h("p.muted", "Rien pour l'instant.")));
 }
+
+/** Bouton retour Android : rien pendant une partie, sinon écran précédent. */
+window.__defisBack = () => {
+  if (document.querySelector(".game")) return true;
+  if (location.hash && location.hash !== "#/") { history.back(); return true; }
+  return false;
+};
 
 // -------------------------------------------------------------- démarrage
 

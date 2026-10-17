@@ -15,7 +15,7 @@ const store = new Store(process.env.DATA_FILE ?? join(root, "data", "db.json"));
 const allowFastDays = process.env.ALLOW_FAST_DAYS !== "0";
 const app = new App({ store, allowFastDays });
 
-const MIME = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".mjs": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".json": "application/json", ".svg": "image/svg+xml", ".webmanifest": "application/manifest+json" };
+const MIME = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".mjs": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".json": "application/json", ".svg": "image/svg+xml", ".webmanifest": "application/manifest+json", ".apk": "application/vnd.android.package-archive" };
 // Seuls ces modules partagés sont servis au navigateur.
 const SHARED = new Set(["rng.mjs", "games.mjs"]);
 
@@ -70,7 +70,9 @@ async function readBody(req) {
 
 async function serveStatic(res, path) {
   let file;
-  if (path.startsWith("/lib/")) {
+  if (path === "/apk/DefisEntreAmis.apk") {
+    file = join(root, "apk", "DefisEntreAmis.apk");
+  } else if (path.startsWith("/lib/")) {
     const name = path.slice(5);
     if (!SHARED.has(name)) return false;
     file = join(root, "lib", name);
