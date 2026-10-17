@@ -1,0 +1,19 @@
+# Tests de l'alpha « Défis entre amis » (dossier defis/).
+name: Défis (tests)
+on:
+  push:
+    paths: ["defis/**", ".github/workflows/defis.yml"]
+  pull_request:
+    paths: ["defis/**", ".github/workflows/defis.yml"]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: defis
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm test
