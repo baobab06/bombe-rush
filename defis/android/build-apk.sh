@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Construit l'APK Android de « Défis entre amis », sans Android Studio ni Gradle.
 #   ./android/build-apk.sh                         → apk/DefisEntreAmis.apk
+#   ./android/build-apk.sh 0.2.0                   → nouvelle version (versionCode + 1)
 #   DEFIS_SERVER=https://mon-serveur ./android/build-apk.sh   (serveur par défaut)
 # Outils téléchargés une fois dans $TOOLS : build-tools 36 (aapt2, d8, zipalign,
 # apksigner) et android.jar (API 36). Il faut Java (JDK 17+), curl et unzip.
@@ -25,6 +26,14 @@ if [ ! -x "$BT/aapt2" ] || [ ! -f "$ANDROID_JAR" ]; then
   curl -sSfL -o "$TOOLS/pf.zip" https://dl.google.com/android/repository/platform-36_r02.zip
   (cd "$TOOLS" && unzip -q -o bt.zip && unzip -q -o pf.zip && rm bt.zip pf.zip)
 fi
+
+# Nouvelle version : le numéro interne (versionCode) doit augmenter pour
+# qu'Android accepte la mise à jour par-dessus l'ancienne appli.
+if [ -n "${1:-}" ]; then
+  code=$(sed -n 's/.*android:versionCode="\([0-9]*\)".*/\1/p' "$HERE/AndroidManifest.xml")
+  sed -i "s/android:versionCode=\"$code\"/android:versionCode=\"$((code + 1))\"/; s/android:versionName=\"[^\"]*\"/android:versionName=\"$1\"/" "$HERE/AndroidManifest.xml"
+fi
+echo "Version : $(sed -n 's/.*android:versionName="\([^"]*\)".*/\1/p' "$HERE/AndroidManifest.xml") ($(sed -n 's/.*android:versionCode="\([0-9]*\)".*/\1/p' "$HERE/AndroidManifest.xml"))"
 
 rm -rf "$OUT" && mkdir -p "$OUT/compiled" "$OUT/classes" "$OUT/gen" "$OUT/res"
 cp -r "$HERE/res/." "$OUT/res/"

@@ -27,7 +27,8 @@ L'adresse se change ensuite dans **Réglages → Changer de serveur**.
 
 ```bash
 cd defis
-./android/build-apk.sh                                  # serveur par défaut ci-dessus
+./android/build-apk.sh                                  # même version, serveur par défaut ci-dessus
+./android/build-apk.sh 0.2.0                            # nouvelle version (à faire pour chaque mise à jour)
 DEFIS_SERVER=https://mon-serveur.onrender.com ./android/build-apk.sh
 ```
 
