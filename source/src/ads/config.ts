@@ -20,9 +20,10 @@ export const ADS = {
    * de Google (voir AdsBridge.java).
    */
   android: {
-    appId: "ca-app-pub-8702007304042641~8404560974",
-    rewarded: "ca-app-pub-8702007304042641/4862655803",
-    interstitial: "ca-app-pub-8702007304042641/9926535369",
+    appId: "ca-app-pub-8702007304042641~7500110205",
+    rewarded: "ca-app-pub-8702007304042641/3808664243",
+    /** pas de bloc interstitiel pour l'instant (vide = aucune pub entre deux parties) */
+    interstitial: "",
   },
 
   /** Pubs récompensées (toujours au choix du joueur) */

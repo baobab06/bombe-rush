@@ -110,7 +110,7 @@ function androidProvider(native: NativeAds): AdProvider {
       return s === "completed" ? "completed" : s === "skipped" ? "skipped" : s === "unavailable" ? "unavailable" : "error";
     },
     async showInterstitial() {
-      if (!native.isReady("interstitial")) return "unavailable";
+      if (!ADS.android.interstitial || !native.isReady("interstitial")) return "unavailable";
       const s = await call((id) => native.showInterstitial(ADS.android.interstitial, id), 60000);
       return s === "shown" ? "shown" : s === "unavailable" ? "unavailable" : "error";
     },
