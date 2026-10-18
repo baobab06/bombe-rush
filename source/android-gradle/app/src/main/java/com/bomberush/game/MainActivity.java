@@ -46,6 +46,7 @@ public class MainActivity extends Activity {
     private WebView web;
     /** Publicités AdMob (pont window.BombeRushAds pour le jeu). */
     private AdsBridge ads;
+    private BillingBridge billing;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -91,6 +92,8 @@ public class MainActivity extends Activity {
         web.addJavascriptInterface(new Bridge(), "BombeRushAndroid");
         ads = new AdsBridge(this, web);
         web.addJavascriptInterface(ads, "BombeRushAds");
+        billing = new BillingBridge(this, web);
+        web.addJavascriptInterface(billing, "BombeRushBilling");
         web.setWebChromeClient(new WebChromeClient());
         web.setWebViewClient(new WebViewClient() {
             @Override
@@ -131,6 +134,7 @@ public class MainActivity extends Activity {
         hideSystemUi();
         // consentement (formulaire Google pour l'Europe si nécessaire), puis chargement des pubs
         ads.start();
+        billing.start();
         // Android 13+ (obligatoire avec la cible API 36 : onBackPressed n'est plus appelé)
         if (Build.VERSION.SDK_INT >= 33) {
             getOnBackInvokedDispatcher().registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT,
@@ -217,12 +221,15 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         if (web != null) web.onResume();
+        // un paiement « en attente » a pu être validé pendant que l'appli était en arrière-plan
+        if (billing != null) billing.restore();
         hideSystemUi();
     }
 
     @Override
     protected void onDestroy() {
         if (ads != null) ads.destroy();
+        if (billing != null) billing.destroy();
         if (web != null) {
             web.destroy();
             web = null;

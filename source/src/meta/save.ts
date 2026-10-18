@@ -122,6 +122,9 @@ export function migrate(data: Partial<Profile> & { ownedSkins?: string[]; versio
   if (!Number.isFinite(p.clock.offset) || Math.abs(p.clock.offset) > 400 * 86400000) p.clock.offset = 0;
   for (const k of ["coins", "coinsEarned", "level", "xp"] as const) if (!Number.isFinite(p[k]) || p[k] < 0) p[k] = base[k];
   p.coins = Math.floor(p.coins);
+  p.bombers = Number.isFinite(p.bombers) && p.bombers > 0 ? Math.floor(p.bombers) : 0;
+  p.bomberGift = p.bomberGift === true;
+  p.purchases = Array.isArray(p.purchases) ? p.purchases.filter((x) => x && typeof x.token === "string").slice(-200) : [];
   if (!Array.isArray(p.settled)) p.settled = [];
   if (!Array.isArray(p.ledger)) p.ledger = [];
   if (!p.pending || typeof p.pending.matchId !== "string") p.pending = null;

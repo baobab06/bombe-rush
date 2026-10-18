@@ -22,6 +22,7 @@ Render redéploie tout seul en 2-3 minutes.
 | Quoi | Fichier |
 |---|---|
 | **Pièces selon la place finale** (1er, 2e, 3e, 4e) par difficulté : `STAKES` | `src/meta/economy.ts` |
+| **Bombers** (monnaie premium) : prix en bombers (`BOMBER_PRICES`…), échange contre des pièces (`EXCHANGES`), **packs en argent réel** (`PACKS`, voir `docs/ACHATS.md`) | `src/meta/economy.ts` |
 | Parties à 2, 3 ou 5+ joueurs : quelle colonne du barème pour chaque place (`PLACE_COLUMNS`), égalité (`DRAW_COLUMN`) | `src/meta/economy.ts` |
 | Bonus sur les gains (événements ×2, séries, 1re victoire du jour…) : `GAIN_MODIFIERS` | `src/meta/rewards.ts` |
 | **Délai avant explosion des bombes** et alerte (`fuse`, `warn`), futurs types de bombes : `BOMB_KINDS` | `src/core/bombs.ts` |

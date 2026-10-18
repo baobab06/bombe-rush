@@ -26,12 +26,15 @@ export interface AppCtx {
 const $ = (id: string) => document.getElementById(id)!;
 export const fmt = (n: number) => Math.round(n).toLocaleString("fr-FR").replace(/ | /g, " ");
 
-/** Porte-monnaie : tous les compteurs [data-coins] de l'interface. */
+/** Porte-monnaie : tous les compteurs [data-coins] (et [data-bombers]) de l'interface. */
 export class Wallet {
   private shown = 0;
   private anim = 0;
 
-  constructor(private coins: () => number) {}
+  constructor(
+    private coins: () => number,
+    private bombers: () => number = () => 0,
+  ) {}
 
   sync() {
     cancelAnimationFrame(this.anim);
@@ -42,6 +45,8 @@ export class Wallet {
 
   private write(v: number) {
     document.querySelectorAll<HTMLElement>("[data-coins]").forEach((el) => (el.textContent = fmt(v)));
+    const b = fmt(this.bombers());
+    document.querySelectorAll<HTMLElement>("[data-bombers]").forEach((el) => (el.textContent = b));
   }
 
   /** Compteur qui défile jusqu'à la valeur actuelle. */

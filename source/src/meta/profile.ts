@@ -59,6 +59,12 @@ export interface Profile {
   coins: number;
   /** total gagné depuis le début (statistique) */
   coinsEarned: number;
+  /** monnaie premium (BOMBERS) */
+  bombers: number;
+  /** cadeau de découverte des bombers déjà donné */
+  bomberGift: boolean;
+  /** achats en argent réel déjà crédités (jeton Google Play) : jamais deux fois le même */
+  purchases: { token: string; productId: string; at: number }[];
   wins: number;
   losses: number;
   played: number;
@@ -121,6 +127,9 @@ export function defaultProfile(): Profile {
     xp: 0,
     coins: 0,
     coinsEarned: 0,
+    bombers: 0,
+    bomberGift: false,
+    purchases: [],
     wins: 0,
     losses: 0,
     played: 0,
