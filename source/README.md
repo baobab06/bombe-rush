@@ -356,6 +356,25 @@ durée du bouclier, mort subite…), la mèche des bombes dans `src/core/bombs.t
 probabilité et répartition des bonus). Les profils des bots sont en tête de
 `src/ai/bot.ts`.
 
+### Positions de départ
+
+Elles sont tirées au hasard à chaque partie (`pickSpawns`, `src/maps/generator.ts`,
+réglages dans `SPAWN_RULES`) à partir de la graine de la partie : le serveur et
+chaque téléphone calculent donc exactement les mêmes positions.
+- Une case est tirée dans le quart haut-gauche puis recopiée en miroir dans les
+  3 autres quarts (5-6 joueurs : + une paire sur un axe central). Les blocs étant
+  eux aussi symétriques, chaque joueur a le même voisinage ; les joueurs sont
+  ensuite répartis au hasard sur ces cases.
+- Une case de départ est toujours du sol praticable (ni mur, bloc, lave, eau,
+  glace ou cheminée), à 2 cases ou plus d'une cheminée, jamais en cul-de-sac, avec une
+  cachette garantie hors du souffle de la 1re bombe. Les zones de départ sont
+  séparées par des blocs, et au moins 5 cases séparent deux joueurs
+  (distance assouplie à 4, 3 puis 2 sur une petite map).
+- Toutes les combinaisons valides sont listées puis tirées : pas de boucle au
+  hasard. Si aucune ne convient (map minuscule ou non symétrique), retour aux
+  positions fixes `S`/`s` du plan.
+- Pas de réapparition : les positions ne servent qu'au début de la partie.
+
 ## Étapes suivantes proposées
 
 1. Retours de test sur la Forêt (sensation de contrôle, vitesse, bots).
