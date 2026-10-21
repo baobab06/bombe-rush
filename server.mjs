@@ -719,31 +719,6 @@ var BEACH = {
   available: true
 };
 
-// src/maps/chaos-arena.ts
-var CHAOS_ARENA = {
-  id: "chaos_arena",
-  name: "Arène Chaos",
-  subtitle: "Cristaux et failles",
-  theme: "chaos_arena",
-  layout: [
-    "#############",
-    "#S.._..._..S#",
-    "#.##..#..##.#",
-    "#...V._.V...#",
-    "#.~~._._.~~.#",
-    "#._.._#_.._.#",
-    "#.~~._._.~~.#",
-    "#...V._.V...#",
-    "#.##..#..##.#",
-    "#S.._..._..S#",
-    "#############"
-  ],
-  blockDensity: 0.62,
-  spawnClear: 1,
-  startRange: 1,
-  available: true
-};
-
 // src/maps/forest.ts
 var FOREST = {
   id: "forest",
@@ -845,13 +820,13 @@ var VOLCANO = {
 };
 
 // src/maps/index.ts
-var MAPS = [FOREST, VOLCANO, ICE, BEACH, LABYRINTH, CHAOS_ARENA];
+var MAPS = [FOREST, VOLCANO, ICE, BEACH, LABYRINTH];
 var RANDOM_MAP = "random";
 function getMap(id) {
   return MAPS.find((m) => m.id === id) ?? MAPS[0];
 }
 function pickMap(id, rand = Math.random) {
-  if (id === RANDOM_MAP)
+  if (id === RANDOM_MAP || !MAPS.some((m) => m.id === id))
     return MAPS[Math.floor(rand() * MAPS.length)];
   return getMap(id);
 }

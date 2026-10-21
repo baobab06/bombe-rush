@@ -233,22 +233,20 @@ console.log("Positions de départ aléatoires");
   check(tooSmall, "map sans assez de cases : erreur claire plutôt qu'une position impossible");
 }
 
-console.log("Nouvelles maps : Labyrinthe et Arène Chaos");
+console.log("Nouvelle map : Labyrinthe");
 {
   const LAB = MAPS.find((m) => m.id === "labyrinth")!;
-  const ARENA = MAPS.find((m) => m.id === "chaos_arena")!;
-  check(!!LAB && !!ARENA, "les 2 nouvelles maps sont dans la liste des maps jouables");
+  check(!!LAB, "le Labyrinthe est dans la liste des maps jouables");
+  check(!MAPS.some((m) => m.id === "chaos_arena"), "l'Arène Chaos a été retirée");
   const slots = (n: number) => Array.from({ length: n }, (_, i) => ({ name: "P" + i, characterId: "pip", isBot: false }));
   // vraiment différentes : plans comparés case par case, entre elles et avec les anciennes
   const diffCells = (a: string[], b: string[]) => a.reduce((n, row, y) => n + [...row].filter((c, x) => c !== b[y][x]).length, 0);
-  const minOld = (m: typeof LAB) => Math.min(...MAPS.filter((o) => o !== LAB && o !== ARENA).map((o) => diffCells(m.layout, o.layout)));
-  check(diffCells(LAB.layout, ARENA.layout) >= 25, `Labyrinthe ≠ Arène Chaos (${diffCells(LAB.layout, ARENA.layout)} cases différentes)`);
-  check(minOld(LAB) >= 20 && minOld(ARENA) >= 20, `différentes des 4 maps existantes (au moins ${Math.min(minOld(LAB), minOld(ARENA))} cases différentes)`);
+  const minOld = (m: typeof LAB) => Math.min(...MAPS.filter((o) => o !== LAB).map((o) => diffCells(m.layout, o.layout)));
+  check(minOld(LAB) >= 20, `différent des 4 autres maps (au moins ${minOld(LAB)} cases différentes)`);
   const count = (m: typeof LAB, c: string) => m.layout.join("").split(c).length - 1;
   check(count(LAB, "#") > count(FOREST, "#") && count(LAB, "~") > 0, `Labyrinthe : plus de murs que la Forêt (${count(LAB, "#")} contre ${count(FOREST, "#")}) et des canaux d'eau`);
-  check(count(ARENA, "~") >= 8 && count(ARENA, "V") === 4 && count(ARENA, "_") >= 10, `Arène Chaos : gouffres (${count(ARENA, "~")}), 4 failles et des zones ouvertes (${count(ARENA, "_")} cases toujours libres)`);
 
-  for (const map of [LAB, ARENA]) {
+  for (const map of [LAB]) {
     const fresh = () => {
       const m = new Match({ seed: 11, map, modeId: "classic", players: slots(2) });
       m.phase = "playing";
@@ -329,7 +327,7 @@ console.log("Nouvelles maps : Labyrinthe et Arène Chaos");
           }
         }
       check(bombs > 30 && wallHit === 0 && beyond === 0, `${map.name} : les explosions s'arrêtent aux murs (${bombs} bombes testées)`);
-      if (map === LAB || map === ARENA) check(overHazard > 0, `${map.name} : les flammes passent au-dessus de ${map === LAB ? "l'eau" : "du vide"}, comme sur les autres maps`);
+      check(overHazard > 0, `${map.name} : les flammes passent au-dessus de l'eau, comme sur les autres maps`);
     }
 
     // loots : uniquement sur des cases praticables ; parties complètes avec bots, dans les 2 modes

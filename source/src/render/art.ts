@@ -4,7 +4,7 @@
  */
 import { TERRAIN } from "../core/types";
 import { LIFT, drawBorderTree, drawBush, drawCrate, drawGrassTile, drawStone, hash } from "./sprites";
-import { CHAOS_ARENA_HD, LABYRINTH_HD } from "./maps-hd";
+import { LABYRINTH_HD } from "./maps-hd";
 import { THEMES, type Theme } from "./themes";
 
 type Ctx = CanvasRenderingContext2D;
@@ -553,7 +553,7 @@ const BEACH: Art = {
 };
 
 
-const ARTS: Record<string, Art> = { forest: FOREST, volcano: VOLCANO, ice: ICE, beach: BEACH, labyrinth: LABYRINTH_HD, chaos_arena: CHAOS_ARENA_HD };
+const ARTS: Record<string, Art> = { forest: FOREST, volcano: VOLCANO, ice: ICE, beach: BEACH, labyrinth: LABYRINTH_HD };
 
 
 export function getArt(id: string): Art {
