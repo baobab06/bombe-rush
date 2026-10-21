@@ -1,4 +1,3 @@
-import { announceBombers, listenPurchases } from "./bank";
 import "../platform/polyfills";
 import { audio } from "../audio/audio";
 import { CHARACTERS, getCharacter, getSkin } from "../core/characters";
@@ -63,7 +62,7 @@ class App implements AppCtx {
   private history: ScreenId[] = [];
   private setupState = { ...this._profile.lastSetup };
   readonly fx = new UiFx($<HTMLCanvasElement>("uiFx"));
-  readonly wallet = new Wallet(() => this._profile.coins, () => this._profile.bombers);
+  readonly wallet = new Wallet(() => this._profile.coins);
   readonly modal = new Modal();
   private shop: ItemBrowser;
   private coll: ItemBrowser;
@@ -98,7 +97,6 @@ class App implements AppCtx {
       else if (this.screen === "pause") this.resume();
     };
     this.shop = new ItemBrowser($("shopBrowser"), "shop", this);
-    listenPurchases(this);
     this.coll = new ItemBrowser($("collBrowser"), "collection", this);
     this.missionsScr = new MissionsScreen(this, () => this.renderBadges());
     this.profileScr = new ProfileScreen(this, () => this.renderBadges(), {
@@ -333,13 +331,6 @@ class App implements AppCtx {
       b.addEventListener("click", () => {
         this.click();
         this.back();
-      }),
-    );
-    document.querySelectorAll<HTMLElement>("[data-bank]").forEach((b) =>
-      b.addEventListener("click", (e) => {
-        e.stopPropagation();
-        this.click();
-        this.openShop(undefined, "bank");
       }),
     );
     document.querySelectorAll<HTMLElement>("[data-go]").forEach((b) =>
@@ -628,13 +619,6 @@ class App implements AppCtx {
           },
           { closable: false, onClose: () => this.wallet.sync() },
         );
-      }, 450);
-      return;
-    }
-    if (!p.bomberGift) {
-      window.setTimeout(() => {
-        if (this.screen !== "home" || p.bomberGift) return;
-        announceBombers(this);
       }, 450);
       return;
     }

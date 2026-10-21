@@ -5,7 +5,7 @@
  */
 import { CHARACTERS, SKINS, type Rarity } from "../core/characters";
 import { ACCESSORIES, BOOMS, EMOTES, TITLES, TRAILS } from "../core/cosmetics";
-import { BOMBER_CHARACTER_PRICES, BOMBER_EMOTE_PRICES, BOMBER_PRICES, CHARACTER_PRICES, EMOTE_PRICES, PRICES } from "./economy";
+import { CHARACTER_PRICES, EMOTE_PRICES, PRICES } from "./economy";
 
 export type ItemKind = "skin" | "accessory" | "trail" | "emote" | "boom" | "title" | "character";
 /** Objet exclusif : ne se vend pas, se gagne (maîtrise, succès, niveau, coffres, rang). */
@@ -17,8 +17,6 @@ export interface CatalogItem {
   name: string;
   rarity: Rarity;
   price: number;
-  /** prix en bombers (monnaie premium) ; 0 = pas vendu en bombers */
-  bomberPrice: number;
   desc: string;
   /** offert d'office (possédé sans achat) */
   free: boolean;
@@ -40,8 +38,8 @@ export const CATEGORIES: { id: ItemKind; label: string; short: string }[] = [
   { id: "title", label: "Titres", short: "Titres" },
 ];
 
-function build(): Omit<CatalogItem, "bomberPrice">[] {
-  const out: Omit<CatalogItem, "bomberPrice">[] = [];
+function build(): CatalogItem[] {
+  const out: CatalogItem[] = [];
   for (const s of SKINS)
     out.push({
       id: s.id, kind: "skin", name: s.name, rarity: s.rarity, price: s.free || s.exclusive ? 0 : s.price ?? PRICES[s.rarity],
@@ -60,19 +58,7 @@ function build(): Omit<CatalogItem, "bomberPrice">[] {
   return out;
 }
 
-/** Prix en bombers : table par rareté (economy.ts), ou prix en pièces ÷ 10 pour un prix sur mesure. */
-function withBomberPrice(it: Omit<CatalogItem, "bomberPrice">): CatalogItem {
-  let bomberPrice = 0;
-  if (it.price > 0) {
-    const table = it.kind === "emote" ? BOMBER_EMOTE_PRICES : BOMBER_PRICES;
-    const standard = it.kind === "emote" ? EMOTE_PRICES[it.rarity] : PRICES[it.rarity];
-    if (it.kind === "character") bomberPrice = BOMBER_CHARACTER_PRICES[it.characterId!] ?? Math.round(it.price / 10);
-    else bomberPrice = it.price === standard ? table[it.rarity] : Math.max(5, Math.round(it.price / 50) * 5);
-  }
-  return { ...it, bomberPrice };
-}
-
-export const CATALOG: CatalogItem[] = build().map(withBomberPrice);
+export const CATALOG: CatalogItem[] = build();
 const byId = new Map(CATALOG.map((i) => [i.id, i]));
 
 export function getItem(id: string | null | undefined): CatalogItem | undefined {

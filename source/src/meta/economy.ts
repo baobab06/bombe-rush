@@ -7,15 +7,9 @@
  */
 import type { Rarity } from "../core/characters";
 
-/**
- * Monnaies :
- *  - PIÈCES : se gagnent en jouant (parties, missions, coffres…) ;
- *  - BOMBERS : monnaie premium (comme les gemmes), surtout achetée avec de
- *    l'argent réel ; un peu se gagne en jouant (connexion du 7e jour…).
- */
+/** Monnaie virtuelle (une seule pour l'instant ; la structure en accepte d'autres). */
 export const CURRENCIES = {
   coins: { id: "coins", name: "Pièces", short: "🪙" },
-  bombers: { id: "bombers", name: "Bombers", short: "💣" },
 } as const;
 export type CurrencyId = keyof typeof CURRENCIES;
 
@@ -38,66 +32,6 @@ export const EMOTE_PRICES: Record<Rarity, number> = {
 export const CHARACTER_PRICES: Record<string, number> = {
   pingo: 4000,
 };
-
-// ---------------------------------------------------------------- bombers
-/**
- * Prix en BOMBERS de chaque objet de la boutique (en plus du prix en pièces :
- * le joueur choisit). Repère : 1 bomber ≈ 10 pièces.
- */
-export const BOMBER_PRICES: Record<Rarity, number> = {
-  common: 50,
-  rare: 150,
-  epic: 300,
-  legend: 500,
-};
-export const BOMBER_EMOTE_PRICES: Record<Rarity, number> = {
-  common: 25,
-  rare: 60,
-  epic: 120,
-  legend: 250,
-};
-export const BOMBER_CHARACTER_PRICES: Record<string, number> = {
-  pingo: 400,
-};
-/** Cadeau pour découvrir les bombers (donné une seule fois). */
-export const BOMBER_WELCOME_GIFT = 30;
-
-/**
- * ÉCHANGE bombers → pièces (dans la boutique, onglet « Banque »).
- * Plus le paquet est gros, meilleur est le taux.
- */
-export const EXCHANGES = [
-  { id: "x-small", bombers: 20, coins: 220 },
-  { id: "x-medium", bombers: 100, coins: 1200 },
-  { id: "x-large", bombers: 400, coins: 5200 },
-] as const;
-export type ExchangeId = (typeof EXCHANGES)[number]["id"];
-
-/**
- * ACHATS AVEC DE L'ARGENT RÉEL (Google Play, appli Android uniquement).
- *
- * `id` = identifiant du produit à créer À L'IDENTIQUE dans la Play Console
- * (Monétiser → Produits → Produits intégrés à l'application, type « consommable »).
- * `price` n'est qu'un prix indicatif : l'appli affiche le vrai prix renvoyé
- * par Google Play (dans la devise du joueur).
- */
-export interface PackDef {
-  id: string;
-  currency: "bombers" | "coins";
-  amount: number;
-  /** bonus affiché (« +10 % ») — déjà compris dans amount */
-  bonus?: string;
-  price: string;
-  tag?: string;
-}
-export const PACKS: PackDef[] = [
-  { id: "bombers_80", currency: "bombers", amount: 80, price: "0,99 €" },
-  { id: "bombers_500", currency: "bombers", amount: 500, bonus: "+10 %", price: "4,99 €", tag: "Populaire" },
-  { id: "bombers_1200", currency: "bombers", amount: 1200, bonus: "+20 %", price: "9,99 €" },
-  { id: "bombers_2600", currency: "bombers", amount: 2600, bonus: "+30 %", price: "19,99 €", tag: "Meilleure offre" },
-  { id: "coins_2000", currency: "coins", amount: 2000, price: "1,99 €" },
-  { id: "coins_6000", currency: "coins", amount: 6000, bonus: "+20 %", price: "4,99 €" },
-];
 
 /** « À la une » : sélection du jour dans la boutique. */
 export const FEATURED = {

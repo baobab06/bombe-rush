@@ -203,10 +203,6 @@ export interface CardState {
   fullPrice?: number;
   deal?: boolean;
   affordable?: boolean;
-  /** monnaie du prix principal (pièces par défaut) */
-  currency?: "coins" | "bombers";
-  /** second prix, en bombers (boutique) */
-  bombers?: number;
   /** texte sous le nom (ex. personnage du skin) */
   sub?: string;
   isNew?: boolean;
@@ -248,9 +244,8 @@ export function itemCard(item: CatalogItem, st: CardState, wearer: Wearer): HTML
   else if (st.price !== undefined)
     b.insertAdjacentHTML(
       "beforeend",
-      `<span class="price${st.affordable === false ? " poor" : ""}"><i class="${st.currency === "bombers" ? "bomber" : "coin"}"></i>${st.deal && st.fullPrice ? `<s>${fmt(st.fullPrice)}</s>` : ""}${fmt(st.price)}</span>`,
+      `<span class="price${st.affordable === false ? " poor" : ""}"><i class="coin"></i>${st.deal && st.fullPrice ? `<s>${fmt(st.fullPrice)}</s>` : ""}${fmt(st.price)}</span>`,
     );
-  if (!st.owned && st.bombers) b.insertAdjacentHTML("beforeend", `<span class="price alt"><i class="bomber"></i>${fmt(st.bombers)}</span>`);
   drawItemArt(cv, item, wearer);
   return b;
 }

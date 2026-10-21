@@ -1,9 +1,8 @@
 /* Tests de l'économie, de la boutique et de la sauvegarde : `bun tests/meta.test.ts` */
 import { CHARACTERS, SKINS, THEMES } from "../src/core/characters";
 import { ACCESSORIES, EMOTES, TRAILS } from "../src/core/cosmetics";
-import { CATALOG, getItem, isBuyable } from "../src/meta/catalog";
-import { BOMBER_PRICES, BOMBER_WELCOME_GIFT, NAME_CHANGE_PRICE, PACKS, PRICES, STARTER_GIFT } from "../src/meta/economy";
-import { creditPurchase, exchange, grantBomberGift, isCredited } from "../src/meta/bank";
+import { CATALOG, getItem } from "../src/meta/catalog";
+import { NAME_CHANGE_PRICE, PRICES, STARTER_GIFT } from "../src/meta/economy";
 import { LOGIN_REWARDS } from "../src/meta/progress-config";
 import { defaultProfile as baseProfile } from "../src/meta/profile";
 /** Profils de test du barème : sans les pièces des niveaux gagnés (testées dans progress.test.ts). */
@@ -213,52 +212,6 @@ const bad = migrate({ coins: -5, equipped: { accessory: "acc-halo", trail: "fx-f
 check(bad.equipped.boom === "boom-classic" && bad.equipped.title === "title-rookie", "explosion / titre non possédés : retirés");
 check(bad.coins === 0 && bad.equipped.accessory === null && bad.equipped.trail === "fx-dust" && bad.equipped.emotes.length === 2, "sauvegarde trafiquée : remise d'aplomb");
 check(countOwned(defaultProfile()).owned > 0, "compteur de collection");
-
-console.log("Bombers (monnaie premium) et achats");
-{
-  const b = defaultProfile();
-  check(b.bombers === 0 && !b.bomberGift, "nouveau profil : 0 bomber");
-  check(grantBomberGift(b) === BOMBER_WELCOME_GIFT && grantBomberGift(b) === 0 && b.bombers === BOMBER_WELCOME_GIFT, "cadeau de découverte donné une seule fois");
-  const cap = getItem("acc-cap")!;
-  check(cap.bomberPrice === BOMBER_PRICES[cap.rarity], "prix en bombers selon la rareté");
-  check(CATALOG.filter((i) => isBuyable(i)).every((i) => i.bomberPrice > 0), "tout objet vendu a un prix en bombers");
-  check(CATALOG.filter((i) => !isBuyable(i)).every((i) => i.bomberPrice === 0), "exclusifs et objets offerts : pas de prix en bombers");
-  b.bombers = cap.bomberPrice - 1;
-  b.coins = 0;
-  const miss = buy(b, "acc-cap", fixed, "bombers");
-  check(!miss.ok && miss.reason === "bombers" && miss.missing === 1, "bombers insuffisants : refusé, montant manquant");
-  b.bombers = cap.bomberPrice + 7;
-  const okB = buy(b, "acc-cap", fixed, "bombers");
-  check(okB.ok && b.bombers === 7 && b.coins === 0 && owns(b, "acc-cap"), "achat en bombers : débite les bombers, pas les pièces");
-  check(!buy(b, "acc-cap", fixed, "bombers").ok, "pas de second achat d'un objet possédé");
-  const deal = featured(fixed).dealId;
-  const dp = priceOf(deal, fixed);
-  check(dp.deal && dp.bombers < dp.bombersFull, "promo du jour : aussi en bombers");
-  // échange
-  b.bombers = 100;
-  const coins0 = b.coins;
-  const ex = exchange(b, "x-medium");
-  check(ex.ok && b.bombers === 0 && b.coins === coins0 + 1200, "échange 100 bombers → 1 200 pièces");
-  check(!exchange(b, "x-medium").ok, "échange refusé sans bombers");
-  // achats en argent réel : une seule fois par jeton
-  const got = creditPurchase(b, "bombers_500", "tok-1");
-  check(!!got && b.bombers === 500, "pack de 500 bombers crédité");
-  check(creditPurchase(b, "bombers_500", "tok-1") === null && b.bombers === 500, "même jeton : jamais crédité deux fois");
-  check(creditPurchase(b, "inconnu", "tok-2") === null && !isCredited(b, "tok-2"), "produit inconnu : rien crédité");
-  const c0 = b.coins;
-  creditPurchase(b, "coins_2000", "tok-3");
-  check(b.coins === c0 + 2000, "pack de pièces crédité");
-  check(PACKS.every((x) => /^[a-z0-9_]+$/.test(x.id)), "identifiants de produits valides pour Google Play");
-  // migration
-  const old = migrate({ coins: 10 } as never);
-  check(old.bombers === 0 && Array.isArray(old.purchases) && old.bomberGift === false, "ancienne sauvegarde : bombers ajoutés à 0");
-  const hacked = migrate({ bombers: -40, purchases: "x" } as never);
-  check(hacked.bombers === 0 && hacked.purchases.length === 0, "sauvegarde trafiquée : bombers négatifs remis à 0");
-  const kept = migrate(JSON.parse(JSON.stringify(b)));
-  check(kept.bombers === b.bombers && isCredited(kept, "tok-1"), "bombers et reçus d'achat relus");
-  // connexion du 7e jour
-  check(LOGIN_REWARDS[6].some((r) => r.kind === "bombers"), "7e jour de connexion : des bombers");
-}
 
 console.log(failures ? `\n${failures} échec(s)` : "\nTout est vert ✅");
 (globalThis as unknown as { process: { exit(c: number): void } }).process.exit(failures ? 1 : 0);

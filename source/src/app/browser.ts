@@ -14,10 +14,9 @@ import { itemCard } from "../ui/items";
 import { Stage } from "../ui/stage";
 import { drawPortrait } from "../ui/thumbs";
 import { fmt, type AppCtx } from "./ctx";
-import { renderBank } from "./bank";
 import { confirmPurchase } from "./purchase";
 
-type Tab = "featured" | "bank" | ItemKind;
+type Tab = "featured" | ItemKind;
 
 export class ItemBrowser {
   private stage: Stage;
@@ -92,7 +91,7 @@ export class ItemBrowser {
   // ------------------------------------------------------------- onglets
   private tabs(): { id: Tab; label: string }[] {
     const list: { id: Tab; label: string }[] = CATEGORIES.filter((c) => this.mode === "collection" || CATALOG.some((i) => i.kind === c.id && isBuyable(i))).map((c) => ({ id: c.id, label: c.label }));
-    if (this.mode === "shop") list.unshift({ id: "featured", label: "À la une" }, { id: "bank", label: "Bombers" });
+    if (this.mode === "shop") list.unshift({ id: "featured", label: "À la une" });
     return list;
   }
 
@@ -104,15 +103,11 @@ export class ItemBrowser {
       b.className = "tab" + (t.id === this.tab ? " sel" : "");
       b.setAttribute("role", "tab");
       b.dataset.tab = t.id;
-      if (this.mode === "collection" && t.id !== "featured" && t.id !== "bank") {
+      if (this.mode === "collection" && t.id !== "featured") {
         const c = countOwned(p, t.id);
         b.innerHTML = `${t.label} <small>${c.owned}/${c.total}</small>`;
       } else b.textContent = t.label;
       if (t.id === "featured") b.insertAdjacentHTML("afterbegin", "⭐ ");
-      if (t.id === "bank") {
-        b.classList.add("tab-bank");
-        b.insertAdjacentHTML("afterbegin", '<i class="bomber"></i> ');
-      }
       b.addEventListener("click", () => {
         audio.play("tab");
         this.tab = t.id;
@@ -150,7 +145,6 @@ export class ItemBrowser {
 
   private items(): CatalogItem[] {
     if (this.tab === "featured") return featured().items;
-    if (this.tab === "bank") return [];
     let list = CATALOG.filter((i) => i.kind === this.tab);
     // boutique : uniquement ce qui se vend (les exclusifs se gagnent)
     if (this.mode === "shop") list = list.filter((i) => isBuyable(i) || i.free);
@@ -163,13 +157,6 @@ export class ItemBrowser {
     const p = this.ctx.profile;
     const grid = this.gridEl;
     grid.innerHTML = "";
-    if (this.tab === "bank") {
-      renderBank(this.ctx, grid, () => {
-        this.ctx.wallet.sync();
-        this.renderGrid();
-      });
-      return;
-    }
     const wearer = { characterId: p.characterId, skinId: equippedSkin(p, p.characterId) };
     const feat = this.tab === "featured" ? featured() : null;
     if (feat) {
@@ -191,8 +178,7 @@ export class ItemBrowser {
           price: it.exclusive && !own ? undefined : pr.price,
           fullPrice: pr.full,
           deal: pr.deal,
-          affordable: p.coins >= pr.price || (!!pr.bombers && p.bombers >= pr.bombers),
-          bombers: this.mode === "shop" && !it.exclusive ? pr.bombers : undefined,
+          affordable: p.coins >= pr.price,
           sub: it.exclusive && !own ? "🔒 Exclusif" : it.kind === "skin" && (this.tab === "featured" || this.mode === "collection") ? getCharacter(it.characterId!).name : undefined,
           isNew: !!feat && !p.seen.includes(it.id) && !it.free,
           dim: this.mode === "collection" ? undefined : false,
@@ -219,27 +205,11 @@ export class ItemBrowser {
   }
 
   private selectFirst() {
-    if (this.tab === "bank") return this.showBankInfo();
     const list = this.items();
     const p = this.ctx.profile;
     const eq = list.find((i) => owns(p, i.id) && isEquipped(p, i.id));
     const pick = this.mode === "shop" ? list.find((i) => !owns(p, i.id)) ?? list[0] : eq ?? list[0];
     if (pick) this.select(pick.id, false);
-  }
-
-  /** Panneau de gauche quand l'onglet Bombers est ouvert. */
-  private showBankInfo() {
-    const p = this.ctx.profile;
-    this.selected = null;
-    this.stage.setMode("idle");
-    this.stage.showEmote(null);
-    this.stage.boomPreview = null;
-    this.stage.set({ characterId: p.characterId, skinId: equippedSkin(p, p.characterId), accessoryId: p.equipped.accessory, trailId: p.equipped.trail }, "legend");
-    this.rarEl.textContent = "Monnaie premium";
-    this.rarEl.dataset.r = "epic";
-    this.nameEl.innerHTML = `<i class="bomber"></i> ${fmt(p.bombers)} bombers`;
-    this.descEl.textContent = "Achète skins, personnages et effets en bombers, ou échange-les contre des pièces. Gagnes-en aussi le 7e jour de connexion.";
-    this.actEl.innerHTML = "";
   }
 
   // ---------------------------------------------------------- sélection
@@ -354,41 +324,21 @@ export class ItemBrowser {
       return;
     }
     const pr = priceOf(it.id);
-    const afterBuy = (equipped: boolean) => {
-      this.render();
-      this.select(it.id, false);
-      if (equipped) this.stage.flash();
-    };
-    // second bouton : payer en bombers
-    if (pr.bombers) {
-      const bb = document.createElement("button");
-      const okB = p.bombers >= pr.bombers;
-      bb.className = "btn btn-purple";
-      bb.innerHTML = `<i class="bomber"></i><span>${fmt(pr.bombers)}</span>`;
-      bb.setAttribute("aria-label", `Acheter pour ${pr.bombers} bombers`);
-      bb.addEventListener("click", () => {
-        this.ctx.click();
-        if (okB) confirmPurchase(this.ctx, it.id, afterBuy, "bombers");
-        else {
-          audio.play("deny");
-          this.ctx.toast(`Il te manque ${fmt(pr.bombers - p.bombers)} bombers`, "bad");
-          this.open(undefined, "bank");
-        }
-      });
-      el.appendChild(bb);
-    }
     if (p.coins >= pr.price) {
       btn.classList.add("btn-green");
-      btn.innerHTML = `<i class="coin"></i><span>${fmt(pr.price)}</span>`;
-      btn.setAttribute("aria-label", `Acheter pour ${pr.price} pièces`);
+      btn.innerHTML = `<span>ACHETER</span><i class="coin"></i><span>${fmt(pr.price)}</span>`;
       btn.addEventListener("click", () => {
         this.ctx.click();
-        confirmPurchase(this.ctx, it.id, afterBuy);
+        confirmPurchase(this.ctx, it.id, (equipped) => {
+          this.render();
+          this.select(it.id, false);
+          if (equipped) this.stage.flash();
+        });
       });
     } else {
       btn.classList.add("btn-yellow");
       btn.innerHTML = `<i class="coin"></i><span>${fmt(pr.price)}</span>`;
-      if (!pr.bombers || p.bombers < pr.bombers) this.descEl.insertAdjacentHTML("beforeend", `<br><b style="color:#ffb3ad">Il te manque ${fmt(pr.price - p.coins)} pièces</b>`);
+      this.descEl.insertAdjacentHTML("beforeend", `<br><b style="color:#ffb3ad">Il te manque ${fmt(pr.price - p.coins)} pièces</b>`);
       btn.addEventListener("click", () => {
         audio.play("deny");
         btn.classList.remove("shake");

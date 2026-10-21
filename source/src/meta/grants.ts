@@ -57,12 +57,6 @@ export function grant(p: Profile, r: Reward, out: Granted[] = [], source?: strin
       if (n) out.push({ reward: r, label: `+${fmtN(n)} pièces`, icon: "🪙", coins: n, source });
       break;
     }
-    case "bombers": {
-      const n = Math.max(0, Math.floor(r.amount));
-      p.bombers += n;
-      if (n) out.push({ reward: r, label: `+${fmtN(n)} bombers`, icon: "💣", coins: 0, source });
-      break;
-    }
     case "xp":
       if (r.amount > 0) {
         out.push({ reward: r, label: `+${fmtN(r.amount)} XP`, icon: "✨", coins: 0, source });
@@ -131,8 +125,6 @@ export function rewardText(r: Reward): string {
   switch (r.kind) {
     case "coins":
       return `${fmtN(r.amount)} pièces`;
-    case "bombers":
-      return `${fmtN(r.amount)} bombers`;
     case "xp":
       return `${fmtN(r.amount)} XP`;
     case "chest":
@@ -144,7 +136,7 @@ export function rewardText(r: Reward): string {
   }
 }
 export function rewardIcon(r: Reward): string {
-  return r.kind === "coins" ? "🪙" : r.kind === "bombers" ? "💣" : r.kind === "xp" ? "✨" : r.kind === "chest" ? "🎁" : "🎉";
+  return r.kind === "coins" ? "🪙" : r.kind === "xp" ? "✨" : r.kind === "chest" ? "🎁" : "🎉";
 }
 
 // ------------------------------------------------------------- coffres
