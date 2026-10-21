@@ -177,7 +177,52 @@ export function generateArena(map: MapDef, playerCount: number, seed: number): A
       tiles[i] = t;
     }
 
+  // Chaque zone de départ est fermée par des blocs (comme sur une map pleine) :
+  // sur une map aérée, un joueur ne doit pas pouvoir rejoindre un autre avant
+  // d'avoir cassé quelque chose. Les zones étant symétriques, la map le reste.
+  const blockable = (x: number, y: number) => {
+    const c = at(x, y);
+    return c === "." || c === "I" || (c === "s" && !extraIsFloor) || (c === "S" && !plan.fixed);
+  };
+  for (const zone of plan.zones) {
+    const area = reachFree(map.layout, zone);
+    for (const c of area) {
+      const x = c % width;
+      const y = Math.floor(c / width);
+      for (const [nx, ny] of [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]]) {
+        const n = ny * width + nx;
+        if (area.has(n) || protectedCells.has(n)) continue;
+        if (tiles[n] === TILE.FLOOR && blockable(nx, ny)) tiles[n] = TILE.BLOCK;
+      }
+    }
+  }
+
   return { width, height, tiles, terrain, hiddenBonus, spawns };
+}
+
+/**
+ * Une zone de départ, plus les cases qui ne reçoivent jamais de bloc
+ * ('_' clairière, 'i' glace libre) qu'elle touche de proche en proche.
+ */
+function reachFree(layout: string[], zone: Set<number>): Set<number> {
+  const height = layout.length;
+  const width = layout[0].length;
+  const free = (x: number, y: number) => x > 0 && y > 0 && x < width - 1 && y < height - 1 && ALWAYS_FREE.includes(layout[y][x]);
+  const out = new Set(zone);
+  const queue = [...zone];
+  while (queue.length) {
+    const c = queue.pop()!;
+    const x = c % width;
+    const y = Math.floor(c / width);
+    for (const [nx, ny] of [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]]) {
+      const n = ny * width + nx;
+      if (!out.has(n) && free(nx, ny)) {
+        out.add(n);
+        queue.push(n);
+      }
+    }
+  }
+  return out;
 }
 
 // =====================================================================
@@ -270,24 +315,7 @@ export function pickSpawns(map: MapDef, count: number, seed: number, tools: Spaw
    * ('_' clairière, 'i' glace libre) qu'elle touche : deux joueurs reliés par
    * ces cases pourraient se rejoindre dès le départ.
    */
-  const alwaysFree = (x: number, y: number) => x > 0 && y > 0 && x < width - 1 && y < height - 1 && ALWAYS_FREE.includes(at(x, y));
-  const reach = (zone: Set<number>): Set<number> => {
-    const out = new Set(zone);
-    const queue = [...zone];
-    while (queue.length) {
-      const c = queue.pop()!;
-      const x = c % width;
-      const y = Math.floor(c / width);
-      for (const [nx, ny] of [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]]) {
-        const n = idx(nx, ny);
-        if (!out.has(n) && alwaysFree(nx, ny)) {
-          out.add(n);
-          queue.push(n);
-        }
-      }
-    }
-    return out;
-  };
+  const reach = (zone: Set<number>) => reachFree(layout, zone);
 
   /** zones disjointes et non collées : au moins une case (bloc) entre deux joueurs */
   const separated = (zonesIn: Set<number>[]) => {

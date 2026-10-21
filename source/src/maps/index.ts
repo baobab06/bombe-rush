@@ -1,11 +1,13 @@
 import { BEACH } from "./beach";
+import { CHAOS_ARENA } from "./chaos-arena";
 import { FOREST } from "./forest";
 import { ICE } from "./ice";
+import { LABYRINTH } from "./labyrinth";
 import { VOLCANO } from "./volcano";
 import type { MapDef } from "./types";
 
 /** Maps jouables. Ajouter une map = un fichier ici + un thème dans render/art.ts. */
-export const MAPS: MapDef[] = [FOREST, VOLCANO, ICE, BEACH];
+export const MAPS: MapDef[] = [FOREST, VOLCANO, ICE, BEACH, LABYRINTH, CHAOS_ARENA];
 
 export const RANDOM_MAP = "random";
 

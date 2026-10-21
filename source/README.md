@@ -180,7 +180,7 @@ Classique, des bots en 3 niveaux, la progression et la sauvegarde locale.
 | Éliminations (touché = la case du centre du perso est en feu) | ✅ |
 | Bonus : Bombe +1, Flamme +1, Vitesse, Bouclier (bouton 🛡️, 3 s) | ✅ |
 | Bots Facile / Normal / Difficile (carte de danger, fuite, chasse, bonus, bouclier) | ✅ |
-| 4 maps : Forêt, Volcan (lave + cheminées en éruption), Banquise (glace glissante), Plage (lagon) + choix aléatoire | ✅ |
+| 6 maps : Forêt, Volcan (lave + cheminées en éruption), Banquise (glace glissante), Plage (lagon), Labyrinthe (temple aux torches, canaux, autel), Arène Chaos (cristaux, gouffres, failles d'énergie) + choix aléatoire | ✅ |
 | Mort subite (spirale de pierres à 0:42) pour éviter les parties sans fin | ✅ |
 | Joystick dynamique, gros boutons, multi-touch, clavier | ✅ |
 | Paysage uniquement : arène pleine hauteur, HUD et commandes dans les colonnes latérales, zoom auto selon l'écran et l'encoche | ✅ |
@@ -355,6 +355,20 @@ Tout est dans `src/core/rules.ts` (portée de départ, vitesse,
 durée du bouclier, mort subite…), la mèche des bombes dans `src/core/bombs.ts` et `src/maps/forest.ts` (densité de blocs,
 probabilité et répartition des bonus). Les profils des bots sont en tête de
 `src/ai/bot.ts`.
+
+### Maps Labyrinthe et Arène Chaos
+
+- Plans : `src/maps/labyrinth.ts`, `src/maps/chaos-arena.ts` (13×11, symétriques). Dessin :
+  `LABYRINTH_ART` et `CHAOS_ARENA_ART` dans `src/render/art.ts` (Canvas, aucune image).
+- Labyrinthe : murs de pierre (torches animées, glyphes), dalles sombres, coins de départ
+  en dalles de sable, caisses / tonneaux / haies destructibles, canaux d'eau (`~`) avec
+  ponts, autel enflammé au centre (mur), portes en haut et en bas.
+- Arène Chaos : sol violet à circuits cyan/rose, cristaux magenta (murs), pylône cyan au
+  centre, caisses néon, gouffres d'énergie (`~` : infranchissables, les flammes passent),
+  4 failles d'énergie (`V` : même règle que les cheminées du Volcan, alerte avant
+  l'éruption, dans les deux modes). Les malus CHAOS restent réservés au mode Chaos.
+- Sur ces maps moins remplies, chaque zone de départ est fermée par des caisses
+  (`generateArena`), comme sur les maps pleines.
 
 ### Positions de départ
 

@@ -233,6 +233,136 @@ console.log("Positions de départ aléatoires");
   check(tooSmall, "map sans assez de cases : erreur claire plutôt qu'une position impossible");
 }
 
+console.log("Nouvelles maps : Labyrinthe et Arène Chaos");
+{
+  const LAB = MAPS.find((m) => m.id === "labyrinth")!;
+  const ARENA = MAPS.find((m) => m.id === "chaos_arena")!;
+  check(!!LAB && !!ARENA, "les 2 nouvelles maps sont dans la liste des maps jouables");
+  const slots = (n: number) => Array.from({ length: n }, (_, i) => ({ name: "P" + i, characterId: "pip", isBot: false }));
+  // vraiment différentes : plans comparés case par case, entre elles et avec les anciennes
+  const diffCells = (a: string[], b: string[]) => a.reduce((n, row, y) => n + [...row].filter((c, x) => c !== b[y][x]).length, 0);
+  const minOld = (m: typeof LAB) => Math.min(...MAPS.filter((o) => o !== LAB && o !== ARENA).map((o) => diffCells(m.layout, o.layout)));
+  check(diffCells(LAB.layout, ARENA.layout) >= 25, `Labyrinthe ≠ Arène Chaos (${diffCells(LAB.layout, ARENA.layout)} cases différentes)`);
+  check(minOld(LAB) >= 20 && minOld(ARENA) >= 20, `différentes des 4 maps existantes (au moins ${Math.min(minOld(LAB), minOld(ARENA))} cases différentes)`);
+  const count = (m: typeof LAB, c: string) => m.layout.join("").split(c).length - 1;
+  check(count(LAB, "#") > count(FOREST, "#") && count(LAB, "~") > 0, `Labyrinthe : plus de murs que la Forêt (${count(LAB, "#")} contre ${count(FOREST, "#")}) et des canaux d'eau`);
+  check(count(ARENA, "~") >= 8 && count(ARENA, "V") === 4 && count(ARENA, "_") >= 10, `Arène Chaos : gouffres (${count(ARENA, "~")}), 4 failles et des zones ouvertes (${count(ARENA, "_")} cases toujours libres)`);
+
+  for (const map of [LAB, ARENA]) {
+    const fresh = () => {
+      const m = new Match({ seed: 11, map, modeId: "classic", players: slots(2) });
+      m.phase = "playing";
+      const g = m.grid;
+      for (let i = 0; i < g.tiles.length; i++) if (g.tiles[i] === TILE.BLOCK) g.tiles[i] = TILE.FLOOR;
+      return m;
+    };
+    // collisions : on pousse le joueur contre chaque mur / gouffre voisin, il ne rentre jamais dedans
+    let pushes = 0, inside = 0;
+    {
+      const m0 = fresh();
+      const g0 = m0.grid;
+      for (let y = 1; y < g0.h - 1; y++)
+        for (let x = 1; x < g0.w - 1; x++) {
+          if (g0.blocksMove(x, y)) continue;
+          for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            if (!g0.blocksMove(x + dx, y + dy)) continue;
+            const m = fresh();
+            const p = m.players[0];
+            p.x = x + 0.5; p.y = y + 0.5;
+            m.players[1].x = 0.5; m.players[1].y = 0.5;
+            run(m, 0.6, () => [{ mx: dx, my: dy, bomb: false, ability: false }, NO_INPUT]);
+            pushes++;
+            if (Math.floor(p.x) !== x || Math.floor(p.y) !== y || m.grid.blocksMove(Math.floor(p.x), Math.floor(p.y))) inside++;
+          }
+        }
+    }
+    check(pushes > 20 && inside === 0, `${map.name} : murs et obstacles bloquent le joueur (${pushes} poussées, ${inside} traversée)`);
+
+    // caisses : une bombe détruit la caisse voisine ; la flamme s'arrête sur un mur
+    {
+      const m = new Match({ seed: 11, map, modeId: "classic", players: slots(2) });
+      m.phase = "playing";
+      const g = m.grid;
+      let target: [number, number] | null = null;
+      let from: [number, number] | null = null;
+      for (let y = 1; y < g.h - 1 && !target; y++)
+        for (let x = 1; x < g.w - 1 && !target; x++)
+          if (g.tile(x, y) === TILE.BLOCK)
+            for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]])
+              if (!g.blocksMove(x + dx, y + dy) && g.tile(x + dx, y + dy) === TILE.FLOOR && !target) { target = [x, y]; from = [x + dx, y + dy]; }
+      const p = m.players[0];
+      p.x = from![0] + 0.5; p.y = from![1] + 0.5;
+      p.shieldTime = 99;
+      m.tryPlaceBomb(p);
+      let destroyed = false;
+      for (let i = 0; i < Math.round((RULES.bombFuse + 0.3) / DT); i++) { m.step(idle(m)); if (m.events.some((e) => e.t === "blockDestroyed" && e.x === target![0] && e.y === target![1])) destroyed = true; }
+      check(destroyed && g.tile(target![0], target![1]) === TILE.FLOOR, `${map.name} : une caisse touchée par une explosion est détruite`);
+    }
+    {
+      // flamme de portée 3 : jamais sur un mur ni au-delà ; elle survole l'eau / le vide
+      const m = fresh();
+      const g = m.grid;
+      const p = m.players[0];
+      p.range = 3;
+      p.shieldTime = 99;
+      let wallHit = 0, beyond = 0, overHazard = 0, bombs = 0;
+      for (let y = 1; y < g.h - 1; y++)
+        for (let x = 1; x < g.w - 1; x++) {
+          if (g.blocksMove(x, y) || g.terrainAt(x, y) === TERRAIN.VENT) continue;
+          const mm = fresh();
+          const q = mm.players[0];
+          q.range = 3; q.shieldTime = 99; q.x = x + 0.5; q.y = y + 0.5;
+          mm.players[1].x = 0.5; mm.players[1].y = 0.5;
+          if (!mm.tryPlaceBomb(q)) continue;
+          bombs++;
+          for (let i = 0; i < Math.round((RULES.bombFuse + 0.05) / DT); i++) mm.step(idle(mm));
+          const gg = mm.grid;
+          for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            let blocked = false;
+            for (let k = 1; k <= 3; k++) {
+              const cx = x + dx * k, cy = y + dy * k;
+              const burning = gg.fire[gg.idx(cx, cy)] > 0;
+              if (gg.tile(cx, cy) === TILE.WALL) { if (burning) wallHit++; blocked = true; continue; }
+              if (blocked && burning) beyond++;
+              if (!blocked && gg.isHazard(cx, cy) && burning) overHazard++;
+            }
+          }
+        }
+      check(bombs > 30 && wallHit === 0 && beyond === 0, `${map.name} : les explosions s'arrêtent aux murs (${bombs} bombes testées)`);
+      if (map === LAB || map === ARENA) check(overHazard > 0, `${map.name} : les flammes passent au-dessus de ${map === LAB ? "l'eau" : "du vide"}, comme sur les autres maps`);
+    }
+
+    // loots : uniquement sur des cases praticables ; parties complètes avec bots, dans les 2 modes
+    for (const modeId of ["classic", "chaos"]) {
+      let badLoot = 0, loots = 0, ended = 0, stuck = 0, chaosEvents = 0, chaosEarly = 0, badZone = 0, moved = 0;
+      const N = 12;
+      for (let sd = 1; sd <= N; sd++) {
+        const m = new Match({ seed: sd * 53 + 7, map, modeId, players: Array.from({ length: 4 }, (_, i) => ({ name: "B" + i, characterId: "renard", isBot: true, difficulty: "normal" as Difficulty })) });
+        const brains = m.players.map((p) => new BotBrain(p.id, "normal", sd));
+        const start = m.players.map((p) => [p.x, p.y]);
+        let guard = 0;
+        while (m.phase !== "over" && guard++ < 60 * 200) {
+          m.step(brains.map((b) => b.update(m, DT)));
+          for (const e of m.events) {
+            if (e.t === "bonusSpawn") { loots++; if (m.grid.blocksMove(e.x, e.y) || m.grid.tile(e.x, e.y) !== TILE.FLOOR) badLoot++; }
+            if (e.t === "chaosWarn" || e.t === "chaosStart") { chaosEvents++; if (m.time < 14.9) chaosEarly++; }
+          }
+          // (les flammes survolent l'eau et le vide comme pour les bombes : seul un mur est interdit)
+          if (m.chaos?.pending) for (const i of m.chaos.pending.zone) if (m.grid.tiles[i] === TILE.WALL) badZone++;
+          for (const p of m.players) if (p.alive && m.grid.blocksMove(Math.floor(p.x), Math.floor(p.y))) stuck++;
+          if (m.time > 4 && m.time < 4 + DT * 1.5) m.players.forEach((p, i) => { if (Math.abs(p.x - start[i][0]) + Math.abs(p.y - start[i][1]) > 0.5) moved++; });
+        }
+        if (m.phase === "over") ended++;
+      }
+      check(ended === N && stuck === 0, `${map.name} ${modeId} : ${N} parties de bots terminées, aucun joueur dans un mur ou un gouffre`);
+      check(moved >= N * 3, `${map.name} ${modeId} : les bots se déplacent dès le début (${moved}/${N * 4} ont bougé en 4 s)`);
+      check(loots > 0 && badLoot === 0, `${map.name} ${modeId} : ${loots} bonus apparus, tous sur des cases libres`);
+      if (modeId === "classic") check(chaosEvents === 0, `${map.name} classique : aucun malus CHAOS`);
+      else check(chaosEvents > N && chaosEarly === 0 && badZone === 0, `${map.name} CHAOS : ${chaosEvents} malus, aucun avant 15 s, zones annoncées jamais sur un mur`);
+    }
+  }
+}
+
 console.log("Maps");
 for (const map of MAPS) {
   for (const n of [2, 4, 6]) {

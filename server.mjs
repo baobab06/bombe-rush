@@ -719,6 +719,31 @@ var BEACH = {
   available: true
 };
 
+// src/maps/chaos-arena.ts
+var CHAOS_ARENA = {
+  id: "chaos_arena",
+  name: "Arène Chaos",
+  subtitle: "Cristaux et failles",
+  theme: "chaos_arena",
+  layout: [
+    "#############",
+    "#S.._..._..S#",
+    "#.##..#..##.#",
+    "#...V._.V...#",
+    "#.~~._._.~~.#",
+    "#._.._#_.._.#",
+    "#.~~._._.~~.#",
+    "#...V._.V...#",
+    "#.##..#..##.#",
+    "#S.._..._..S#",
+    "#############"
+  ],
+  blockDensity: 0.62,
+  spawnClear: 1,
+  startRange: 1,
+  available: true
+};
+
 // src/maps/forest.ts
 var FOREST = {
   id: "forest",
@@ -769,6 +794,31 @@ var ICE = {
   available: true
 };
 
+// src/maps/labyrinth.ts
+var LABYRINTH = {
+  id: "labyrinth",
+  name: "Labyrinthe",
+  subtitle: "Temple aux torches",
+  theme: "labyrinth",
+  layout: [
+    "#############",
+    "#S_..#.#.._S#",
+    "#_##.#.#.##_#",
+    "#..#.....#..#",
+    "#.##.~_~.##.#",
+    "#...._#_....#",
+    "#.##.~_~.##.#",
+    "#..#.....#..#",
+    "#_##.#.#.##_#",
+    "#S_..#.#.._S#",
+    "#############"
+  ],
+  blockDensity: 0.72,
+  spawnClear: 1,
+  startRange: 1,
+  available: true
+};
+
 // src/maps/volcano.ts
 var VOLCANO = {
   id: "volcano",
@@ -795,7 +845,7 @@ var VOLCANO = {
 };
 
 // src/maps/index.ts
-var MAPS = [FOREST, VOLCANO, ICE, BEACH];
+var MAPS = [FOREST, VOLCANO, ICE, BEACH, LABYRINTH, CHAOS_ARENA];
 var RANDOM_MAP = "random";
 function getMap(id) {
   return MAPS.find((m) => m.id === id) ?? MAPS[0];
@@ -1631,7 +1681,45 @@ function generateArena(map, playerCount, seed) {
       }
       tiles[i] = t;
     }
+  const blockable = (x, y) => {
+    const c = at(x, y);
+    return c === "." || c === "I" || c === "s" && !extraIsFloor || c === "S" && !plan.fixed;
+  };
+  for (const zone of plan.zones) {
+    const area = reachFree(map.layout, zone);
+    for (const c of area) {
+      const x = c % width;
+      const y = Math.floor(c / width);
+      for (const [nx, ny] of [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]]) {
+        const n = ny * width + nx;
+        if (area.has(n) || protectedCells.has(n))
+          continue;
+        if (tiles[n] === TILE.FLOOR && blockable(nx, ny))
+          tiles[n] = TILE.BLOCK;
+      }
+    }
+  }
   return { width, height, tiles, terrain, hiddenBonus, spawns };
+}
+function reachFree(layout, zone) {
+  const height = layout.length;
+  const width = layout[0].length;
+  const free = (x, y) => x > 0 && y > 0 && x < width - 1 && y < height - 1 && ALWAYS_FREE.includes(layout[y][x]);
+  const out = new Set(zone);
+  const queue = [...zone];
+  while (queue.length) {
+    const c = queue.pop();
+    const x = c % width;
+    const y = Math.floor(c / width);
+    for (const [nx, ny] of [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]]) {
+      const n = ny * width + nx;
+      if (!out.has(n) && free(nx, ny)) {
+        out.add(n);
+        queue.push(n);
+      }
+    }
+  }
+  return out;
 }
 var manhattan = (a, b) => Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]);
 function pickSpawns(map, count, seed, tools) {
@@ -1673,24 +1761,7 @@ function pickSpawns(map, count, seed, tools) {
     }
     return zoneCache.get(k);
   };
-  const alwaysFree = (x, y) => x > 0 && y > 0 && x < width - 1 && y < height - 1 && ALWAYS_FREE.includes(at(x, y));
-  const reach = (zone) => {
-    const out = new Set(zone);
-    const queue = [...zone];
-    while (queue.length) {
-      const c = queue.pop();
-      const x = c % width;
-      const y = Math.floor(c / width);
-      for (const [nx, ny] of [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]]) {
-        const n = idx(nx, ny);
-        if (!out.has(n) && alwaysFree(nx, ny)) {
-          out.add(n);
-          queue.push(n);
-        }
-      }
-    }
-    return out;
-  };
+  const reach = (zone) => reachFree(layout, zone);
   const separated = (zonesIn) => {
     const zones = zonesIn.map(reach);
     const all = new Map;

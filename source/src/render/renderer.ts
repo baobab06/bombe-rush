@@ -195,7 +195,7 @@ export class Renderer {
         case "eruption":
           P.explosion(e.x + 0.5, e.y + 0.5);
           for (let k = 0; k < 10; k++)
-            P.spawn("spark", e.x + 0.5, e.y + 0.5, { vx: (Math.random() - 0.5) * 3, vy: (Math.random() - 0.5) * 3, vz: 5 + Math.random() * 4, life: 0.8, size: 0.09, color: Math.random() < 0.5 ? "#ffcf4a" : "#ff5a1f" });
+            P.spawn("spark", e.x + 0.5, e.y + 0.5, { vx: (Math.random() - 0.5) * 3, vy: (Math.random() - 0.5) * 3, vz: 5 + Math.random() * 4, life: 0.8, size: 0.09, color: this.eruptionColor() });
           this.shake = Math.min(1, this.shake + 0.4);
           this.flash = Math.min(0.5, this.flash + 0.12);
           break;
@@ -224,6 +224,11 @@ export class Renderer {
     this.fx(playerId).emote = { id: emoteId, at: this.time };
   }
 
+  private eruptionColor(): string {
+    const c = this.art.eruption ?? ["#ffcf4a", "#ff5a1f"];
+    return c[Math.floor(Math.random() * c.length)];
+  }
+
   /** Particules d'ambiance propres à chaque carte. */
   private ambient(m: Match, dt: number) {
     if (this.reducedMotion || dt <= 0) return;
@@ -242,6 +247,16 @@ export class Renderer {
           break;
         case "ice":
           P.spawn("flake", x, y, { z: 1.6, vz: -0.45, vx: 0.15, life: 3.2, size: 0.05 + Math.random() * 0.03, color: "#ffffff", vr: 1.5 });
+          break;
+        case "labyrinth":
+          // braises des torches et poussière dorée
+          if (Math.random() < 0.5) P.spawn("ember", x, y, { z: 0.4, vz: 0.4 + Math.random() * 0.4, vx: 0.05, life: 1.4, size: 0.03, color: Math.random() < 0.5 ? "#ffb347" : "#ffd27a" });
+          else if (Math.random() < 0.5) P.spawn("glow", x, y, { z: 0.3 + Math.random() * 0.8, vz: 0.05, vx: (Math.random() - 0.5) * 0.3, life: 2.4, size: 0.04, color: "#ffe9a8" });
+          break;
+        case "chaos_arena":
+          // étincelles d'énergie cyan et rose
+          if (Math.random() < 0.6) P.spawn("twinkle", x, y, { z: 0.1 + Math.random() * 0.6, vz: 0.15, life: 1, size: 0.07, color: Math.random() < 0.5 ? "#4ff0ff" : "#ff5ccf" });
+          else P.spawn("glow", x, y, { z: 0.4 + Math.random() * 0.8, vz: 0.1, vx: (Math.random() - 0.5) * 0.4, life: 2, size: 0.05, color: "#c58bff" });
           break;
         case "beach":
           if (Math.random() < 0.5) P.spawn("twinkle", x, y, { z: 0.05, life: 0.9, size: 0.07, color: "#fff8d6" });
@@ -291,6 +306,22 @@ export class Renderer {
       const g = ctx.createLinearGradient(0, H, 0, H * 0.4);
       g.addColorStop(0, `rgba(255,90,20,${a})`);
       g.addColorStop(1, "rgba(255,90,20,0)");
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, W, H);
+    } else if (theme === "labyrinth") {
+      // lumière chaude des torches, vignette sombre
+      const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.3, W / 2, H / 2, Math.max(W, H) * 0.75);
+      g.addColorStop(0, `rgba(255,170,80,${0.035 + 0.01 * Math.sin(t * 3)})`);
+      g.addColorStop(1, "rgba(0,0,0,0.22)");
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, W, H);
+    } else if (theme === "chaos_arena") {
+      // halos cyan / magenta qui respirent
+      const a = 0.05 + 0.025 * Math.sin(t * 1.2);
+      const g = ctx.createLinearGradient(0, 0, W, H);
+      g.addColorStop(0, `rgba(80,230,255,${a})`);
+      g.addColorStop(0.5, "rgba(0,0,0,0)");
+      g.addColorStop(1, `rgba(255,70,200,${a})`);
       ctx.fillStyle = g;
       ctx.fillRect(0, 0, W, H);
     } else if (theme === "ice") {
