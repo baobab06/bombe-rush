@@ -13,6 +13,7 @@ import type { StakeId } from "./economy";
 /** Une récompense, quelle que soit sa source (niveau, mission, coffre…). */
 export type Reward =
   | { kind: "coins"; amount: number }
+  | { kind: "bombers"; amount: number }
   | { kind: "xp"; amount: number }
   | { kind: "item"; id: string }
   | { kind: "chest"; tier: ChestTier; count?: number };
@@ -119,7 +120,7 @@ export const LOGIN_REWARDS: Reward[][] = [
   [{ kind: "coins", amount: 100 }],
   [{ kind: "coins", amount: 150 }],
   [{ kind: "coins", amount: 200 }],
-  [{ kind: "chest", tier: "rare" }],
+  [{ kind: "chest", tier: "rare" }, { kind: "bombers", amount: 10 }],
 ];
 
 // ------------------------------------------------------ séries de victoires

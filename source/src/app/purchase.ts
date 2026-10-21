@@ -5,27 +5,33 @@
 import { audio } from "../audio/audio";
 import { RARITY_LABEL } from "../core/characters";
 import { getItem } from "../meta/catalog";
-import { buy, equip, equippedSkin, priceOf } from "../meta/store";
+import { buy, equip, equippedSkin, priceOf, type PayWith } from "../meta/store";
 import { haptics } from "../platform/haptics";
 import { itemCard } from "../ui/items";
 import { RARITY_COLOR } from "../ui/stage";
 import { fmt, type AppCtx } from "./ctx";
 
-export function confirmPurchase(ctx: AppCtx, id: string, onDone: (equipped: boolean) => void) {
+export function confirmPurchase(ctx: AppCtx, id: string, onDone: (equipped: boolean) => void, currency: PayWith = "coins") {
   const item = getItem(id);
   if (!item) return;
   const p = ctx.profile;
-  const { price, full, deal } = priceOf(id);
+  const pr = priceOf(id);
+  const bombers = currency === "bombers";
+  const { deal } = pr;
+  const price = bombers ? pr.bombers : pr.price;
+  const full = bombers ? pr.bombersFull : pr.full;
+  const icon = bombers ? '<i class="bomber"></i>' : '<i class="coin"></i>';
+  const left = bombers ? p.bombers - price : p.coins - price;
   ctx.modal.open((sheet, close) => {
     sheet.insertAdjacentHTML("beforeend", `<h2>Acheter ?</h2>`);
     const box = document.createElement("div");
     box.className = "buy";
-    const card = itemCard(item, { owned: false, dim: false, price, fullPrice: full, deal }, { characterId: p.characterId, skinId: equippedSkin(p, p.characterId) });
+    const card = itemCard(item, { owned: false, dim: false, price, fullPrice: full, deal, currency }, { characterId: p.characterId, skinId: equippedSkin(p, p.characterId) });
     box.appendChild(card);
     const right = document.createElement("div");
     right.innerHTML = `<p>${RARITY_LABEL[item.rarity]} · ${item.desc || ""}</p>
-      <div class="cost"><i class="coin"></i>${deal ? `<s style="opacity:.6;font-size:.6em">${fmt(full)}</s>` : ""}${fmt(price)}</div>
-      <p>Il te restera <b style="color:#fff">${fmt(p.coins - price)}</b> pièces.</p>`;
+      <div class="cost">${icon}${deal ? `<s style="opacity:.6;font-size:.6em">${fmt(full)}</s>` : ""}${fmt(price)}</div>
+      <p>Il te restera <b style="color:#fff">${fmt(left)}</b> ${bombers ? "bombers" : "pièces"}.</p>`;
     const actions = document.createElement("div");
     actions.className = "sheet-actions";
     const no = document.createElement("button");
@@ -40,10 +46,10 @@ export function confirmPurchase(ctx: AppCtx, id: string, onDone: (equipped: bool
     yes.innerHTML = `<span>ACHETER</span>`;
     yes.addEventListener("click", () => {
       const before = p.coins;
-      const r = buy(p, id);
+      const r = buy(p, id, new Date(), currency);
       if (!r.ok) {
         audio.play("deny");
-        ctx.toast(r.reason === "coins" ? `Il te manque ${fmt(r.missing ?? 0)} pièces` : "Achat impossible", "bad");
+        ctx.toast(r.reason === "coins" ? `Il te manque ${fmt(r.missing ?? 0)} pièces` : r.reason === "bombers" ? `Il te manque ${fmt(r.missing ?? 0)} bombers` : "Achat impossible", "bad");
         close();
         return;
       }

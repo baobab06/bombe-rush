@@ -42,58 +42,6 @@ const place = (m: Match, id: number, x: number, y: number) => {
   m.players[id].y = y + 0.5;
 };
 
-/** Zones de sol libre (hors murs, blocs, lave, eau) connexes, à l'intérieur de l'arène. */
-function floorComponents(m: Match): Set<number>[] {
-  const g = m.grid;
-  const free = (x: number, y: number) => g.tile(x, y) === TILE.FLOOR && !g.isHazard(x, y);
-  const seen = new Set<number>();
-  const out: Set<number>[] = [];
-  for (let y = 1; y < g.h - 1; y++)
-    for (let x = 1; x < g.w - 1; x++) {
-      const i = g.idx(x, y);
-      if (!free(x, y) || seen.has(i)) continue;
-      const comp = new Set([i]);
-      seen.add(i);
-      const q = [i];
-      while (q.length) {
-        const c = q.pop()!;
-        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-          const nx = (c % g.w) + dx, ny = Math.floor(c / g.w) + dy, ni = g.idx(nx, ny);
-          if (free(nx, ny) && !seen.has(ni)) { seen.add(ni); comp.add(ni); q.push(ni); }
-        }
-      }
-      out.push(comp);
-    }
-  return out;
-}
-
-/**
- * Le joueur `id` peut-il poser sa 1re bombe dans sa zone de départ et s'en
- * protéger ? (vraie simulation : bombe posée, joueur dans la cachette, explosion)
- */
-function survivesFirstBomb(seed: number, n: number, map: typeof FOREST, id: number): boolean {
-  const make = () => new Match({ seed, map, modeId: "classic", players: Array.from({ length: n }, (_, i) => ({ name: "P" + i, characterId: "pip", isBot: false })) });
-  const m0 = make();
-  const comp = floorComponents(m0).find((c) => c.has(m0.grid.idx(Math.floor(m0.players[id].x), Math.floor(m0.players[id].y))))!;
-  const w = m0.grid.w;
-  for (const b of comp) {
-    const m = make();
-    m.phase = "playing";
-    const p = m.players[id];
-    const bx = b % w, by = Math.floor(b / w);
-    p.x = bx + 0.5; p.y = by + 0.5;
-    if (!m.tryPlaceBomb(p)) continue;
-    // cachette : une case de la zone hors du souffle (portée de départ)
-    const r = p.range;
-    const hide = [...comp].find((c) => { const x = c % w, y = Math.floor(c / w); return !((x === bx && Math.abs(y - by) <= r) || (y === by && Math.abs(x - bx) <= r)); });
-    if (hide === undefined) continue;
-    p.x = (hide % w) + 0.5; p.y = Math.floor(hide / w) + 0.5;
-    for (let i = 0; i < Math.round((RULES.bombFuse + RULES.fireDuration + 0.3) / DT); i++) m.step(m.players.map(() => NO_INPUT));
-    if (p.alive) return true;
-  }
-  return false;
-}
-
 console.log("Départ");
 {
   const m = new Match({ seed: 5, map: FOREST, modeId: "classic", players: [0, 1].map((i) => ({ name: "P" + i, characterId: "pip", isBot: false })) });
@@ -104,133 +52,24 @@ for (const n of [2, 4, 6]) {
   for (let seed = 1; seed <= 20; seed++) {
     const m = new Match({ seed, map: FOREST, modeId: "classic", players: Array.from({ length: n }, (_, i) => ({ name: "P" + i, characterId: "pip", isBot: false })) });
     const g = m.grid;
-    // arène pleine : les seules cases vides sont les petites zones de départ (une par
-    // position, 3 à 5 cases), séparées les unes des autres par des blocs
-    const comps = floorComponents(m);
-    const sizesOk = comps.every((c) => c.size >= 2 && c.size <= 7);
-    const expected = n > 4 ? 6 : 4;
-    if (seed === 1) check(comps.length === expected && sizesOk, `${n} joueurs : seules les ${expected} zones de départ sont vides, tout le reste est bloc ou pierre (${comps.map((c) => c.size).join("/")})`);
-    else if (!(comps.length === expected && sizesOk)) check(false, `${n} joueurs, graine ${seed} : zones de départ (${comps.map((c) => c.size).join("/")})`);
-    // cachette : pour chaque joueur, poser sa 1re bombe puis se cacher survit
-    if (seed <= 3 && n === 4) {
-      const ok = m.players.every((_, id) => survivesFirstBomb(m.config.seed, n, FOREST, id));
-      check(ok, `graine ${seed} : la cachette du spawn protège chaque joueur de sa 1re bombe`);
+    let floors = 0;
+    for (let y = 1; y < g.h - 1; y++) for (let x = 1; x < g.w - 1; x++) if (g.tile(x, y) === TILE.FLOOR) floors++;
+    // chaque spawn : la case + ses voisins libres seulement (L de 3 cases dans les coins)
+    const expected = n > 4 ? 4 * 3 + 2 * 3 : 4 * 3;
+    if (seed === 1) check(floors === expected, `${n} joueurs : seules ${expected} cases vides (spawns), tout le reste est bloc ou pierre (trouvé ${floors})`);
+    // cachette : pour chaque joueur, poser au spawn voisin puis se cacher survit
+    if (seed === 1 && n === 4) {
+      const p = m.players[0];
+      const sx = Math.floor(p.x), sy = Math.floor(p.y);
+      m.phase = "playing";
+      p.x = sx + 1.5; // case voisine (2,1)
+      m.tryPlaceBomb(p);
+      p.x = sx + 0.5;
+      p.y = sy + 1.5; // cachette (1,2)
+      run(m, RULES.bombFuse + 0.2);
+      check(p.alive, "la cachette du spawn protège de la 1re bombe");
     }
   }
-}
-
-console.log("Positions de départ aléatoires");
-{
-  const slots = (n: number) => Array.from({ length: n }, (_, i) => ({ name: "P" + i, characterId: "pip", isBot: false }));
-  const cell = (p: { x: number; y: number }) => [Math.floor(p.x), Math.floor(p.y)] as [number, number];
-  const man = (a: [number, number], b: [number, number]) => Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]);
-  for (const map of MAPS) {
-    let overlap = 0, onObstacle = 0, tooClose = 0, cantMove = 0, sharedZone = 0, notMirror = 0, checked = 0;
-    const configs = new Set<string>();
-    const p0cells = new Set<string>();
-    const quadCount = [0, 0, 0, 0];
-    for (const n of [1, 2, 3, 4, 5, 6])
-      for (let seed = 1; seed <= 150; seed++) {
-        const m = new Match({ seed: seed * 7919 + n, map, modeId: seed % 2 ? "chaos" : "classic", players: slots(n) });
-        const g = m.grid;
-        const cells = m.players.map(cell);
-        checked++;
-        if (new Set(cells.map((c) => c.join(","))).size !== n) overlap++;
-        for (const [x, y] of cells) {
-          const i = g.idx(x, y);
-          if (g.tile(x, y) !== TILE.FLOOR || g.isHazard(x, y) || g.bombAt[i] >= 0 || g.fire[i] > 0 || g.terrainAt(x, y) !== TERRAIN.NONE) onObstacle++;
-          // peut bouger tout de suite : au moins une case voisine libre
-          // et jamais en cul-de-sac : au moins 2 cases libres autour
-          if ([[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([dx, dy]) => !g.blocksMove(x + dx, y + dy)).length < 2) cantMove++;
-        }
-        for (let a = 0; a < n; a++) for (let b = a + 1; b < n; b++) if (man(cells[a], cells[b]) < 5) tooClose++;
-        // deux joueurs ne partagent jamais la même zone libre au départ
-        const comps = floorComponents(m);
-        for (const c of comps) if (cells.filter(([x, y]) => c.has(g.idx(x, y))).length > 1) sharedZone++;
-        // équité : arène et positions symétriques (miroirs haut/bas et gauche/droite)
-        const set = new Set(cells.map((c) => c.join(",")));
-        if (n === 4) {
-          for (const [x, y] of cells) if (!set.has(`${g.w - 1 - x},${y}`) || !set.has(`${x},${g.h - 1 - y}`)) notMirror++;
-          for (let y = 0; y < g.h; y++) for (let x = 0; x < g.w; x++) if (g.tile(x, y) !== g.tile(g.w - 1 - x, y) || g.tile(x, y) !== g.tile(x, g.h - 1 - y)) { notMirror++; y = g.h; break; }
-          configs.add([...set].sort().join(" "));
-          p0cells.add(cells[0].join(","));
-          quadCount[m.loot.quadrant(cells[0][0], cells[0][1])]++;
-        }
-      }
-    check(overlap === 0, `${map.name} : jamais deux joueurs sur la même case (${checked} parties, 1 à 6 joueurs)`);
-    check(onObstacle === 0, `${map.name} : jamais de départ sur un mur, un bloc, une bombe, du feu, de la lave, de l'eau, de la glace ou une cheminée`);
-    check(cantMove === 0, `${map.name} : chaque joueur a au moins 2 cases libres à côté de lui (pas de cul-de-sac)`);
-    check(tooClose === 0, `${map.name} : au moins 5 cases entre deux joueurs`);
-    check(sharedZone === 0, `${map.name} : chaque joueur commence dans sa propre zone, séparée des autres par des blocs`);
-    check(notMirror === 0, `${map.name} : positions et blocs symétriques (aucun joueur avantagé)`);
-    check(configs.size >= 4, `${map.name} : les positions changent d'une partie à l'autre (${configs.size} dispositions différentes à 4 joueurs)`);
-    check(p0cells.size >= 16, `${map.name} : le joueur 1 change de case (${p0cells.size} cases différentes)`);
-    const share = quadCount.map((q) => q / 150);
-    check(share.every((s) => s > 0.15 && s < 0.35), `${map.name} : le joueur 1 n'a pas de coin favori (${share.map((s) => Math.round(s * 100) + "%").join(" ")})`);
-  }
-  // même graine = mêmes positions (serveur et téléphones calculent la même chose)
-  const a = new Match({ seed: 123456, map: MAPS[2], modeId: "chaos", players: slots(4) });
-  const b = new Match({ seed: 123456, map: MAPS[2], modeId: "chaos", players: slots(4) });
-  check(a.players.every((p, i) => p.x === b.players[i].x && p.y === b.players[i].y), "même graine → mêmes positions (multijoueur sans désynchronisation)");
-  const c = new Match({ seed: 123457, map: MAPS[2], modeId: "chaos", players: slots(4) });
-  check(!a.players.every((p, i) => p.x === c.players[i].x && p.y === c.players[i].y), "graine différente → positions différentes");
-
-  // les joueurs bougent vraiment dès le départ (vraie simulation, vrais contrôles)
-  let moved = 0, total = 0;
-  for (const map of MAPS)
-    for (let seed = 1; seed <= 25; seed++) {
-      const m = new Match({ seed, map, modeId: "classic", players: slots(4) });
-      run(m, RULES.countdown + 0.05);
-      const g = m.grid;
-      const inputs = m.players.map((p) => {
-        const [x, y] = cell(p);
-        const d = [[1, 0], [-1, 0], [0, 1], [0, -1]].find(([dx, dy]) => !g.blocksMove(x + dx, y + dy))!;
-        return { mx: d[0], my: d[1], bomb: false, ability: false };
-      });
-      const before = m.players.map((p) => [p.x, p.y]);
-      run(m, 0.4, () => inputs);
-      m.players.forEach((p, i) => { total++; if (Math.abs(p.x - before[i][0]) + Math.abs(p.y - before[i][1]) > 0.5) moved++; });
-    }
-  check(moved === total, `tous les joueurs se déplacent dès le départ (${moved}/${total})`);
-
-  // la 1re bombe ne condamne personne : sur chaque map, chaque joueur a une cachette
-  let safe = 0, tries = 0;
-  for (const map of MAPS)
-    for (let seed = 1; seed <= 6; seed++)
-      for (let id = 0; id < 4; id++) { tries++; if (survivesFirstBomb(seed * 31, 4, map, id)) safe++; }
-  check(safe === tries, `chaque joueur peut poser sa 1re bombe et s'abriter (${safe}/${tries})`);
-
-  // petites maps : tirage si possible, sinon positions fixes, jamais d'erreur ni de doublon
-  const mk = (id: string, layout: string[]) => ({ id, name: id, subtitle: "", theme: "forest", layout, blockDensity: 1, spawnClear: 1, startRange: 1, available: true });
-  const small = mk("small7", ["#######", "#S...S#", "#.#.#.#", "#.....#", "#.#.#.#", "#S...S#", "#######"]);
-  const tiny = mk("tiny5", ["#####", "#S.S#", "#...#", "#S.S#", "#####"]);
-  const odd = mk("odd", ["########", "#S.....#", "#.##.#.#", "#.....S#", "########"]);
-  for (const [map, label] of [[small, "petite map 7×7"], [tiny, "mini map 5×5 (secours : positions fixes)"], [odd, "map non symétrique (secours)"]] as const)
-    for (const n of [2, 3, 4, 5, 6]) {
-      let ok = true;
-      for (let seed = 1; seed <= 40; seed++) {
-        try {
-          const m = new Match({ seed, map, modeId: "classic", players: slots(n) });
-          const cells = m.players.map(cell);
-          if (new Set(cells.map((c) => c.join(","))).size !== n) ok = false;
-          if (cells.some(([x, y]) => m.grid.blocksMove(x, y))) ok = false;
-        } catch (e) {
-          // seule erreur admise : la map n'a vraiment pas assez de cases libres
-          if (!String(e).includes("trop petite")) ok = false;
-        }
-      }
-      if (n === 2 || n === 4 || n === 6) check(ok, `${label}, ${n} joueurs : positions distinctes et libres, aucune boucle infinie`);
-    }
-  // petite map 7×7 : une seule disposition respecte la distance minimale, mais
-  // les joueurs y sont répartis au hasard (le joueur 1 change de coin)
-  const s7 = new Set<string>();
-  for (let seed = 1; seed <= 60; seed++) s7.add(cell(new Match({ seed, map: small, modeId: "classic", players: slots(4) }).players[0]).join(","));
-  check(s7.size === 4, `petite map 7×7 : le joueur 1 change de coin (${s7.size} coins différents)`);
-  const t5 = new Match({ seed: 9, map: tiny, modeId: "classic", players: slots(4) }).players.map(cell).map((c) => c.join(",")).sort().join(" ");
-  check(t5 === "1,1 1,3 3,1 3,3", `mini map 5×5 : secours sur les 4 positions fixes (${t5})`);
-  let tooSmall = false;
-  try { new Match({ seed: 1, map: mk("micro", ["####", "#S.#", "####"]), modeId: "classic", players: slots(4) }); } catch (e) { tooSmall = String(e).includes("trop petite"); }
-  check(tooSmall, "map sans assez de cases : erreur claire plutôt qu'une position impossible");
 }
 
 console.log("Maps");

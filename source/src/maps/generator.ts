@@ -18,8 +18,7 @@ export interface Arena {
  *    spawn voit exactement le même voisinage, bonus cachés compris ;
  *  - autour de chaque spawn, juste assez de place pour poser une bombe et
  *    se cacher hors de son souffle (vérifié, agrandi si besoin) ;
- *  - les positions de départ sont tirées au hasard à chaque partie
- *    (voir pickSpawns), toujours en miroir pour rester équitables.
+ *  - les spawns sont attribués en coins opposés d'abord.
  */
 /** Caractères du plan → sol spécial. */
 const TERRAIN_OF: Record<string, number> = {
@@ -32,24 +31,6 @@ const TERRAIN_OF: Record<string, number> = {
 /** Cases où l'on peut marcher (une fois le bloc éventuel détruit). */
 const WALKABLE = [".", "_", "S", "s", "I", "i", "V"];
 
-/** Réglages du tirage des positions de départ. */
-export const SPAWN_RULES = {
-  /**
-   * Distance minimale (en cases, de Manhattan) entre deux joueurs, essayée
-   * dans l'ordre : on n'assouplit que si la map est trop petite.
-   */
-  minDistance: [5, 4, 3, 2],
-  /** refuser les départs en cul-de-sac (une seule case libre à côté) */
-  noDeadEnd: true,
-  /** aucune case de départ à moins de cette distance d'une cheminée volcanique */
-  ventMargin: 2,
-} as const;
-
-/** Cases qui ne reçoivent jamais de bloc (hors positions de départ). */
-const ALWAYS_FREE = ["_", "i"];
-/** Cases où un joueur peut commencer (pas de glace, de cheminée, de lave, d'eau ni de mur). */
-const SPAWNABLE = [".", "_", "S", "s"];
-
 export function generateArena(map: MapDef, playerCount: number, seed: number): Arena {
   const rng = new Rng(seed ^ 0x5eed);
   const height = map.layout.length;
@@ -58,8 +39,30 @@ export function generateArena(map: MapDef, playerCount: number, seed: number): A
   const terrain = new Uint8Array(width * height);
   const hiddenBonus: (string | null)[] = new Array(width * height).fill(null);
   const at = (x: number, y: number) => map.layout[y][x];
-  const count = Math.max(playerCount, 1);
 
+  const mainSpawns: [number, number][] = [];
+  const extraSpawns: [number, number][] = [];
+  for (let y = 0; y < height; y++)
+    for (let x = 0; x < width; x++) {
+      const c = at(x, y);
+      if (c === "S") mainSpawns.push([x, y]);
+      if (c === "s") extraSpawns.push([x, y]);
+    }
+
+  // Ordre d'attribution : coins opposés en premier (HG, BD, HD, BG)
+  const cx = (width - 1) / 2;
+  const cy = (height - 1) / 2;
+  const quad = ([x, y]: [number, number]) => (x < cx ? 0 : 1) + (y < cy ? 0 : 2);
+  const order = [0, 3, 1, 2];
+  mainSpawns.sort((a, b) => order.indexOf(quad(a)) - order.indexOf(quad(b)));
+  const useExtra = playerCount > mainSpawns.length;
+  const spawns = [...mainSpawns, ...(useExtra ? extraSpawns : [])].slice(
+    0,
+    Math.max(playerCount, 1),
+  );
+
+  // Cases protégées autour des spawns (tous les 'S', et les 's' si utilisés)
+  const protectedCells = new Set<number>();
   const open = (x: number, y: number) =>
     x > 0 && y > 0 && x < width - 1 && y < height - 1 && WALKABLE.includes(at(x, y));
   const DIRS4: [number, number][] = [[1, 0], [-1, 0], [0, 1], [0, -1]];
@@ -100,7 +103,7 @@ export function generateArena(map: MapDef, playerCount: number, seed: number): A
 
   // Zone dégagée minimale : le spawn et ses voisins directs, puis on
   // agrandit case par case seulement si aucune cachette n'existe.
-  const zoneAround = ([sx, sy]: [number, number]): Set<number> => {
+  const clearAround = ([sx, sy]: [number, number]) => {
     const zone = new Set<number>([sy * width + sx]);
     for (const [dx, dy] of DIRS4)
       for (let i = 1; i <= map.spawnClear; i++) {
@@ -130,19 +133,10 @@ export function generateArena(map: MapDef, playerCount: number, seed: number): A
       if (best < 0) break;
       zone.add(best);
     }
-    return zone;
+    for (const c of zone) protectedCells.add(c);
   };
-
-  const plan = pickSpawns(map, count, seed, { open, zoneAround, hasHideSpot });
-  const spawns = plan.spawns;
-  // jamais de position impossible : mieux vaut refuser une map trop petite
-  if (spawns.length < count) throw new Error(`Map « ${map.id} » trop petite pour ${count} joueurs`);
-
-  // Cases protégées (jamais de bloc) : les zones de départ du plan retenu
-  const protectedCells = new Set<number>();
-  for (const z of plan.zones) for (const c of z) protectedCells.add(c);
-  // une case 's' inutilisée reste une case ordinaire (elle peut recevoir un bloc)
-  const extraIsFloor = plan.fixed && plan.useExtra;
+  mainSpawns.forEach(clearAround);
+  if (useExtra) extraSpawns.forEach(clearAround);
 
   // Décisions aléatoires prises sur le quadrant canonique puis recopiées
   const canon = (x: number, y: number) =>
@@ -164,10 +158,7 @@ export function generateArena(map: MapDef, playerCount: number, seed: number): A
       let t: TileType = TILE.FLOOR;
       terrain[i] = TERRAIN_OF[c] ?? TERRAIN.NONE;
       if (c === "#") t = TILE.WALL;
-      else if (
-        (c === "." || c === "I" || (c === "s" && !extraIsFloor) || (c === "S" && !plan.fixed)) &&
-        !protectedCells.has(i)
-      ) {
+      else if ((c === "." || c === "I" || (c === "s" && !useExtra)) && !protectedCells.has(i)) {
         const d = decision.get(canon(x, y))!;
         if (d.block) {
           t = TILE.BLOCK;
@@ -178,265 +169,4 @@ export function generateArena(map: MapDef, playerCount: number, seed: number): A
     }
 
   return { width, height, tiles, terrain, hiddenBonus, spawns };
-}
-
-// =====================================================================
-// Positions de départ aléatoires
-// =====================================================================
-
-interface SpawnTools {
-  open(x: number, y: number): boolean;
-  zoneAround(s: [number, number]): Set<number>;
-  hasHideSpot(cells: Set<number>, range: number): boolean;
-}
-
-export interface SpawnPlan {
-  /** une position par joueur, dans l'ordre des joueurs (sans doublon) */
-  spawns: [number, number][];
-  /** zones dégagées à protéger des blocs (toujours symétriques) */
-  zones: Set<number>[];
-  /** true = positions fixes du plan (secours) ; false = tirage aléatoire */
-  fixed: boolean;
-  useExtra: boolean;
-}
-
-const manhattan = (a: [number, number], b: [number, number]) => Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]);
-
-/**
- * Choisit les positions de départ d'une partie, à partir de sa graine
- * (même graine = mêmes positions sur le serveur et sur chaque téléphone).
- *
- * - On tire une case dans le quart haut-gauche, puis on la recopie en miroir
- *   dans les 3 autres quarts : comme les blocs sont eux aussi symétriques,
- *   chaque joueur a exactement le même voisinage (aucun avantage).
- * - 5-6 joueurs : une paire de cases en plus, en miroir sur l'axe central.
- * - Chaque case : sol praticable (ni mur, ni lave, ni eau, ni glace, ni
- *   cheminée), loin des cheminées, avec une cachette garantie hors du souffle
- *   de la 1re bombe, et des zones de départ séparées par au moins un bloc.
- * - Toutes les possibilités sont listées puis tirées au sort : aucune boucle
- *   de recherche au hasard, donc rien d'infini, même sur une petite map.
- * - Les joueurs sont ensuite répartis au hasard sur les cases retenues.
- * - Si aucune combinaison n'est possible : positions fixes du plan (S / s).
- */
-export function pickSpawns(map: MapDef, count: number, seed: number, tools: SpawnTools): SpawnPlan {
-  const rng = new Rng((seed ^ 0x5a17_c0de) >>> 0);
-  const layout = map.layout;
-  const height = layout.length;
-  const width = layout[0].length;
-  const at = (x: number, y: number) => layout[y][x];
-  const idx = (x: number, y: number) => y * width + x;
-  const symmetric = width % 2 === 1 && height % 2 === 1 && isMirrorSymmetric(layout);
-  const cx = (width - 1) / 2;
-  const cy = (height - 1) / 2;
-
-  const vents: [number, number][] = [];
-  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) if (at(x, y) === "V") vents.push([x, y]);
-  const nearVent = (x: number, y: number, d: number) => vents.some((v) => manhattan(v, [x, y]) <= d);
-
-  const spawnable = (x: number, y: number) =>
-    x > 0 && y > 0 && x < width - 1 && y < height - 1 && SPAWNABLE.includes(at(x, y)) && !nearVent(x, y, SPAWN_RULES.ventMargin);
-
-  const mirroredZone = ([x, y]: [number, number]): Set<number> => {
-    const fx = x > cx;
-    const fy = y > cy;
-    const base = tools.zoneAround([fx ? width - 1 - x : x, fy ? height - 1 - y : y]);
-    const out = new Set<number>();
-    for (const c of base) {
-      const bx = c % width;
-      const by = Math.floor(c / width);
-      out.add(idx(fx ? width - 1 - bx : bx, fy ? height - 1 - by : by));
-    }
-    return out;
-  };
-
-  // zone dégagée valide : cachette garantie, à l'écart des éruptions
-  const zoneCache = new Map<number, Set<number> | null>();
-  const zoneOf = (s: [number, number]): Set<number> | null => {
-    const k = idx(s[0], s[1]);
-    if (!zoneCache.has(k)) {
-      // map symétrique : on calcule la zone dans le quart haut-gauche puis on la
-      // recopie en miroir, pour que tous les joueurs aient exactement la même
-      const z = symmetric ? mirroredZone(s) : tools.zoneAround(s);
-      const ok =
-        tools.hasHideSpot(z, map.startRange) &&
-        [...z].every((c) => !nearVent(c % width, Math.floor(c / width), 1));
-      zoneCache.set(k, ok ? z : null);
-    }
-    return zoneCache.get(k)!;
-  };
-
-  /**
-   * Une zone de départ s'étend aussi aux cases qui ne reçoivent jamais de bloc
-   * ('_' clairière, 'i' glace libre) qu'elle touche : deux joueurs reliés par
-   * ces cases pourraient se rejoindre dès le départ.
-   */
-  const alwaysFree = (x: number, y: number) => x > 0 && y > 0 && x < width - 1 && y < height - 1 && ALWAYS_FREE.includes(at(x, y));
-  const reach = (zone: Set<number>): Set<number> => {
-    const out = new Set(zone);
-    const queue = [...zone];
-    while (queue.length) {
-      const c = queue.pop()!;
-      const x = c % width;
-      const y = Math.floor(c / width);
-      for (const [nx, ny] of [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]]) {
-        const n = idx(nx, ny);
-        if (!out.has(n) && alwaysFree(nx, ny)) {
-          out.add(n);
-          queue.push(n);
-        }
-      }
-    }
-    return out;
-  };
-
-  /** zones disjointes et non collées : au moins une case (bloc) entre deux joueurs */
-  const separated = (zonesIn: Set<number>[]) => {
-    const zones = zonesIn.map(reach);
-    const all = new Map<number, number>();
-    for (let zi = 0; zi < zones.length; zi++)
-      for (const c of zones[zi]) {
-        if (all.has(c)) return false;
-        all.set(c, zi);
-      }
-    for (const [c, zi] of all) {
-      const x = c % width;
-      const y = Math.floor(c / width);
-      for (const n of [idx(x + 1, y), idx(x - 1, y), idx(x, y + 1), idx(x, y - 1)]) {
-        const o = all.get(n);
-        if (o !== undefined && o !== zi) return false;
-      }
-    }
-    return true;
-  };
-
-  /** pas de cul-de-sac : au moins 2 cases libres autour du point de départ, dans sa zone */
-  const roomy = (s: [number, number], zone: Set<number>) =>
-    [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([dx, dy]) => zone.has(idx(s[0] + dx, s[1] + dy))).length >= 2;
-
-  const groupOk = (cells: [number, number][], minD: number): Set<number>[] | null => {
-    for (let i = 0; i < cells.length; i++) {
-      if (!spawnable(cells[i][0], cells[i][1])) return null;
-      for (let j = i + 1; j < cells.length; j++) if (manhattan(cells[i], cells[j]) < minD) return null;
-    }
-    const zones: Set<number>[] = [];
-    for (const c of cells) {
-      const z = zoneOf(c);
-      if (!z || (SPAWN_RULES.noDeadEnd && !roomy(c, z))) return null;
-      zones.push(z);
-    }
-    return separated(zones) ? zones : null;
-  };
-
-  if (symmetric) {
-    const mirror4 = (x: number, y: number): [number, number][] => [
-      [x, y], // haut-gauche
-      [width - 1 - x, height - 1 - y], // bas-droite
-      [width - 1 - x, y], // haut-droite
-      [x, height - 1 - y], // bas-gauche
-    ];
-    for (const minD of SPAWN_RULES.minDistance) {
-      // toutes les combinaisons valides, listées une fois
-      const options: { cells: [number, number][]; zones: Set<number>[] }[] = [];
-      const corners: [number, number][][] = [];
-      for (let y = 1; y < cy; y++) for (let x = 1; x < cx; x++) if (groupOk(mirror4(x, y), minD)) corners.push(mirror4(x, y));
-      if (count <= 4) {
-        for (const c of corners) options.push({ cells: c, zones: groupOk(c, minD)! });
-      } else {
-        // paires sur les axes : colonne centrale (haut/bas) ou ligne centrale (gauche/droite)
-        const axisPairs: [number, number][][] = [];
-        for (let y = 1; y < cy; y++) axisPairs.push([[cx, y], [cx, height - 1 - y]]);
-        for (let x = 1; x < cx; x++) axisPairs.push([[x, cy], [width - 1 - x, cy]]);
-        for (const c of corners)
-          for (const a of axisPairs) {
-            const cells = [...c, ...a];
-            const zones = groupOk(cells, minD);
-            if (zones) options.push({ cells, zones });
-          }
-      }
-      if (!options.length) continue;
-      const choice = rng.pick(options);
-      let cells = choice.cells.slice(0, 4);
-      // 2 joueurs : une diagonale au hasard ; 3 joueurs : 3 coins au hasard
-      if (count === 2) cells = rng.chance(0.5) ? [cells[0], cells[1]] : [cells[2], cells[3]];
-      else if (count === 3) cells = rng.shuffle(cells).slice(0, 3);
-      else if (count === 5) cells = [...cells, rng.pick(choice.cells.slice(4))];
-      else if (count >= 6) cells = choice.cells.slice(0, 6);
-      if (count === 1) cells = [rng.pick(cells)];
-      return {
-        spawns: rng.shuffle(cells.slice()),
-        // les 4 coins sont toujours dégagés (map symétrique), les axes seulement s'ils servent
-        zones: choice.zones,
-        fixed: false,
-        useExtra: count > 4,
-      };
-    }
-  }
-  return fixedSpawns(map, count, rng, zoneOf);
-}
-
-/** Le plan est-il identique en miroir horizontal et vertical ? */
-function isMirrorSymmetric(layout: string[]): boolean {
-  const h = layout.length;
-  const w = layout[0].length;
-  for (let y = 0; y < h; y++) {
-    if (layout[y].length !== w) return false;
-    for (let x = 0; x < w; x++) {
-      const c = layout[y][x];
-      if (layout[y][w - 1 - x] !== c || layout[h - 1 - y][x] !== c) return false;
-    }
-  }
-  return true;
-}
-
-/**
- * Secours : les positions fixes du plan ('S' puis 's'), coins opposés
- * d'abord, comme avant. Les joueurs y sont répartis au hasard. S'il manque
- * encore des cases (map trop petite), on complète avec les cases libres les
- * plus éloignées des joueurs déjà placés, sans jamais en réutiliser une.
- */
-function fixedSpawns(
-  map: MapDef,
-  count: number,
-  rng: Rng,
-  zoneOf: (s: [number, number]) => Set<number> | null,
-): SpawnPlan {
-  const layout = map.layout;
-  const height = layout.length;
-  const width = layout[0].length;
-  const main: [number, number][] = [];
-  const extra: [number, number][] = [];
-  const free: [number, number][] = [];
-  for (let y = 1; y < height - 1; y++)
-    for (let x = 1; x < width - 1; x++) {
-      const c = layout[y][x];
-      if (c === "S") main.push([x, y]);
-      else if (c === "s") extra.push([x, y]);
-      else if (SPAWNABLE.includes(c)) free.push([x, y]);
-    }
-  const cx = (width - 1) / 2;
-  const cy = (height - 1) / 2;
-  const quad = ([x, y]: [number, number]) => (x < cx ? 0 : 1) + (y < cy ? 0 : 2);
-  const order = [0, 3, 1, 2];
-  main.sort((a, b) => order.indexOf(quad(a)) - order.indexOf(quad(b)));
-  const useExtra = count > main.length;
-  const chosen = [...main, ...(useExtra ? extra : [])].slice(0, count);
-  // complément, sans doublon ni boucle infinie (liste finie)
-  while (chosen.length < count && free.length) {
-    let best = 0;
-    let bestD = -1;
-    for (let i = 0; i < free.length; i++) {
-      const d = chosen.length ? Math.min(...chosen.map((c) => manhattan(c, free[i]))) : 0;
-      if (d > bestD) {
-        bestD = d;
-        best = i;
-      }
-    }
-    chosen.push(free.splice(best, 1)[0]);
-  }
-  const zones: Set<number>[] = [];
-  for (const s of [...main, ...(useExtra ? extra : []), ...chosen.slice(main.length + (useExtra ? extra.length : 0))]) {
-    const z = zoneOf(s);
-    zones.push(z ?? new Set([s[1] * width + s[0]]));
-  }
-  return { spawns: rng.shuffle(chosen.slice()), zones, fixed: true, useExtra };
 }

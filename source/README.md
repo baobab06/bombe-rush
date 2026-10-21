@@ -22,6 +22,7 @@ Render redéploie tout seul en 2-3 minutes.
 | Quoi | Fichier |
 |---|---|
 | **Pièces selon la place finale** (1er, 2e, 3e, 4e) par difficulté : `STAKES` | `src/meta/economy.ts` |
+| **Bombers** (monnaie premium) : prix en bombers (`BOMBER_PRICES`…), échange contre des pièces (`EXCHANGES`), **packs en argent réel** (`PACKS`, voir `docs/ACHATS.md`) | `src/meta/economy.ts` |
 | Parties à 2, 3 ou 5+ joueurs : quelle colonne du barème pour chaque place (`PLACE_COLUMNS`), égalité (`DRAW_COLUMN`) | `src/meta/economy.ts` |
 | Bonus sur les gains (événements ×2, séries, 1re victoire du jour…) : `GAIN_MODIFIERS` | `src/meta/rewards.ts` |
 | **Délai avant explosion des bombes** et alerte (`fuse`, `warn`), futurs types de bombes : `BOMB_KINDS` | `src/core/bombs.ts` |
@@ -354,25 +355,6 @@ Tout est dans `src/core/rules.ts` (portée de départ, vitesse,
 durée du bouclier, mort subite…), la mèche des bombes dans `src/core/bombs.ts` et `src/maps/forest.ts` (densité de blocs,
 probabilité et répartition des bonus). Les profils des bots sont en tête de
 `src/ai/bot.ts`.
-
-### Positions de départ
-
-Elles sont tirées au hasard à chaque partie (`pickSpawns`, `src/maps/generator.ts`,
-réglages dans `SPAWN_RULES`) à partir de la graine de la partie : le serveur et
-chaque téléphone calculent donc exactement les mêmes positions.
-- Une case est tirée dans le quart haut-gauche puis recopiée en miroir dans les
-  3 autres quarts (5-6 joueurs : + une paire sur un axe central). Les blocs étant
-  eux aussi symétriques, chaque joueur a le même voisinage ; les joueurs sont
-  ensuite répartis au hasard sur ces cases.
-- Une case de départ est toujours du sol praticable (ni mur, bloc, lave, eau,
-  glace ou cheminée), à 2 cases ou plus d'une cheminée, jamais en cul-de-sac, avec une
-  cachette garantie hors du souffle de la 1re bombe. Les zones de départ sont
-  séparées par des blocs, et au moins 5 cases séparent deux joueurs
-  (distance assouplie à 4, 3 puis 2 sur une petite map).
-- Toutes les combinaisons valides sont listées puis tirées : pas de boucle au
-  hasard. Si aucune ne convient (map minuscule ou non symétrique), retour aux
-  positions fixes `S`/`s` du plan.
-- Pas de réapparition : les positions ne servent qu'au début de la partie.
 
 ## Étapes suivantes proposées
 

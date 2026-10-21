@@ -92,8 +92,6 @@ d'afficher des pubs web à l'intérieur d'une WebView d'application.
 
 ## Bouton « Sans pub »
 
-Il n'est **pas** créé, parce qu'il n'y a pas d'achat intégré réel. Pour le
-faire : Google Play Billing dans l'application (produit « remove_ads »,
-vérification de l'achat côté serveur), et un paiement (Stripe…) avec un
-compte joueur pour le web. Ensuite, désactiver `ads.interstitial()` pour les
-joueurs qui ont acheté l'option.
+Il n'est **pas** encore créé. Les achats intégrés existent depuis la 1.2 (voir `docs/ACHATS.md`) :
+il suffira d'ajouter un produit non consommable « remove_ads » et de désactiver
+`ads.interstitial()` pour les joueurs qui l'ont acheté.

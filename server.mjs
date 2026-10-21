@@ -1513,13 +1513,6 @@ var TERRAIN_OF = {
   V: TERRAIN.VENT
 };
 var WALKABLE = [".", "_", "S", "s", "I", "i", "V"];
-var SPAWN_RULES = {
-  minDistance: [5, 4, 3, 2],
-  noDeadEnd: true,
-  ventMargin: 2
-};
-var ALWAYS_FREE = ["_", "i"];
-var SPAWNABLE = [".", "_", "S", "s"];
 function generateArena(map, playerCount, seed) {
   const rng = new Rng(seed ^ 24301);
   const height = map.layout.length;
@@ -1528,7 +1521,24 @@ function generateArena(map, playerCount, seed) {
   const terrain = new Uint8Array(width * height);
   const hiddenBonus = new Array(width * height).fill(null);
   const at = (x, y) => map.layout[y][x];
-  const count = Math.max(playerCount, 1);
+  const mainSpawns = [];
+  const extraSpawns = [];
+  for (let y = 0;y < height; y++)
+    for (let x = 0;x < width; x++) {
+      const c = at(x, y);
+      if (c === "S")
+        mainSpawns.push([x, y]);
+      if (c === "s")
+        extraSpawns.push([x, y]);
+    }
+  const cx = (width - 1) / 2;
+  const cy = (height - 1) / 2;
+  const quad = ([x, y]) => (x < cx ? 0 : 1) + (y < cy ? 0 : 2);
+  const order = [0, 3, 1, 2];
+  mainSpawns.sort((a, b) => order.indexOf(quad(a)) - order.indexOf(quad(b)));
+  const useExtra = playerCount > mainSpawns.length;
+  const spawns = [...mainSpawns, ...useExtra ? extraSpawns : []].slice(0, Math.max(playerCount, 1));
+  const protectedCells = new Set;
   const open = (x, y) => x > 0 && y > 0 && x < width - 1 && y < height - 1 && WALKABLE.includes(at(x, y));
   const DIRS4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
   const hasHideSpot = (cells, range) => {
@@ -1561,7 +1571,7 @@ function generateArena(map, playerCount, seed) {
     }
     return false;
   };
-  const zoneAround = ([sx, sy]) => {
+  const clearAround = ([sx, sy]) => {
     const zone = new Set([sy * width + sx]);
     for (const [dx, dy] of DIRS4)
       for (let i = 1;i <= map.spawnClear; i++) {
@@ -1593,17 +1603,12 @@ function generateArena(map, playerCount, seed) {
         break;
       zone.add(best);
     }
-    return zone;
-  };
-  const plan = pickSpawns(map, count, seed, { open, zoneAround, hasHideSpot });
-  const spawns = plan.spawns;
-  if (spawns.length < count)
-    throw new Error(`Map « ${map.id} » trop petite pour ${count} joueurs`);
-  const protectedCells = new Set;
-  for (const z of plan.zones)
-    for (const c of z)
+    for (const c of zone)
       protectedCells.add(c);
-  const extraIsFloor = plan.fixed && plan.useExtra;
+  };
+  mainSpawns.forEach(clearAround);
+  if (useExtra)
+    extraSpawns.forEach(clearAround);
   const canon = (x, y) => Math.min(y, height - 1 - y) * width + Math.min(x, width - 1 - x);
   const decision = new Map;
   for (let y = 0;y < height; y++)
@@ -1622,7 +1627,7 @@ function generateArena(map, playerCount, seed) {
       terrain[i] = TERRAIN_OF[c] ?? TERRAIN.NONE;
       if (c === "#")
         t = TILE.WALL;
-      else if ((c === "." || c === "I" || c === "s" && !extraIsFloor || c === "S" && !plan.fixed) && !protectedCells.has(i)) {
+      else if ((c === "." || c === "I" || c === "s" && !useExtra) && !protectedCells.has(i)) {
         const d = decision.get(canon(x, y));
         if (d.block) {
           t = TILE.BLOCK;
@@ -1632,214 +1637,6 @@ function generateArena(map, playerCount, seed) {
       tiles[i] = t;
     }
   return { width, height, tiles, terrain, hiddenBonus, spawns };
-}
-var manhattan = (a, b) => Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]);
-function pickSpawns(map, count, seed, tools) {
-  const rng = new Rng((seed ^ 1511506142) >>> 0);
-  const layout = map.layout;
-  const height = layout.length;
-  const width = layout[0].length;
-  const at = (x, y) => layout[y][x];
-  const idx = (x, y) => y * width + x;
-  const symmetric = width % 2 === 1 && height % 2 === 1 && isMirrorSymmetric(layout);
-  const cx = (width - 1) / 2;
-  const cy = (height - 1) / 2;
-  const vents = [];
-  for (let y = 0;y < height; y++)
-    for (let x = 0;x < width; x++)
-      if (at(x, y) === "V")
-        vents.push([x, y]);
-  const nearVent = (x, y, d) => vents.some((v) => manhattan(v, [x, y]) <= d);
-  const spawnable = (x, y) => x > 0 && y > 0 && x < width - 1 && y < height - 1 && SPAWNABLE.includes(at(x, y)) && !nearVent(x, y, SPAWN_RULES.ventMargin);
-  const mirroredZone = ([x, y]) => {
-    const fx = x > cx;
-    const fy = y > cy;
-    const base = tools.zoneAround([fx ? width - 1 - x : x, fy ? height - 1 - y : y]);
-    const out = new Set;
-    for (const c of base) {
-      const bx = c % width;
-      const by = Math.floor(c / width);
-      out.add(idx(fx ? width - 1 - bx : bx, fy ? height - 1 - by : by));
-    }
-    return out;
-  };
-  const zoneCache = new Map;
-  const zoneOf = (s) => {
-    const k = idx(s[0], s[1]);
-    if (!zoneCache.has(k)) {
-      const z = symmetric ? mirroredZone(s) : tools.zoneAround(s);
-      const ok = tools.hasHideSpot(z, map.startRange) && [...z].every((c) => !nearVent(c % width, Math.floor(c / width), 1));
-      zoneCache.set(k, ok ? z : null);
-    }
-    return zoneCache.get(k);
-  };
-  const alwaysFree = (x, y) => x > 0 && y > 0 && x < width - 1 && y < height - 1 && ALWAYS_FREE.includes(at(x, y));
-  const reach = (zone) => {
-    const out = new Set(zone);
-    const queue = [...zone];
-    while (queue.length) {
-      const c = queue.pop();
-      const x = c % width;
-      const y = Math.floor(c / width);
-      for (const [nx, ny] of [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]]) {
-        const n = idx(nx, ny);
-        if (!out.has(n) && alwaysFree(nx, ny)) {
-          out.add(n);
-          queue.push(n);
-        }
-      }
-    }
-    return out;
-  };
-  const separated = (zonesIn) => {
-    const zones = zonesIn.map(reach);
-    const all = new Map;
-    for (let zi = 0;zi < zones.length; zi++)
-      for (const c of zones[zi]) {
-        if (all.has(c))
-          return false;
-        all.set(c, zi);
-      }
-    for (const [c, zi] of all) {
-      const x = c % width;
-      const y = Math.floor(c / width);
-      for (const n of [idx(x + 1, y), idx(x - 1, y), idx(x, y + 1), idx(x, y - 1)]) {
-        const o = all.get(n);
-        if (o !== undefined && o !== zi)
-          return false;
-      }
-    }
-    return true;
-  };
-  const roomy = (s, zone) => [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([dx, dy]) => zone.has(idx(s[0] + dx, s[1] + dy))).length >= 2;
-  const groupOk = (cells, minD) => {
-    for (let i = 0;i < cells.length; i++) {
-      if (!spawnable(cells[i][0], cells[i][1]))
-        return null;
-      for (let j = i + 1;j < cells.length; j++)
-        if (manhattan(cells[i], cells[j]) < minD)
-          return null;
-    }
-    const zones = [];
-    for (const c of cells) {
-      const z = zoneOf(c);
-      if (!z || SPAWN_RULES.noDeadEnd && !roomy(c, z))
-        return null;
-      zones.push(z);
-    }
-    return separated(zones) ? zones : null;
-  };
-  if (symmetric) {
-    const mirror4 = (x, y) => [
-      [x, y],
-      [width - 1 - x, height - 1 - y],
-      [width - 1 - x, y],
-      [x, height - 1 - y]
-    ];
-    for (const minD of SPAWN_RULES.minDistance) {
-      const options = [];
-      const corners = [];
-      for (let y = 1;y < cy; y++)
-        for (let x = 1;x < cx; x++)
-          if (groupOk(mirror4(x, y), minD))
-            corners.push(mirror4(x, y));
-      if (count <= 4) {
-        for (const c of corners)
-          options.push({ cells: c, zones: groupOk(c, minD) });
-      } else {
-        const axisPairs = [];
-        for (let y = 1;y < cy; y++)
-          axisPairs.push([[cx, y], [cx, height - 1 - y]]);
-        for (let x = 1;x < cx; x++)
-          axisPairs.push([[x, cy], [width - 1 - x, cy]]);
-        for (const c of corners)
-          for (const a of axisPairs) {
-            const cells = [...c, ...a];
-            const zones = groupOk(cells, minD);
-            if (zones)
-              options.push({ cells, zones });
-          }
-      }
-      if (!options.length)
-        continue;
-      const choice = rng.pick(options);
-      let cells = choice.cells.slice(0, 4);
-      if (count === 2)
-        cells = rng.chance(0.5) ? [cells[0], cells[1]] : [cells[2], cells[3]];
-      else if (count === 3)
-        cells = rng.shuffle(cells).slice(0, 3);
-      else if (count === 5)
-        cells = [...cells, rng.pick(choice.cells.slice(4))];
-      else if (count >= 6)
-        cells = choice.cells.slice(0, 6);
-      if (count === 1)
-        cells = [rng.pick(cells)];
-      return {
-        spawns: rng.shuffle(cells.slice()),
-        zones: choice.zones,
-        fixed: false,
-        useExtra: count > 4
-      };
-    }
-  }
-  return fixedSpawns(map, count, rng, zoneOf);
-}
-function isMirrorSymmetric(layout) {
-  const h = layout.length;
-  const w = layout[0].length;
-  for (let y = 0;y < h; y++) {
-    if (layout[y].length !== w)
-      return false;
-    for (let x = 0;x < w; x++) {
-      const c = layout[y][x];
-      if (layout[y][w - 1 - x] !== c || layout[h - 1 - y][x] !== c)
-        return false;
-    }
-  }
-  return true;
-}
-function fixedSpawns(map, count, rng, zoneOf) {
-  const layout = map.layout;
-  const height = layout.length;
-  const width = layout[0].length;
-  const main = [];
-  const extra = [];
-  const free = [];
-  for (let y = 1;y < height - 1; y++)
-    for (let x = 1;x < width - 1; x++) {
-      const c = layout[y][x];
-      if (c === "S")
-        main.push([x, y]);
-      else if (c === "s")
-        extra.push([x, y]);
-      else if (SPAWNABLE.includes(c))
-        free.push([x, y]);
-    }
-  const cx = (width - 1) / 2;
-  const cy = (height - 1) / 2;
-  const quad = ([x, y]) => (x < cx ? 0 : 1) + (y < cy ? 0 : 2);
-  const order = [0, 3, 1, 2];
-  main.sort((a, b) => order.indexOf(quad(a)) - order.indexOf(quad(b)));
-  const useExtra = count > main.length;
-  const chosen = [...main, ...useExtra ? extra : []].slice(0, count);
-  while (chosen.length < count && free.length) {
-    let best = 0;
-    let bestD = -1;
-    for (let i = 0;i < free.length; i++) {
-      const d = chosen.length ? Math.min(...chosen.map((c) => manhattan(c, free[i]))) : 0;
-      if (d > bestD) {
-        bestD = d;
-        best = i;
-      }
-    }
-    chosen.push(free.splice(best, 1)[0]);
-  }
-  const zones = [];
-  for (const s of [...main, ...useExtra ? extra : [], ...chosen.slice(main.length + (useExtra ? extra.length : 0))]) {
-    const z = zoneOf(s);
-    zones.push(z ?? new Set([s[1] * width + s[0]]));
-  }
-  return { spawns: rng.shuffle(chosen.slice()), zones, fixed: true, useExtra };
 }
 
 // src/core/match.ts

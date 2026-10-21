@@ -72,29 +72,51 @@ export function featured(now = new Date()): Featured {
   return { items: picks, dealId: picks[0].id, refreshIn: midnight.getTime() - now.getTime() };
 }
 
-export function priceOf(id: string, now = new Date()): { price: number; full: number; deal: boolean } {
+export interface ItemPrice {
+  /** prix en pièces (promotion comprise) */
+  price: number;
+  full: number;
+  /** prix en bombers (promotion comprise) ; 0 = pas vendu en bombers */
+  bombers: number;
+  bombersFull: number;
+  deal: boolean;
+}
+export function priceOf(id: string, now = new Date()): ItemPrice {
   const it = getItem(id);
-  if (!it) return { price: 0, full: 0, deal: false };
+  if (!it) return { price: 0, full: 0, bombers: 0, bombersFull: 0, deal: false };
   const f = featured(now);
-  if (f.dealId === id) return { price: Math.round((it.price * (1 - FEATURED.dealDiscount)) / 10) * 10, full: it.price, deal: true };
-  return { price: it.price, full: it.price, deal: false };
+  if (f.dealId === id) {
+    const k = 1 - FEATURED.dealDiscount;
+    return { price: Math.round((it.price * k) / 10) * 10, full: it.price, bombers: Math.max(5, Math.round((it.bomberPrice * k) / 5) * 5), bombersFull: it.bomberPrice, deal: true };
+  }
+  return { price: it.price, full: it.price, bombers: it.bomberPrice, bombersFull: it.bomberPrice, deal: false };
 }
 
 // ---------------------------------------------------------------- achat
-export type BuyResult = { ok: true; item: CatalogItem; price: number } | { ok: false; reason: "unknown" | "owned" | "coins" | "character" | "exclusive"; missing?: number };
+export type PayWith = "coins" | "bombers";
+export type BuyResult =
+  | { ok: true; item: CatalogItem; price: number; currency: PayWith }
+  | { ok: false; reason: "unknown" | "owned" | "coins" | "bombers" | "character" | "exclusive"; missing?: number };
 
-export function buy(p: Profile, id: string, now = new Date()): BuyResult {
+/** Achète un objet en pièces (par défaut) ou en bombers. */
+export function buy(p: Profile, id: string, now = new Date(), currency: PayWith = "coins"): BuyResult {
   const it = getItem(id);
   if (!it) return { ok: false, reason: "unknown" };
   if (owns(p, id)) return { ok: false, reason: "owned" };
   if (it.exclusive) return { ok: false, reason: "exclusive" };
   if (it.kind === "skin" && !p.ownedCharacters.includes(it.characterId!)) return { ok: false, reason: "character" };
-  const { price } = priceOf(id, now);
-  if (p.coins < price) return { ok: false, reason: "coins", missing: price - p.coins };
-  p.coins -= price;
+  const pr = priceOf(id, now);
+  if (currency === "bombers") {
+    if (!pr.bombers) return { ok: false, reason: "unknown" };
+    if (p.bombers < pr.bombers) return { ok: false, reason: "bombers", missing: pr.bombers - p.bombers };
+    p.bombers -= pr.bombers;
+  } else {
+    if (p.coins < pr.price) return { ok: false, reason: "coins", missing: pr.price - p.coins };
+    p.coins -= pr.price;
+  }
   if (it.kind === "character") p.ownedCharacters.push(it.characterId!);
   else p.owned.push(id);
-  return { ok: true, item: it, price };
+  return { ok: true, item: it, price: currency === "bombers" ? pr.bombers : pr.price, currency };
 }
 
 // ------------------------------------------------------------ équipement

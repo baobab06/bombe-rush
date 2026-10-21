@@ -9,9 +9,9 @@ La version **1.1.1** de l'appli contient AdMob, le SDK officiel de Google :
 **Depuis la 1.1.1, ce sont tes VRAIS identifiants** (compte AdMob `pub-8702007304042641`) :
 | | Identifiant |
 |---|---|
-| Application | `ca-app-pub-8702007304042641~8404560974` |
-| Vidéo avec récompense | `ca-app-pub-8702007304042641/4862655803` |
-| Interstitiel (entre deux parties) | `ca-app-pub-8702007304042641/9926535369` |
+| Application | `ca-app-pub-8702007304042641~7500110205` (nouvelle appli AdMob, version 1.2.1) |
+| Interstitiel avec récompense (vidéos +100 pièces, coffre gratuit, gains doublés) | `ca-app-pub-8702007304042641/3808664243` |
+| Interstitiel (entre deux parties) | aucun pour l'instant : pubs entre deux parties désactivées |
 
 **Sécurité intégrée** : l'appli n'affiche les vraies pubs que si elle a été installée **depuis Google Play**.
 Un APK installé à la main (comme `BombeRush-1.1.1-pubs-TEST.apk`) affiche les pubs « Test Ad » de Google :

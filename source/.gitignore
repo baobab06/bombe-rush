@@ -2,3 +2,9 @@ node_modules/
 dist/
 *.keystore
 *.pass
+
+# compilation Gradle locale
+android-gradle/.gradle/
+android-gradle/build/
+android-gradle/app/build/
+package-lock.json

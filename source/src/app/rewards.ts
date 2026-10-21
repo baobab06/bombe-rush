@@ -16,6 +16,7 @@ import { fmt, type AppCtx } from "./ctx";
 /** Petite étiquette de récompense (avant de l'avoir gagnée). */
 export function rewardChip(r: Reward): string {
   if (r.kind === "coins") return `<span class="rw-chip coins"><i class="coin"></i>${fmt(r.amount)}</span>`;
+  if (r.kind === "bombers") return `<span class="rw-chip bombers"><i class="bomber"></i>${fmt(r.amount)}</span>`;
   if (r.kind === "xp") return `<span class="rw-chip xp">${fmt(r.amount)} XP</span>`;
   if (r.kind === "chest") return `<span class="rw-chip chest c-${r.tier}">🎁 ${CHESTS[r.tier].name.replace("Coffre ", "")}</span>`;
   const it = getItem(r.id);
@@ -40,7 +41,7 @@ export function grantCard(g: Granted, ctx: AppCtx): HTMLElement {
     const name = it.kind === "skin" ? `${getCharacter(it.characterId!).name} ${it.name}` : it.name;
     el.insertAdjacentHTML("beforeend", `<small>${kind} ${RARITY_LABEL[it.rarity].toLowerCase()}</small><b>${name}</b>${g.duplicate ? `<em>doublon → <i class="coin"></i>+${fmt(g.coins)}</em>` : `<em class="new">NOUVEAU !</em>`}`);
   } else {
-    const big = g.reward.kind === "coins" ? '<i class="coin big"></i>' : g.reward.kind === "chest" ? '<span class="gc-emo">🎁</span>' : '<span class="gc-emo">✨</span>';
+    const big = g.reward.kind === "coins" ? '<i class="coin big"></i>' : g.reward.kind === "bombers" ? '<i class="bomber big"></i>' : g.reward.kind === "chest" ? '<span class="gc-emo">🎁</span>' : '<span class="gc-emo">✨</span>';
     el.innerHTML = `${big}<b>${g.label}</b>`;
   }
   if (g.source) el.title = g.source;
@@ -103,7 +104,8 @@ export function openDaily(ctx: AppCtx, onChange: () => void) {
       d.className = "day" + (done ? " done" : "") + (today ? " today" : "") + (i === LOGIN_REWARDS.length - 1 ? " big" : "");
       const art = r.kind === "chest" ? '<span class="stack chest-ico">🎁</span>' : `<span class="stack">${'<i class="coin"></i>'.repeat(i >= 4 ? 3 : i >= 2 ? 2 : 1)}</span>`;
       const lbl = r.kind === "coins" ? fmt(r.amount) : r.kind === "chest" ? CHESTS[r.tier].name.replace("Coffre ", "Coffre ") : rewardText(r);
-      d.innerHTML = `<small>Jour ${i + 1}</small>${art}<b>${lbl}</b>${done ? `<span class="tick">${icon("check")}</span>` : ""}`;
+      const extra = rw.slice(1).find((x) => x.kind === "bombers");
+      d.innerHTML = `<small>Jour ${i + 1}</small>${art}<b>${lbl}</b>${extra && extra.kind === "bombers" ? `<em class="day-extra"><i class="bomber"></i>+${fmt(extra.amount)}</em>` : ""}${done ? `<span class="tick">${icon("check")}</span>` : ""}`;
       if (today) todayEl = d;
       days.appendChild(d);
     });

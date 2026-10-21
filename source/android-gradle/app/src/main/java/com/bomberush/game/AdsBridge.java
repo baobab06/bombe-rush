@@ -16,8 +16,8 @@ import com.google.android.gms.ads.LoadAdError;
 import com.google.android.gms.ads.MobileAds;
 import com.google.android.gms.ads.interstitial.InterstitialAd;
 import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback;
-import com.google.android.gms.ads.rewarded.RewardedAd;
-import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback;
+import com.google.android.gms.ads.rewardedinterstitial.RewardedInterstitialAd;
+import com.google.android.gms.ads.rewardedinterstitial.RewardedInterstitialAdLoadCallback;
 import com.google.android.ump.ConsentInformation;
 import com.google.android.ump.ConsentRequestParameters;
 import com.google.android.ump.UserMessagingPlatform;
@@ -30,6 +30,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * Côté jeu : window.BombeRushAds (voir src/ads/service.ts, fournisseur "android").
  *  - configure(rewardedUnit, interstitialUnit) : identifiants des blocs d'annonces
  *  - isReady(kind)                              : une pub est chargée ("rewarded" / "interstitial")
+ *  Le bloc « récompensé » est un INTERSTITIEL AVEC RÉCOMPENSE (RewardedInterstitialAd) depuis la 1.2.1.
+ *  Il n'est montré qu'après un appui du joueur sur « regarder une vidéo » (choix explicite, règle AdMob).
  *  - showRewarded(unit, callbackId)             : résultat "completed" UNIQUEMENT si la récompense
  *                                                 est confirmée par le SDK (OnUserEarnedRewardListener)
  *  - showInterstitial(unit, callbackId)         : résultat "shown" / "unavailable" / "error"
@@ -42,7 +44,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class AdsBridge {
     private static final String TAG = "BombeRushAds";
     // Identifiants de TEST officiels de Google (fonctionnent avec n'importe quel identifiant d'application)
-    private static final String TEST_REWARDED = "ca-app-pub-3940256099942544/5224354917";
+    private static final String TEST_REWARDED = "ca-app-pub-3940256099942544/5354046379"; // interstitiel avec récompense
     private static final String TEST_INTERSTITIAL = "ca-app-pub-3940256099942544/1033173712";
     private final Activity act;
     private final WebView web;
@@ -51,7 +53,7 @@ public class AdsBridge {
     private volatile boolean nonPersonalized = false;
     private volatile String rewardedUnit = null;
     private volatile String interstitialUnit = null;
-    private RewardedAd rewarded;
+    private RewardedInterstitialAd rewarded;
     private InterstitialAd interstitial;
     private boolean loadingRewarded = false;
     private boolean loadingInterstitial = false;
@@ -107,9 +109,9 @@ public class AdsBridge {
     private void loadRewarded() {
         if (destroyed || rewardedUnit == null || rewarded != null || loadingRewarded || !started.get()) return;
         loadingRewarded = true;
-        RewardedAd.load(act, rewardedUnit, request(), new RewardedAdLoadCallback() {
+        RewardedInterstitialAd.load(act, rewardedUnit, request(), new RewardedInterstitialAdLoadCallback() {
             @Override
-            public void onAdLoaded(RewardedAd ad) {
+            public void onAdLoaded(RewardedInterstitialAd ad) {
                 loadingRewarded = false;
                 rewarded = ad;
             }
@@ -190,7 +192,7 @@ public class AdsBridge {
     @JavascriptInterface
     public void showRewarded(String unitId, String callbackId) {
         act.runOnUiThread(() -> {
-            final RewardedAd ad = rewarded;
+            final RewardedInterstitialAd ad = rewarded;
             if (ad == null) {
                 reply(callbackId, "unavailable");
                 loadRewarded();
