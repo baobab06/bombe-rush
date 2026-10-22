@@ -881,8 +881,8 @@ var MODES = [
   },
   {
     id: "koth",
-    name: "Roi de la colline",
-    tagline: "Reste seul sur la colline pour marquer. Premier à 25 points !",
+    name: "Domination",
+    tagline: "Reste seul dans la zone pour marquer. Premier à 25 points !",
     available: true,
     emoji: "\uD83D\uDC51",
     suddenDeath: false,
@@ -2884,7 +2884,7 @@ class GameRunner {
       }
     }
     const seed = Math.random() * 2 ** 31 | 0;
-    this.match = new Match({ seed, map: pickMap(opts.mapId), modeId: opts.modeId, players: this.slots });
+    this.match = new Match({ seed, map: pickMap(opts.modeId === "classic" ? RANDOM_MAP : opts.mapId), modeId: opts.modeId, players: this.slots });
     this.slots.forEach((slot, i) => {
       this.queues.push([]);
       this.lastCmd.push(NO_INPUT);

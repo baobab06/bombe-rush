@@ -558,7 +558,8 @@ class App implements AppCtx {
     const bots = p.lastSetup.botCount;
     const ev = activeEvents();
     const allEv = ev.find((e) => !e.modeId);
-    $("playSub").innerHTML = `${allEv ? `<span class="ps-ev" title="${esc(allEv.name)}">${allEv.icon} ×${String(allEv.coinMultiplier).replace(".", ",")}</span> ` : ""}${STAKES[sid].label} · ${bots} bot${bots > 1 ? "s" : ""} · ${map} <span class="ps-win">🥇 ${signed(tbl[0].amount)}</span> <span class="ps-loss">💀 ${signed(tbl[tbl.length - 1].amount)}</span>`;
+    const mapLbl = modeId === "classic" ? "🎲 carte surprise" : map;
+    $("playSub").innerHTML = `${allEv ? `<span class="ps-ev" title="${esc(allEv.name)}">${allEv.icon} ×${String(allEv.coinMultiplier).replace(".", ",")}</span> ` : ""}${STAKES[sid].label} · ${bots} bot${bots > 1 ? "s" : ""} · ${mapLbl} <span class="ps-win">🥇 ${signed(tbl[0].amount)}</span> <span class="ps-loss">💀 ${signed(tbl[tbl.length - 1].amount)}</span>`;
     const deal = featured();
     const dp = priceOf(deal.dealId);
     $("shopRibbon").hidden = !dp.deal;
@@ -690,6 +691,11 @@ class App implements AppCtx {
     }
     mapRow.querySelectorAll<HTMLElement>(".map[data-id]").forEach((el) => el.classList.toggle("sel", el.dataset.id === st.mapId));
     const rnd = $("btnRandomMap");
+    // Classique : carte tirée au hasard, on ne la choisit pas
+    const surprise = st.modeId === "classic";
+    mapRow.hidden = surprise;
+    rnd.hidden = surprise;
+    $("mapSurprise").hidden = !surprise;
     rnd.classList.toggle("sel", st.mapId === RANDOM_MAP);
     rnd.setAttribute("aria-pressed", String(st.mapId === RANDOM_MAP));
     const mark = (id: string, v: string) =>
@@ -990,7 +996,7 @@ class App implements AppCtx {
     title.textContent = `${pk.hostName} t'invite à jouer !`;
     const md = MODES.find((x) => x.id === pk.modeId) ?? MODES[0];
     const mode = `<span${md.id === "chaos" ? ' class="chaos"' : ""}>${md.emoji ?? "🎮"} ${md.name}</span>`;
-    const map = MAPS.find((m) => m.id === pk.mapId)?.name ?? "🎲 Aléatoire";
+    const map = pk.modeId === "classic" ? "🎲 Surprise" : MAPS.find((m) => m.id === pk.mapId)?.name ?? "🎲 Aléatoire";
     room.innerHTML = `${mode}<span>🗺️ ${map}</span><span>👥 ${pk.players}/${pk.max}</span>`;
     const full = (pk.players ?? 0) >= (pk.max ?? 4);
     btn.disabled = full || this.online.status !== "online";
@@ -1265,6 +1271,8 @@ class App implements AppCtx {
       b.classList.toggle("sel", b.dataset.map === r.mapId);
       b.disabled = !host;
     });
+    $("lobbyMaps").hidden = r.modeId === "classic";
+    $("lobbySurprise").hidden = r.modeId !== "classic";
     const bots = $<HTMLInputElement>("lobbyBots");
     bots.checked = r.fillBots;
     bots.disabled = !host;
@@ -1461,8 +1469,8 @@ class App implements AppCtx {
         const rows = [...hl.rows].sort((a, b) => b.points - a.points);
         const state = hl.myRespawn > 0
           ? `<span class="hb-state dead">💀 retour dans ${hl.myRespawn} s</span>`
-          : hl.contested ? '<span class="hb-state contested">⚔️ colline disputée</span>'
-          : hl.holder < 0 ? '<span class="hb-state">colline libre</span>' : "";
+          : hl.contested ? '<span class="hb-state contested">⚔️ zone disputée</span>'
+          : hl.holder < 0 ? '<span class="hb-state">zone libre</span>' : "";
         hb.innerHTML = `<span class="hb-title">👑 PREMIER À ${hl.target}</span>${rows
           .map((r) => `<span class="hb-row${r.me ? " me" : ""}${r.holder ? " holder" : ""}"><i class="hb-dot" style="background:${r.color}"></i><span class="hb-bar"><i style="width:${Math.min(100, (r.points / hl.target) * 100)}%"></i></span><b>${r.points}</b></span>`)
           .join("")}${state}`;
@@ -1619,7 +1627,7 @@ class App implements AppCtx {
         "beforeend",
         `<span class="rk-name"><b>${esc(x.me ? this._profile.name : x.name)}</b>${x.me ? '<em class="rk-you">TOI</em>' : ""}</span>
         <span class="rk-place">${x.decided ? `${placeName(x.place)}${tie ? " ex aequo" : ""}` : "en jeu…"}</span>
-        ${x.points !== undefined ? `<span class="rk-pts" title="Points de colline">👑 ${x.points}</span>` : `<span class="rk-kills" title="Éliminations">💥 ${x.kills}</span>`}`,
+        ${x.points !== undefined ? `<span class="rk-pts" title="Points de domination">👑 ${x.points}</span>` : `<span class="rk-kills" title="Éliminations">💥 ${x.kills}</span>`}`,
       );
       ol.appendChild(li);
     });

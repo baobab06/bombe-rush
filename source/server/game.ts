@@ -7,7 +7,7 @@ import { CHARACTERS } from "../src/core/characters";
 import { Match } from "../src/core/match";
 import { DT } from "../src/core/rules";
 import { NO_INPUT, type InputCmd, type PlayerSlot, type SimEvent } from "../src/core/types";
-import { pickMap } from "../src/maps";
+import { pickMap, RANDOM_MAP } from "../src/maps";
 import { encodeSnapshot } from "../src/net/snapshot";
 import type { ServerMsg } from "../src/net/protocol";
 
@@ -61,7 +61,8 @@ export class GameRunner {
       }
     }
     const seed = (Math.random() * 2 ** 31) | 0;
-    this.match = new Match({ seed, map: pickMap(opts.mapId), modeId: opts.modeId, players: this.slots });
+    // Classique : la carte est toujours tirée au hasard (surprise)
+    this.match = new Match({ seed, map: pickMap(opts.modeId === "classic" ? RANDOM_MAP : opts.mapId), modeId: opts.modeId, players: this.slots });
     this.slots.forEach((slot, i) => {
       this.queues.push([]);
       this.lastCmd.push(NO_INPUT);

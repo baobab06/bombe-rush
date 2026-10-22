@@ -100,10 +100,10 @@
         <div class="mode-switch" id="homeModes" role="radiogroup" aria-label="Mode de jeu">
           <button data-mode="classic" role="radio"><span>🎮 CLASSIQUE</span></button>
           <button data-mode="chaos" role="radio"><span>💀 CHAOS</span><em class="ev-tag" id="homeEvent" hidden></em></button>
-          <button data-mode="koth" role="radio"><span>👑 COLLINE</span></button>
+          <button data-mode="koth" role="radio"><span>👑 DOMINATION</span></button>
         </div>
         <button class="btn btn-play" id="btnPlay"><i data-icon="play"></i><span class="lbl">JOUER</span></button>
-        <button class="play-setup" id="btnPlaySetup"><span id="playSub">Normal · 3 bots · Forêt</span><i data-icon="gear"></i></button>
+        <button class="play-setup" id="btnPlaySetup"><i data-icon="gear"></i><span class="ps-txt"><b class="ps-title">OPTIONS DE PARTIE</b><span id="playSub">Normal · 3 bots</span></span></button>
         <button class="btn btn-blue btn-private" id="btnPrivate"><i data-icon="users"></i><span>JOUER ENTRE AMIS</span></button>
       </div>
     </div>
@@ -116,7 +116,7 @@
 
   <!-- Préparation de partie -->
   <section class="screen" id="setup" hidden>
-    <header class="bar"><button class="back" data-back aria-label="Retour"><i data-icon="back"></i></button><h2>Nouvelle partie</h2><div class="wallet" data-wallet><i class="coin"></i><b data-coins>0</b></div></header>
+    <header class="bar"><button class="back" data-back aria-label="Retour"><i data-icon="back"></i></button><h2>Options de partie</h2><div class="wallet" data-wallet><i class="coin"></i><b data-coins>0</b></div></header>
     <div class="setup-grid">
       <div class="setup-left panel">
         <h3 class="label">Mode</h3>
@@ -131,6 +131,7 @@
       <div class="setup-right">
         <div class="label-row"><h3 class="label">Carte</h3><button class="chip" id="btnRandomMap">🎲 Aléatoire</button></div>
         <div class="map-row" id="mapRow"></div>
+        <div class="map-surprise" id="mapSurprise" hidden><b>🎲 Carte surprise</b><span>En Classique, la carte est tirée au hasard : tu la découvres au début de la partie.</span></div>
         <div class="launch-row">
           <div class="stake-banner" id="stakeBanner"></div>
           <button class="btn btn-yellow launch" id="btnLaunch"><i data-icon="play"></i><span>LANCER</span></button>
@@ -180,10 +181,11 @@
         <div class="mode-pick" id="lobbyModes">
           <button data-mode="classic">🎮 CLASSIQUE</button>
           <button data-mode="chaos">💀 CHAOS</button>
-          <button data-mode="koth">👑 COLLINE</button>
+          <button data-mode="koth">👑 DOMINATION</button>
         </div>
         <h3 class="label">Carte</h3>
         <div class="map-chips" id="lobbyMaps"></div>
+        <p class="map-surprise small" id="lobbySurprise" hidden>🎲 Carte surprise en Classique</p>
         <label class="toggle small"><span>Compléter avec des bots</span><input type="checkbox" id="lobbyBots"><i></i></label>
       </div>
       <div class="lobby-right">

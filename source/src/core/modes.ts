@@ -43,8 +43,8 @@ export const MODES: ModeDef[] = [
   },
   {
     id: "koth",
-    name: "Roi de la colline",
-    tagline: "Reste seul sur la colline pour marquer. Premier à 25 points !",
+    name: "Domination",
+    tagline: "Reste seul dans la zone pour marquer. Premier à 25 points !",
     available: true,
     emoji: "👑",
     suddenDeath: false,

@@ -7,7 +7,7 @@ import { HILL_RULES } from "../core/hill";
 import { DT, RULES } from "../core/rules";
 import { NO_INPUT, type Difficulty, type PlayerSlot, type SimEvent } from "../core/types";
 import { Controls } from "../input/controls";
-import { getMap, pickMap } from "../maps";
+import { getMap, pickMap, RANDOM_MAP } from "../maps";
 import { LocalSession, type GameSession } from "../net/session";
 import { haptics } from "../platform/haptics";
 import { Renderer, type Rect } from "../render/renderer";
@@ -133,7 +133,8 @@ export class GameScreen {
         name: getCharacter(id).name, characterId: id, ...randomLook(id, false), isBot: true, difficulty: setup.difficulty,
       })),
     ];
-    this.begin(players, pickMap(setup.mapId).id, setup.modeId, 0, (Math.random() * 1e9) | 0);
+    // Classique : la carte est toujours tirée au hasard (surprise)
+    this.begin(players, pickMap(setup.modeId === "classic" ? RANDOM_MAP : setup.mapId).id, setup.modeId, 0, (Math.random() * 1e9) | 0);
   }
 
   restart() {
@@ -472,7 +473,7 @@ export class GameScreen {
           break;
         case "respawn":
           audio.play("shield", e.player === me.id ? 1 : 0.35);
-          if (e.player === me.id) this.onBanner?.("👑 DE RETOUR", "FONCE SUR LA COLLINE !");
+          if (e.player === me.id) this.onBanner?.("👑 DE RETOUR", "FONCE SUR LA ZONE !");
           this.onHud?.();
           break;
         case "shieldBlocked":

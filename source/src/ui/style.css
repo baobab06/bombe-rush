@@ -547,7 +547,7 @@ button:focus-visible, input:focus-visible + i { outline: 3px solid var(--coin); 
 .code-box b { font-family: var(--display); font-weight: 400; font-size: min(10cqh, 4.6cqw); letter-spacing: .14em; color: var(--coin); user-select: text; -webkit-user-select: text; text-shadow: 0 .5cqh 0 var(--ink); }
 .code-actions { display: flex; flex-wrap: wrap; gap: 1.4cqh; flex: 1; justify-content: flex-end; align-items: center; }
 .mode-pick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2cqh; }
-.mode-pick button { padding: 2cqh 2cqh; border-radius: 3.2cqh; background: rgba(10,6,40,.45); border: max(2px,.55cqh) solid rgba(255,255,255,.12); font-family: var(--display); font-size: .84em; letter-spacing: .02em; color: var(--muted); }
+.mode-pick button { padding: 2cqh 1.2cqh; white-space: nowrap; font-size: min(.84em, 2.6cqw) !important; border-radius: 3.2cqh; background: rgba(10,6,40,.45); border: max(2px,.55cqh) solid rgba(255,255,255,.12); font-family: var(--display); font-size: .84em; letter-spacing: .02em; color: var(--muted); }
 .mode-pick button.sel { color: #fff; border-color: var(--coin); background: rgba(255,210,63,.15); box-shadow: 0 0 0 .6cqh rgba(255,210,63,.15); }
 .mode-pick button[data-mode="chaos"].sel { border-color: #ff4d6d; background: rgba(255,77,109,.18); box-shadow: 0 0 0 .6cqh rgba(255,77,109,.2); }
 .mode-pick button:disabled { cursor: default; }
@@ -1339,3 +1339,13 @@ button:focus-visible, input:focus-visible + i { outline: 3px solid var(--coin); 
 .hill-board .hb-state.dead { color: #ffd64a; }
 #hud.compact .hill-board .hb-bar { display: none; }
 .rk-pts { font-weight: 800; color: #ffd64a; }
+
+/* bouton « Options de partie » sous JOUER */
+.play-setup { padding: .9cqh 2.8cqh; gap: 1.6cqh; border-color: rgba(255,214,74,.45); }
+.play-setup .ps-txt { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.15; min-width: 0; }
+.play-setup .ps-title { font-family: var(--display); font-size: 1.12em; letter-spacing: .04em; color: #ffd64a; }
+.play-setup #playSub { font-size: .9em; opacity: .9; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+/* carte surprise (Classique) */
+.map-surprise { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.6cqh; text-align: center; margin-bottom: 3cqh; padding: 3cqh; border-radius: 3.4cqh; border: var(--edge) dashed rgba(255,255,255,.25); background: rgba(10,6,40,.35); color: var(--muted); }
+.map-surprise b { font-family: var(--display); font-size: 1.4em; color: #fff; }
+.map-surprise.small { flex: none; margin: 0; padding: 1.4cqh; font-weight: 800; font-size: .8em; }

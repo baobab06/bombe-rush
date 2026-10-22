@@ -356,13 +356,13 @@ durée du bouclier, mort subite…), la mèche des bombes dans `src/core/bombs.t
 probabilité et répartition des bonus). Les profils des bots sont en tête de
 `src/ai/bot.ts`.
 
-### Mode Roi de la colline (`koth`)
+### Mode Domination (`koth`, « roi de la colline »)
 
 - Règles : `src/core/hill.ts` (réglages dans `HILL_RULES`), branché par `src/core/modes.ts`.
 - Colline : jusqu'à 3×3 cases au centre (sans murs ni eau / lave), dégagée au départ ;
   si le centre est occupé (lagon de la Plage, autel du Labyrinthe), les cases
   praticables les plus proches, à même distance (symétrique).
-- Seul sur la colline : 1 point / s. À deux ou plus : disputée, personne ne marque.
+- Seul dans la zone : 1 point / s. À deux ou plus : disputée, personne ne marque.
 - Éliminé : réapparition après 3 s, loin des autres et de la colline, bouclier 2,5 s,
   pouvoirs de départ. Pas de mort subite dans ce mode.
 - Premier à 25 points, sinon meilleur score à la fin du temps (égalité = match nul).
@@ -380,6 +380,12 @@ probabilité et répartition des bonus). Les profils des bots sont en tête de
   ponts, autel enflammé au centre (mur), portes en haut et en bas.
 - Sur cette map moins remplie, chaque zone de départ est fermée par des caisses
   (`generateArena`), comme sur les maps pleines.
+
+### Choix de la carte
+
+- Classique : carte toujours tirée au hasard (« carte surprise »), en solo comme en
+  partie privée (`app/game.ts`, `server/game.ts`) ; le choix de carte est masqué.
+- Chaos et Domination : carte au choix ou aléatoire (bouton « Options de partie »).
 
 ### Positions de départ
 
