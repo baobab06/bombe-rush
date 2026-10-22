@@ -327,7 +327,7 @@ export class Renderer {
   private groundRows = 0;
 
   private bakeGround(m: Match) {
-    const key = `${this.s}|${this.dpr}|${m.config.seed}|${this.ox}|${this.oy}|${this.viewW}|${this.viewH}`;
+    const key = `${this.s}|${this.dpr}|${m.config.seed}|${this.ox}|${this.oy}|${this.viewW}|${this.viewH}|${this.art.version?.() ?? 0}`;
     if (key === this.groundKey && this.ground) return;
     this.groundKey = key;
     const { w, h } = m.grid;

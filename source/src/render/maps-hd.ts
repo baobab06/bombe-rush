@@ -152,6 +152,64 @@ function softShadow(g: Ctx, x: number, y: number, w: number, h: number, r: numbe
   g.restore();
 }
 
+// ------------------------------------------------ illustrations (images)
+/**
+ * Illustrations faites avec une IA d'images (fond transparent, 256×256),
+ * dans public/sprites/labyrinth/. Si une image manque ou n'est pas encore
+ * chargée, le dessin par code prend le relais : le jeu marche toujours.
+ */
+const SPRITE_FILES: Record<string, string> = {
+  barrel: "sprites/labyrinth/barrel.png",
+  crate: "sprites/labyrinth/crate.png",
+  bush: "sprites/labyrinth/bush.png",
+  wallTorch: "sprites/labyrinth/wall-torch.png",
+  altar: "sprites/labyrinth/altar.png",
+  floorSand: "sprites/labyrinth/floor-sand.png",
+  water: "sprites/labyrinth/water.png",
+  bridge: "sprites/labyrinth/bridge.png",
+  wall: "sprites/labyrinth/wall.png",
+  floor: "sprites/labyrinth/floor.png",
+};
+/** augmente à chaque image chargée : le sol (cuit une fois) est alors redessiné */
+let spriteVersion = 0;
+const images = new Map<string, HTMLImageElement>();
+function img(id: string): HTMLImageElement | null {
+  const file = SPRITE_FILES[id];
+  if (!file || typeof Image === "undefined") return null;
+  let im = images.get(id);
+  if (!im) {
+    im = new Image();
+    im.decoding = "async";
+    im.onload = () => spriteVersion++;
+    im.src = file;
+    images.set(id, im);
+  }
+  return im.complete && im.naturalWidth > 0 ? im : null;
+}
+// préchargement dès l'ouverture du jeu
+if (typeof window !== "undefined") for (const id of Object.keys(SPRITE_FILES)) img(id);
+
+/**
+ * Pose une illustration vue de dessus comme un objet en relief : ombre douce,
+ * épaisseur (copies assombries empilées) puis le dessus, remonté de LIFT.
+ */
+function illustrated(g: Ctx, s: number, im: HTMLImageElement, round: boolean, scale = 0.9) {
+  const lift = s * LIFT;
+  const w = s * scale;
+  const x = (s - w) / 2;
+  const yTop = (s - w) / 2 - lift;
+  // ombre au sol
+  if (round) ellipse(g, s / 2 + s * 0.06, s / 2 + s * 0.1, w * 0.48, w * 0.44, "rgba(0,0,0,0.35)");
+  else softShadow(g, x, yTop + lift, w, w, s * 0.08);
+  // épaisseur
+  const steps = 5;
+  g.save();
+  g.filter = "brightness(0.5) saturate(1.1)";
+  for (let k = steps; k >= 1; k--) g.drawImage(im, x, yTop + (lift * k) / steps, w, w);
+  g.restore();
+  g.drawImage(im, x, yTop, w, w);
+}
+
 // ====================================================================
 //                              LABYRINTHE
 // ====================================================================
@@ -442,9 +500,11 @@ function labFloorHD(g: Ctx, px: number, py: number, s: number, tx: number, ty: n
   const sand = cx <= 2 && cy <= 2 && !(cx === 2 && cy === 2);
   const center = cx >= 4 && cy >= 3;
   const base = sand ? "#d6b07a" : center ? "#454c5e" : "#3d4351";
-  // 4 dalles biseautées
+  const sandImg = img(sand ? "floorSand" : "floor");
+  if (sandImg) g.drawImage(sandImg, px, py, s, s);
+  // 4 dalles biseautées (dessin par code si pas d'illustration)
   const half = s / 2;
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < (sandImg ? 0 : 4); i++) {
     const ox = (i % 2) * half;
     const oy = Math.floor(i / 2) * half;
     const v = (hash(tx * 2 + (i % 2), ty * 2 + (i >> 1), 21) - 0.5) * (sand ? 0.12 : 0.16);
@@ -460,16 +520,29 @@ function labFloorHD(g: Ctx, px: number, py: number, s: number, tx: number, ty: n
       circle(g, px + ox + half * (0.15 + hash(tx * 9 + i, ty, k) * 0.7), py + oy + half * (0.15 + hash(tx, ty * 9 + i, k) * 0.7), s * 0.007, sand ? "rgba(140,100,50,0.5)" : "rgba(255,255,255,0.07)");
   }
   const h = hash(cx, cy, 31);
-  if (!sand && h < 0.2) {
+  if (sandImg) {
+    // sol illustré : pas de décor ajouté par code
+  } else if (!sand && h < 0.2) {
     for (let k = 0; k < 4; k++) circle(g, px + s * (0.08 + k * 0.05), py + s * (0.85 - (k % 2) * 0.05), s * 0.035, k % 2 ? "rgba(98,160,70,0.7)" : "rgba(70,130,55,0.7)");
   } else if (!sand && h < 0.33) {
     line(g, [px + s * 0.55, py + s * 0.52, px + s * 0.66, py + s * 0.66, px + s * 0.6, py + s * 0.82, px + s * 0.7, py + s * 0.95], "rgba(8,10,16,0.6)", Math.max(1, s * 0.016));
-  } else if (sand && h < 0.3) {
+  } else if (sand && !sandImg && h < 0.3) {
     ellipse(g, px + s * 0.7, py + s * 0.3, s * 0.06, s * 0.035, "#b89260");
   }
   // pont de bois au-dessus des canaux
   const water = (x: number, y: number) => at(L, x, y) === "~";
-  if (at(L, tx, ty) === "_" && (water(tx - 1, ty) || water(tx + 1, ty) || water(tx, ty - 1) || water(tx, ty + 1))) labBridge(g, px, py, s, water(tx - 1, ty) || water(tx + 1, ty));
+  if (at(L, tx, ty) === "_" && (water(tx - 1, ty) || water(tx + 1, ty) || water(tx, ty - 1) || water(tx, ty + 1))) {
+    // eau à gauche/droite : on traverse de haut en bas (pont tel quel), sinon pont tourné
+    const vertical = water(tx - 1, ty) || water(tx + 1, ty);
+    const im = img("bridge");
+    if (im) {
+      g.save();
+      g.translate(px + s / 2, py + s / 2);
+      if (!vertical) g.rotate(Math.PI / 2);
+      g.drawImage(im, -s / 2, -s / 2, s, s);
+      g.restore();
+    } else labBridge(g, px, py, s, vertical);
+  }
   // occlusion ambiante au pied des murs (lumière venant du haut-gauche)
   const wall = (x: number, y: number) => at(L, x, y) === "#";
   g.save();
@@ -652,13 +725,17 @@ function labFarHD(g: Ctx, px: number, py: number, s: number, tx: number, ty: num
 
 export const LABYRINTH_HD: Art = {
   id: "labyrinth",
+  version: () => spriteVersion,
   background: "#12301f",
   ink: "#151922",
   farVeil: "rgba(4, 12, 10, 0.42)",
   floor: labFloorHD,
   border: (g, px, py, s, tx, ty, ring) => (ring ? labRingHD(g, px, py, s, tx, ty) : labFarHD(g, px, py, s, tx, ty)),
   terrain: (g, kind, px, py, s, tx, ty) => {
-    if (kind === TERRAIN.WATER) labWaterHD(g, px, py, s, tx, ty);
+    if (kind !== TERRAIN.WATER) return;
+    const im = img("water");
+    if (im) g.drawImage(im, px, py, s, s);
+    else labWaterHD(g, px, py, s, tx, ty);
   },
   animate: (ctx, kind, px, py, s, tx, ty, t) => {
     if (kind !== TERRAIN.WATER) return;
@@ -683,6 +760,42 @@ export const LABYRINTH_HD: Art = {
     const [cx, cy] = canon(L, tx, ty);
     // murs de mort subite (hors plan) : pierre simple
     const key = kind === "plain" || kind === "torch" || kind === "glyph" || kind === "moss" ? `lab-wall-${kind}-${cx}-${cy}` : `lab-${kind}`;
+    // murs simples (et murs de mort subite) : même principe que le mur à torche
+    const wallImg = kind === "plain" || kind === "glyph" || kind === "moss" ? img("wall") : null;
+    if (wallImg) {
+      cached(ctx, "lab-wall-img", px, py, s, LIFT + 0.05, 0.18, (g, ss) => {
+        stoneBlock(g, ss, 1, LAB_STONE);
+        const pad = ss * 0.035;
+        g.drawImage(wallImg, pad, -ss * LIFT + pad, ss - pad * 2, ss - pad * 2 - ss * LIFT * 0.12);
+      });
+      return;
+    }
+    const torchImg = kind === "torch" ? img("wallTorch") : null;
+    const t = now();
+    const flick = 0.85 + 0.15 * Math.sin(t * 10.7 + tx * 7.1 + ty) + 0.06 * Math.sin(t * 23.3 + ty * 3.7);
+    if (torchImg) {
+      // corps de pierre comme les autres murs, illustration sur le dessus ; le feu est dans
+      // l'image, on ajoute seulement sa lueur qui vacille
+      cached(ctx, "lab-wallTorch-img", px, py, s, LIFT + 0.05, 0.18, (g, ss) => {
+        stoneBlock(g, ss, 1, LAB_STONE);
+        const pad = ss * 0.035;
+        g.drawImage(torchImg, pad, -ss * LIFT + pad, ss - pad * 2, ss - pad * 2 - ss * LIFT * 0.12);
+      });
+      glow(ctx, px + s / 2, py + s / 2 - s * LIFT * 1.1, s * 0.5 * flick, "255,150,60", 0.5);
+      return;
+    }
+    const altarImg = kind === "altar" ? img("altar") : null;
+    if (altarImg) {
+      // l'autel : un monument qui dépasse de sa case (image 256×384)
+      cached(ctx, "lab-altar-img", px, py, s, 1.0, 0.18, (g, ss) => {
+        ellipse(g, ss * 0.56, ss * 0.86, ss * 0.46, ss * 0.16, "rgba(0,0,0,0.4)");
+        const w = ss * 1.25;
+        const h = w * 1.5;
+        g.drawImage(altarImg, (ss - w) / 2, ss * 0.97 - h, w, h);
+      });
+      glow(ctx, px + s / 2, py + s * 0.97 - s * 1.25 * 1.5 * 0.8, s * 0.8 * flick, "255,150,60", 0.55);
+      return;
+    }
     cached(ctx, key, px, py, s, LIFT + 0.05, 0.18, (g, ss) => labWallSprite(g, ss, tx, ty, kind));
     const top = py - s * LIFT + s * 0.035;
     const hTop = s - s * 0.07 - s * LIFT * 0.12;
@@ -692,14 +805,20 @@ export const LABYRINTH_HD: Art = {
   block: (ctx, px, py, s, tx, ty) => {
     const [cx, cy] = canon(L, tx, ty);
     const h = hash(cx, cy, 5);
-    if (h < 0.58) cached(ctx, `lab-crate-${Math.floor(h * 4)}`, px, py, s, LIFT + 0.05, 0.18, (g, ss) => labCrateSprite(g, ss, Math.floor(h * 4)));
-    else if (h < 0.78) cached(ctx, "lab-barrel", px, py, s, LIFT + 0.05, 0.18, labBarrelSprite);
-    else cached(ctx, `lab-hedge-${cx}-${cy}`, px, py, s, LIFT + 0.05, 0.18, (g, ss) => labHedgeSprite(g, ss, cx * 13 + cy));
+    // illustration si elle est chargée, sinon dessin par code
+    const draw = (id: string, round: boolean, scale: number, fallbackKey: string, fallback: (g: Ctx, ss: number) => void) => {
+      const im = img(id);
+      if (im) cached(ctx, `lab-${id}-img`, px, py, s, LIFT + 0.05, 0.18, (g, ss) => illustrated(g, ss, im, round, scale));
+      else cached(ctx, fallbackKey, px, py, s, LIFT + 0.05, 0.18, fallback);
+    };
+    if (h < 0.58) draw("crate", false, 0.9, `lab-crate-${Math.floor(h * 4)}`, (g, ss) => labCrateSprite(g, ss, Math.floor(h * 4)));
+    else if (h < 0.78) draw("barrel", true, 0.9, "lab-barrel", labBarrelSprite);
+    else draw("bush", true, 0.94, `lab-hedge-${cx}-${cy}`, (g, ss) => labHedgeSprite(g, ss, cx * 13 + cy));
   },
   debris: (tx, ty) => {
     const [cx, cy] = canon(L, tx, ty);
     const h = hash(cx, cy, 5);
-    return h < 0.78 ? ["#e39a52", "#9c5a26", "#c87c3c"] : ["#5cc04a", "#2c7a2e", "#8be06a"];
+    return h < 0.78 ? ["#e39a52", "#9c5a26", "#c87c3c"] : ["#3f8a3a", "#1f5a24", "#e8c840"];
   },
   eruption: ["#ffcf4a", "#ff5a1f"],
 };

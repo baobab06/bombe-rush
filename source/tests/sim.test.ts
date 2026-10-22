@@ -240,7 +240,9 @@ console.log("Nouvelle map : Labyrinthe");
   check(!MAPS.some((m) => m.id === "chaos_arena"), "l'Arène Chaos a été retirée");
   const slots = (n: number) => Array.from({ length: n }, (_, i) => ({ name: "P" + i, characterId: "pip", isBot: false }));
   // vraiment différentes : plans comparés case par case, entre elles et avec les anciennes
-  const diffCells = (a: string[], b: string[]) => a.reduce((n, row, y) => n + [...row].filter((c, x) => c !== b[y][x]).length, 0);
+  // cases différentes ; une map de taille différente compte comme entièrement différente
+  const diffCells = (a: string[], b: string[]) =>
+    a.length !== b.length || a[0].length !== b[0].length ? a.length * a[0].length : a.reduce((n, row, y) => n + [...row].filter((c, x) => c !== b[y][x]).length, 0);
   const minOld = (m: typeof LAB) => Math.min(...MAPS.filter((o) => o !== LAB).map((o) => diffCells(m.layout, o.layout)));
   check(minOld(LAB) >= 20, `différent des 4 autres maps (au moins ${minOld(LAB)} cases différentes)`);
   const count = (m: typeof LAB, c: string) => m.layout.join("").split(c).length - 1;
@@ -346,7 +348,8 @@ console.log("Nouvelle map : Labyrinthe");
             if (e.t === "chaosWarn" || e.t === "chaosStart") { chaosEvents++; if (m.time < 14.9) chaosEarly++; }
           }
           // (les flammes survolent l'eau et le vide comme pour les bombes : seul un mur est interdit)
-          if (m.chaos?.pending) for (const i of m.chaos.pending.zone) if (m.grid.tiles[i] === TILE.WALL) badZone++;
+          // (pendant la mort subite, un mur peut tomber sur une case déjà annoncée : le feu l'ignore)
+          if (m.chaos?.pending && !m.suddenDeath) for (const i of m.chaos.pending.zone) if (m.grid.tiles[i] === TILE.WALL) badZone++;
           for (const p of m.players) if (p.alive && m.grid.blocksMove(Math.floor(p.x), Math.floor(p.y))) stuck++;
           if (m.time > 4 && m.time < 4 + DT * 1.5) m.players.forEach((p, i) => { if (Math.abs(p.x - start[i][0]) + Math.abs(p.y - start[i][1]) > 0.5) moved++; });
         }

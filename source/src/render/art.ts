@@ -27,6 +27,8 @@ export interface Art {
   pillar(ctx: Ctx, px: number, py: number, s: number, tx: number, ty: number): void;
   block(ctx: Ctx, px: number, py: number, s: number, tx: number, ty: number): void;
   debris(tx: number, ty: number): string[];
+  /** change quand une illustration finit de charger : le sol cuit est alors redessiné */
+  version?(): number;
   /** couleurs des étincelles d'éruption (cheminée / faille) */
   eruption?: string[];
 }
