@@ -655,7 +655,7 @@ class App implements AppCtx {
       const b = document.createElement("button");
       b.className = "choice" + (m.id === st.modeId ? " sel" : "") + (m.available ? "" : " locked");
       b.dataset.mode = m.id;
-      b.innerHTML = `<b>${m.id === "chaos" ? "💀 " : "🎮 "}${m.name}</b><span>${m.tagline}</span>${m.available ? "" : '<em class="tag">Bientôt</em>'}`;
+      b.innerHTML = `<b>${m.emoji ?? "🎮"} ${m.name}</b><span>${m.tagline}</span>${m.available ? "" : '<em class="tag">Bientôt</em>'}`;
       b.disabled = !m.available;
       b.setAttribute("aria-pressed", String(m.id === st.modeId));
       b.addEventListener("click", () => {
@@ -988,7 +988,8 @@ class App implements AppCtx {
     }
     kicker.textContent = "🎮 Invitation";
     title.textContent = `${pk.hostName} t'invite à jouer !`;
-    const mode = pk.modeId === "chaos" ? '<span class="chaos">💀 Chaos</span>' : "<span>🎮 Classique</span>";
+    const md = MODES.find((x) => x.id === pk.modeId) ?? MODES[0];
+    const mode = `<span${md.id === "chaos" ? ' class="chaos"' : ""}>${md.emoji ?? "🎮"} ${md.name}</span>`;
     const map = MAPS.find((m) => m.id === pk.mapId)?.name ?? "🎲 Aléatoire";
     room.innerHTML = `${mode}<span>🗺️ ${map}</span><span>👥 ${pk.players}/${pk.max}</span>`;
     const full = (pk.players ?? 0) >= (pk.max ?? 4);
@@ -1448,6 +1449,25 @@ class App implements AppCtx {
     }
     const alive = h.players.filter((p) => p.alive).length;
     $("hudAlive").textContent = `${alive} en vie`;
+    // Roi de la colline : tableau des points à la place du compteur « en vie »
+    const hb = $("hudHill");
+    $("hudAlive").hidden = !!h.hill;
+    hb.hidden = !h.hill;
+    if (h.hill) {
+      const hl = h.hill;
+      const sig = JSON.stringify(hl);
+      if (hb.dataset.sig !== sig) {
+        hb.dataset.sig = sig;
+        const rows = [...hl.rows].sort((a, b) => b.points - a.points);
+        const state = hl.myRespawn > 0
+          ? `<span class="hb-state dead">💀 retour dans ${hl.myRespawn} s</span>`
+          : hl.contested ? '<span class="hb-state contested">⚔️ colline disputée</span>'
+          : hl.holder < 0 ? '<span class="hb-state">colline libre</span>' : "";
+        hb.innerHTML = `<span class="hb-title">👑 PREMIER À ${hl.target}</span>${rows
+          .map((r) => `<span class="hb-row${r.me ? " me" : ""}${r.holder ? " holder" : ""}"><i class="hb-dot" style="background:${r.color}"></i><span class="hb-bar"><i style="width:${Math.min(100, (r.points / hl.target) * 100)}%"></i></span><b>${r.points}</b></span>`)
+          .join("")}${state}`;
+      }
+    }
     const pw = $("hudPowers");
     const psig = h.powers.map((p) => p.value).join();
     if (pw.dataset.sig !== psig) {
@@ -1599,7 +1619,7 @@ class App implements AppCtx {
         "beforeend",
         `<span class="rk-name"><b>${esc(x.me ? this._profile.name : x.name)}</b>${x.me ? '<em class="rk-you">TOI</em>' : ""}</span>
         <span class="rk-place">${x.decided ? `${placeName(x.place)}${tie ? " ex aequo" : ""}` : "en jeu…"}</span>
-        <span class="rk-kills" title="Éliminations">💥 ${x.kills}</span>`,
+        ${x.points !== undefined ? `<span class="rk-pts" title="Points de colline">👑 ${x.points}</span>` : `<span class="rk-kills" title="Éliminations">💥 ${x.kills}</span>`}`,
       );
       ol.appendChild(li);
     });

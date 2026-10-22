@@ -71,6 +71,8 @@ export class Match {
   fog = false;
   /** état du mode Chaos (null en Classique) */
   chaos: import("./chaos").ChaosDirector | null = null;
+  /** état du mode Roi de la colline (null sinon) */
+  hill: import("./hill").HillState | null = null;
   /** cheminées volcaniques : [x, y, décalage de phase] */
   readonly vents: [number, number, number][] = [];
 
@@ -470,6 +472,7 @@ export class Match {
     p.stats.survivalTime = this.time;
     if (killer >= 0 && killer !== p.id) this.players[killer].stats.kills++;
     this.events.push({ t: "playerDied", player: p.id, killer, x: p.x, y: p.y });
+    this.hill?.onDeath(p);
   }
 
   // ------------------------------------------------------- mort subite
@@ -488,6 +491,7 @@ export class Match {
   }
 
   private updateSuddenDeath(): void {
+    if (this.mode.suddenDeath === false) return;
     if (!this.suddenDeath && this.timeLeft <= RULES.suddenDeathAt) {
       this.suddenDeath = true;
       this.events.push({ t: "suddenDeath" });
@@ -628,6 +632,7 @@ export class Match {
   /** Murs de mort subite à venir dans `horizon` secondes : [x, y, délai]. */
   upcomingDrops(horizon: number): [number, number, number][] {
     const out: [number, number, number][] = [];
+    if (this.mode.suddenDeath === false) return out;
     if (!this.suddenDeath && this.timeLeft - horizon > RULES.suddenDeathAt) return out;
     const startIn = this.suddenDeath ? Math.max(0, this.sdTimer) : this.timeLeft - RULES.suddenDeathAt;
     for (let k = this.sdIndex; k < this.sdOrder.length; k++) {
@@ -670,7 +675,9 @@ export class Match {
   // ------------------------------------------------------- fin de match
   private updateEnd(): void {
     if (this.phase === "playing") {
-      if (this.aliveCount <= 1 || this.timeLeft <= 0) {
+      // Roi de la colline : on réapparaît, la partie se joue aux points
+      const done = this.hill ? this.hill.reached || this.timeLeft <= 0 : this.aliveCount <= 1 || this.timeLeft <= 0;
+      if (done) {
         this.phase = "ending";
         this.endTimer = RULES.endDelay;
       }
@@ -688,6 +695,16 @@ export class Match {
    */
   standings(): { id: number; place: number; alive: boolean; decided: boolean }[] {
     const over = this.phase === "over";
+    const hill = this.hill;
+    if (hill) {
+      // Roi de la colline : classement aux points (égalité = même place), connu à la fin
+      const ranked = [...this.players].sort((a, b) => hill.points(b.id) - hill.points(a.id) || a.id - b.id);
+      let place = 1;
+      return ranked.map((p, i) => {
+        if (i > 0 && hill.points(ranked[i - 1].id) !== hill.points(p.id)) place = i + 1;
+        return { id: p.id, place, alive: p.alive, decided: over };
+      });
+    }
     const ranked = [...this.players].sort((a, b) => {
       if (a.alive !== b.alive) return a.alive ? -1 : 1;
       if (a.alive) return a.id - b.id;
@@ -705,7 +722,7 @@ export class Match {
     this.phase = "over";
     const alive = this.players.filter((p) => p.alive);
     for (const p of alive) p.stats.survivalTime = this.time;
-    this.winnerId = alive.length === 1 ? alive[0].id : -1;
+    this.winnerId = this.hill ? this.hill.leader() : alive.length === 1 ? alive[0].id : -1;
     for (const st of this.standings()) this.players[st.id].place = st.place;
     this.events.push({ t: "matchEnd", winner: this.winnerId });
   }

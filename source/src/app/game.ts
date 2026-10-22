@@ -3,6 +3,7 @@ import { CHARACTERS, getCharacter, skinsOf } from "../core/characters";
 import { CHAOS_EVENTS } from "../core/chaos";
 import { ACCESSORIES, EMOTES, BOOMS, TRAILS } from "../core/cosmetics";
 import { lookOf } from "../render/bodies";
+import { HILL_RULES } from "../core/hill";
 import { DT, RULES } from "../core/rules";
 import { NO_INPUT, type Difficulty, type PlayerSlot, type SimEvent } from "../core/types";
 import { Controls } from "../input/controls";
@@ -50,6 +51,8 @@ export interface StandingRow {
   decided: boolean;
   alive: boolean;
   kills: number;
+  /** Roi de la colline : points marqués */
+  points?: number;
   me: boolean;
 }
 
@@ -321,7 +324,8 @@ export class GameScreen {
       this.onEnding?.();
     }
     if (!this.finished && this.finishTimer < 0) {
-      if (!me.alive) this.finishTimer = 1.8;
+      // (Roi de la colline : on réapparaît, la partie continue)
+      if (!me.alive && !m.hill) this.finishTimer = 1.8;
       else if (m.phase === "over") this.finishTimer = 1.0;
       // l'issue est connue : on la règle tout de suite (avant même l'écran
       // de résultats), pour qu'un rechargement ne puisse rien changer
@@ -380,6 +384,7 @@ export class GameScreen {
         decided: st.decided,
         alive: st.alive,
         kills: p.stats.kills,
+        points: m.hill ? m.hill.points(p.id) : undefined,
         me: p.id === s.localPlayer,
       };
     });
@@ -456,6 +461,19 @@ export class GameScreen {
           break;
         case "shieldOn":
           audio.play("shield", e.player === me.id ? 1 : 0.4);
+          break;
+        // Roi de la colline
+        case "hillTaken":
+          audio.play(e.player === me.id ? "coin" : "whoosh", e.player === me.id ? 1 : 0.35);
+          if (e.player === me.id) haptics.pulse(25);
+          break;
+        case "hillPoints":
+          if (e.player === me.id) audio.play("unlock", 0.6);
+          break;
+        case "respawn":
+          audio.play("shield", e.player === me.id ? 1 : 0.35);
+          if (e.player === me.id) this.onBanner?.("👑 DE RETOUR", "FONCE SUR LA COLLINE !");
+          this.onHud?.();
           break;
         case "shieldBlocked":
           audio.play("shieldHit");
@@ -563,6 +581,16 @@ export class GameScreen {
           }
         : null,
       players: m.players.map((p) => ({ color: lookOf(p.characterId, p.skinId).palette.main, alive: p.alive, me: p.id === me.id, name: p.name })),
+      /** Roi de la colline : points de chacun, qui marque, réapparition du joueur */
+      hill: m.hill
+        ? {
+            target: HILL_RULES.target,
+            holder: m.hill.holder,
+            contested: m.hill.contested,
+            myRespawn: me.alive ? 0 : Math.max(1, Math.ceil(m.hill.respawnIn[me.id])),
+            rows: m.players.map((p) => ({ color: lookOf(p.characterId, p.skinId).palette.main, points: m.hill!.points(p.id), me: p.id === me.id, holder: m.hill!.holder === p.id })),
+          }
+        : null,
       powers: [
         { type: "bomb", color: BONUS_COLORS.bomb[0], label: "bombes", value: me.maxBombs },
         { type: "flame", color: BONUS_COLORS.flame[0], label: "portée", value: me.range },

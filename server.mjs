@@ -669,17 +669,207 @@ class ChaosDirector {
   }
 }
 
+// src/core/rules.ts
+var RULES = {
+  tickRate: 60,
+  countdown: 3,
+  matchDuration: 150,
+  suddenDeathAt: 42,
+  suddenDeathInterval: 0.4,
+  suddenDeathWarn: 0.7,
+  endDelay: 1,
+  baseSpeed: 3.4,
+  speedPerLevel: 0.45,
+  maxSpeedLevel: 5,
+  startBombs: 1,
+  maxBombs: 8,
+  startRange: 1,
+  maxRange: 8,
+  bombFuse: BOMB_KINDS.standard.fuse,
+  bombWarn: BOMB_WARN,
+  fireDuration: 0.55,
+  shieldDuration: 3,
+  maxShieldCharges: 1,
+  ventPeriod: 9,
+  ventStagger: 3,
+  ventWarn: 1.6,
+  cornerAssist: 0.42
+};
+var DT = 1 / RULES.tickRate;
+
+// src/core/hill.ts
+var HILL_RULES = {
+  target: 25,
+  respawnDelay: 3,
+  respawnShield: 2.5,
+  respawnHillGap: 3
+};
+
+class HillState {
+  m;
+  cells;
+  cellSet;
+  center;
+  scores;
+  respawnIn;
+  holder = -1;
+  contested = false;
+  constructor(m) {
+    this.m = m;
+    const g = m.grid;
+    const cx = Math.floor((g.w - 1) / 2);
+    const cy = Math.floor((g.h - 1) / 2);
+    this.center = [cx, cy];
+    const usable = (x, y) => x > 0 && y > 0 && x < g.w - 1 && y < g.h - 1 && g.tile(x, y) !== TILE.WALL && !g.isHazard(x, y);
+    let cells = [];
+    for (let y = cy - 1;y <= cy + 1; y++)
+      for (let x = cx - 1;x <= cx + 1; x++)
+        if (usable(x, y))
+          cells.push(g.idx(x, y));
+    if (cells.length < 3) {
+      for (let d = 1;d < g.w + g.h; d++) {
+        const ring = [];
+        for (let y = 1;y < g.h - 1; y++)
+          for (let x = 1;x < g.w - 1; x++)
+            if (Math.abs(x - cx) + Math.abs(y - cy) === d && usable(x, y))
+              ring.push(g.idx(x, y));
+        if (ring.length >= 2) {
+          cells = ring;
+          break;
+        }
+      }
+    }
+    for (const i of cells)
+      if (g.tiles[i] === TILE.BLOCK) {
+        g.tiles[i] = TILE.FLOOR;
+        g.hiddenBonus[i] = null;
+      }
+    this.cells = cells;
+    this.cellSet = new Set(cells);
+    this.scores = m.players.map(() => 0);
+    this.respawnIn = m.players.map(() => 0);
+  }
+  isHill(x, y) {
+    return this.cellSet.has(this.m.grid.idx(x, y));
+  }
+  points(id) {
+    return Math.floor(this.scores[id] + 0.000001);
+  }
+  onDeath(p) {
+    this.respawnIn[p.id] = HILL_RULES.respawnDelay;
+  }
+  update() {
+    const m = this.m;
+    if (m.phase !== "playing") {
+      this.holder = -1;
+      this.contested = false;
+      return;
+    }
+    const on = m.players.filter((p) => p.alive && this.cellSet.has(m.grid.idx(Math.floor(p.x), Math.floor(p.y))));
+    this.contested = on.length > 1;
+    const prev = this.holder;
+    this.holder = on.length === 1 ? on[0].id : -1;
+    if (this.holder >= 0) {
+      const before = this.points(this.holder);
+      this.scores[this.holder] = Math.min(HILL_RULES.target, this.scores[this.holder] + DT);
+      const after = this.points(this.holder);
+      if (after !== before && after % 10 === 0)
+        m.events.push({ t: "hillPoints", player: this.holder, points: after });
+    }
+    if (this.holder !== prev && this.holder >= 0)
+      m.events.push({ t: "hillTaken", player: this.holder });
+    const n = m.players.length;
+    for (let k = 0;k < n; k++) {
+      const p = m.players[(k + m.tick) % n];
+      if (p.alive || this.respawnIn[p.id] <= 0)
+        continue;
+      this.respawnIn[p.id] -= DT;
+      if (this.respawnIn[p.id] <= 0)
+        this.respawn(p);
+    }
+  }
+  get reached() {
+    return this.scores.some((s) => s >= HILL_RULES.target - 0.000001);
+  }
+  leader() {
+    const best = Math.max(...this.scores.map((_, i) => this.points(i)));
+    const top = this.scores.map((_, i) => i).filter((i) => this.points(i) === best);
+    return top.length === 1 ? top[0] : -1;
+  }
+  respawn(p) {
+    const m = this.m;
+    const g = m.grid;
+    const others = m.players.filter((o) => o.alive && o.id !== p.id);
+    let best = null;
+    let bestScore = -Infinity;
+    for (let y = 1;y < g.h - 1; y++)
+      for (let x = 1;x < g.w - 1; x++) {
+        if (!m.isFreeCell(x, y, true) || g.fire[g.idx(x, y)] > 0)
+          continue;
+        if (this.inBlast(x, y))
+          continue;
+        const hill = Math.abs(x - this.center[0]) + Math.abs(y - this.center[1]);
+        if (hill < HILL_RULES.respawnHillGap)
+          continue;
+        let exits = 0;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]])
+          if (!g.blocksMove(x + dx, y + dy))
+            exits++;
+        if (!exits)
+          continue;
+        const near = others.length ? Math.min(...others.map((o) => Math.abs(o.x - 0.5 - x) + Math.abs(o.y - 0.5 - y))) : 10;
+        const score = Math.min(near, 8) * 10 + exits + m.rng.next();
+        if (score > bestScore) {
+          bestScore = score;
+          best = [x, y];
+        }
+      }
+    if (!best) {
+      this.respawnIn[p.id] = 0.5;
+      return;
+    }
+    p.x = best[0] + 0.5;
+    p.y = best[1] + 0.5;
+    p.alive = true;
+    p.moving = false;
+    p.slideX = 0;
+    p.slideY = 0;
+    p.faceX = 0;
+    p.faceY = 1;
+    p.speed = RULES.baseSpeed;
+    p.speedLevel = 0;
+    p.maxBombs = RULES.startBombs;
+    p.range = RULES.startRange;
+    p.activeBombs = Math.min(p.activeBombs, p.maxBombs);
+    p.shieldTime = HILL_RULES.respawnShield;
+    p.killedBy = -1;
+    this.respawnIn[p.id] = 0;
+    m.events.push({ t: "respawn", player: p.id, x: best[0], y: best[1] });
+  }
+  inBlast(x, y) {
+    for (const b of this.m.bombs.values()) {
+      if (b.tx === x && Math.abs(b.ty - y) <= b.range)
+        return true;
+      if (b.ty === y && Math.abs(b.tx - x) <= b.range)
+        return true;
+    }
+    return false;
+  }
+}
+
 // src/core/modes.ts
 var MODES = [
   {
     id: "classic",
     name: "Classique",
+    emoji: "\uD83C\uDFAE",
     tagline: "Le dernier debout gagne.",
     available: true
   },
   {
     id: "chaos",
     name: "Chaos",
+    emoji: "\uD83D\uDC80",
     tagline: "Pluie de bombes, tempêtes, explosions géantes…",
     available: true,
     onStart(m) {
@@ -687,6 +877,20 @@ var MODES = [
     },
     onTick(m, dt) {
       m.chaos?.update(dt);
+    }
+  },
+  {
+    id: "koth",
+    name: "Roi de la colline",
+    tagline: "Reste seul sur la colline pour marquer. Premier à 25 points !",
+    available: true,
+    emoji: "\uD83D\uDC51",
+    suddenDeath: false,
+    onStart(m) {
+      m.hill = new HillState(m);
+    },
+    onTick(m) {
+      m.hill?.update();
     }
   }
 ];
@@ -889,34 +1093,6 @@ var DIRS = [
   [0, -1, 4],
   [0, 1, 8]
 ];
-
-// src/core/rules.ts
-var RULES = {
-  tickRate: 60,
-  countdown: 3,
-  matchDuration: 150,
-  suddenDeathAt: 42,
-  suddenDeathInterval: 0.4,
-  suddenDeathWarn: 0.7,
-  endDelay: 1,
-  baseSpeed: 3.4,
-  speedPerLevel: 0.45,
-  maxSpeedLevel: 5,
-  startBombs: 1,
-  maxBombs: 8,
-  startRange: 1,
-  maxRange: 8,
-  bombFuse: BOMB_KINDS.standard.fuse,
-  bombWarn: BOMB_WARN,
-  fireDuration: 0.55,
-  shieldDuration: 3,
-  maxShieldCharges: 1,
-  ventPeriod: 9,
-  ventStagger: 3,
-  ventWarn: 1.6,
-  cornerAssist: 0.42
-};
-var DT = 1 / RULES.tickRate;
 
 // src/core/rng.ts
 class Rng {
@@ -1182,6 +1358,8 @@ class BotBrain {
     }
     if (this.path.length)
       return;
+    if (m.hill && this.playHill(m, p, danger))
+      return;
     if (this.prof.aggression < 0.5 && this.rng.chance(0.25)) {
       const wander = this.findTarget(m, p, danger, 3, () => this.rng.chance(0.3));
       if (wander)
@@ -1208,6 +1386,74 @@ class BotBrain {
     const chase = this.pathToNearestEnemy(m, p, danger);
     if (chase)
       this.path = chase;
+  }
+  playHill(m, p, danger) {
+    const hill = m.hill;
+    const g = m.grid;
+    const [px, py] = [Math.floor(p.x), Math.floor(p.y)];
+    if (hill.isHill(px, py)) {
+      this.path = [];
+      this.lastDecision = "hill";
+      return true;
+    }
+    if (this.prof.aggression < 0.5 && this.rng.chance(0.35))
+      return false;
+    const toHill = this.findTarget(m, p, danger, 40, (i) => hill.cellSet.has(i) && g.bombAt[i] < 0);
+    if (toHill && toHill.length) {
+      this.path = toHill;
+      this.lastDecision = "hill";
+      return true;
+    }
+    const dist = this.hillDistance(m);
+    const mine = dist[g.idx(px, py)];
+    const goal = this.findTarget(m, p, danger, 30, (i) => {
+      if (g.bombAt[i] >= 0)
+        return false;
+      const x = i % g.w;
+      const y = Math.floor(i / g.w);
+      for (const [dx, dy] of DIRS) {
+        const n = g.idx(x + dx, y + dy);
+        if (g.tile(x + dx, y + dy) === TILE.BLOCK && dist[n] < mine)
+          return true;
+      }
+      return false;
+    });
+    if (goal && goal.length) {
+      this.path = goal;
+      this.lastDecision = "hill";
+      return true;
+    }
+    return false;
+  }
+  hillCache = null;
+  hillDistance(m) {
+    if (this.hillCache && m.tick - this.hillCache.tick < 30)
+      return this.hillCache.dist;
+    const g = m.grid;
+    const dist = new Int16Array(g.w * g.h).fill(32000);
+    const q = [];
+    for (const c of m.hill.cells) {
+      dist[c] = 0;
+      q.push(c);
+    }
+    for (let k = 0;k < q.length; k++) {
+      const c = q[k];
+      const x = c % g.w;
+      const y = Math.floor(c / g.w);
+      for (const [dx, dy] of DIRS) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (g.tile(nx, ny) === TILE.WALL || g.isHazard(nx, ny))
+          continue;
+        const n = g.idx(nx, ny);
+        if (dist[n] > dist[c] + 1) {
+          dist[n] = dist[c] + 1;
+          q.push(n);
+        }
+      }
+    }
+    this.hillCache = { tick: m.tick, dist };
+    return dist;
   }
   blocksLeft(m) {
     let n = 0;
@@ -1917,6 +2163,7 @@ class Match {
   fuseMul = 1;
   fog = false;
   chaos = null;
+  hill = null;
   vents = [];
   constructor(config) {
     this.config = config;
@@ -2304,6 +2551,7 @@ class Match {
     if (killer >= 0 && killer !== p.id)
       this.players[killer].stats.kills++;
     this.events.push({ t: "playerDied", player: p.id, killer, x: p.x, y: p.y });
+    this.hill?.onDeath(p);
   }
   buildSuddenDeathOrder() {
     const { w, h } = this.grid;
@@ -2328,6 +2576,8 @@ class Match {
     this.sdOrder = out.filter(([x, y]) => this.grid.tile(x, y) !== TILE.WALL && !this.grid.isHazard(x, y));
   }
   updateSuddenDeath() {
+    if (this.mode.suddenDeath === false)
+      return;
     if (!this.suddenDeath && this.timeLeft <= RULES.suddenDeathAt) {
       this.suddenDeath = true;
       this.events.push({ t: "suddenDeath" });
@@ -2464,6 +2714,8 @@ class Match {
   }
   upcomingDrops(horizon) {
     const out = [];
+    if (this.mode.suddenDeath === false)
+      return out;
     if (!this.suddenDeath && this.timeLeft - horizon > RULES.suddenDeathAt)
       return out;
     const startIn = this.suddenDeath ? Math.max(0, this.sdTimer) : this.timeLeft - RULES.suddenDeathAt;
@@ -2508,7 +2760,8 @@ class Match {
   }
   updateEnd() {
     if (this.phase === "playing") {
-      if (this.aliveCount <= 1 || this.timeLeft <= 0) {
+      const done = this.hill ? this.hill.reached || this.timeLeft <= 0 : this.aliveCount <= 1 || this.timeLeft <= 0;
+      if (done) {
         this.phase = "ending";
         this.endTimer = RULES.endDelay;
       }
@@ -2520,6 +2773,16 @@ class Match {
   }
   standings() {
     const over = this.phase === "over";
+    const hill = this.hill;
+    if (hill) {
+      const ranked = [...this.players].sort((a, b) => hill.points(b.id) - hill.points(a.id) || a.id - b.id);
+      let place = 1;
+      return ranked.map((p, i) => {
+        if (i > 0 && hill.points(ranked[i - 1].id) !== hill.points(p.id))
+          place = i + 1;
+        return { id: p.id, place, alive: p.alive, decided: over };
+      });
+    }
     const ranked = [...this.players].sort((a, b) => {
       if (a.alive !== b.alive)
         return a.alive ? -1 : 1;
@@ -2540,7 +2803,7 @@ class Match {
     const alive = this.players.filter((p) => p.alive);
     for (const p of alive)
       p.stats.survivalTime = this.time;
-    this.winnerId = alive.length === 1 ? alive[0].id : -1;
+    this.winnerId = this.hill ? this.hill.leader() : alive.length === 1 ? alive[0].id : -1;
     for (const st of this.standings())
       this.players[st.id].place = st.place;
     this.events.push({ t: "matchEnd", winner: this.winnerId });
@@ -2571,6 +2834,7 @@ function encodeSnapshot(m, acks, events) {
     bombs: [...m.bombs.values()].map((b) => [b.id, b.ownerId, b.tx, b.ty, r2(b.fuse), b.range, b.passable, b.fuseTotal]),
     bonuses: [...m.bonuses.values()].map((b) => [b.id, b.type, b.tx, b.ty, r2(b.invuln), r2(b.age)]),
     pending: m.pendingDrops.map(([x, y, l]) => [x, y, r2(l)]),
+    hill: m.hill ? { scores: m.hill.scores.map(r2), respawn: m.hill.respawnIn.map(r2), holder: m.hill.holder, contested: m.hill.contested } : null,
     chaos: m.chaos ? {
       pending: m.chaos.pending ? [m.chaos.pending.def.id, r2(m.chaos.pendingLeft), m.chaos.pending.zone] : null,
       active: m.chaos.active.map((a) => [a.def.id, r2(a.timer), a.zone]),

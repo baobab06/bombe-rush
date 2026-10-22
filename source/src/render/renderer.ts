@@ -185,6 +185,15 @@ export class Renderer {
           this.fx(p.id).actionAt = this.time;
           break;
         }
+        case "respawn": {
+          // réapparition : anneau et étincelles dorées
+          for (let k = 0; k < 14; k++) P.spawn("twinkle", e.x + 0.5 + (Math.random() - 0.5) * 0.9, e.y + 0.5 + (Math.random() - 0.5) * 0.6, { z: 0.2 + Math.random() * 1, vz: 0.6, life: 0.7, size: 0.1, color: Math.random() < 0.5 ? "#ffe27a" : "#ffffff" });
+          P.spawn("ring", e.x + 0.5, e.y + 0.5, { life: 0.5, size: 0.3, color: "#ffd64a" });
+          break;
+        }
+        case "hillTaken":
+          P.spawn("ring", m.players[e.player].x, m.players[e.player].y, { life: 0.45, size: 0.35, color: "#ffd64a" });
+          break;
         case "chaosStart":
           if (CHAOS_EVENTS.find((d) => d.id === e.id)?.countdown) {
             this.boomAt = this.time;
@@ -461,6 +470,9 @@ export class Renderer {
       ctx.fill();
     }
 
+    // Roi de la colline : cases de la colline (dorées, rouges si disputée)
+    if (m.hill) this.drawHill(m, t);
+
     // index des joueurs par rangée (position interpolée)
     const px = (i: number) => (prev ? prev[i * 2] + (m.players[i].x - prev[i * 2]) * alpha : m.players[i].x);
     const py = (i: number) => (prev ? prev[i * 2 + 1] + (m.players[i].y - prev[i * 2 + 1]) * alpha : m.players[i].y);
@@ -530,7 +542,19 @@ export class Renderer {
       }
       // joueurs de la rangée, triés en profondeur
       rows[y].sort((a, b) => py(a) - py(b));
-      for (const id of rows[y]) this.drawPlayer(m, id, px(id), py(id));
+      for (const id of rows[y]) {
+        this.drawPlayer(m, id, px(id), py(id));
+        // Roi de la colline : couronne au-dessus de celui qui marque
+        if (m.hill && m.hill.holder === id) {
+          const bob = Math.sin(this.time * 6) * s * 0.04;
+          ctx.save();
+          ctx.font = `${Math.round(s * 0.5)}px sans-serif`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText("👑", px(id) * s, (py(id) - 1.15) * s + bob);
+          ctx.restore();
+        }
+      }
       for (const d of this.dying) if (Math.floor(d.y) === y) this.drawDying(m, d);
     }
 
@@ -709,6 +733,43 @@ export class Renderer {
     ctx.fillStyle = color;
     ctx.fillText(text, 0, 0);
     ctx.restore();
+  }
+
+  /** Colline : dalles dorées qui pulsent, liseré ; rouge si disputée ; couronne au centre. */
+  private drawHill(m: Match, t: number) {
+    const ctx = this.ctx;
+    const s = this.s;
+    const hill = m.hill!;
+    const w = m.grid.w;
+    const hot = hill.contested;
+    const held = hill.holder >= 0;
+    const pulse = 0.5 + 0.5 * Math.sin(t * (hot ? 10 : 3));
+    const fill = hot ? `rgba(255,70,70,${0.18 + pulse * 0.18})` : `rgba(255,205,60,${0.16 + pulse * (held ? 0.2 : 0.1)})`;
+    const edge = hot ? `rgba(255,110,110,${0.7 + pulse * 0.3})` : `rgba(255,225,120,${0.65 + pulse * 0.3})`;
+    for (const i of hill.cells) {
+      const X = (i % w) * s;
+      const Y = Math.floor(i / w) * s;
+      ctx.fillStyle = fill;
+      ctx.fillRect(X + 1, Y + 1, s - 2, s - 2);
+      ctx.strokeStyle = edge;
+      ctx.lineWidth = Math.max(1.5, s * 0.05);
+      ctx.setLineDash([s * 0.18, s * 0.1]);
+      ctx.lineDashOffset = -t * s * 0.3;
+      ctx.strokeRect(X + s * 0.08, Y + s * 0.08, s * 0.84, s * 0.84);
+    }
+    ctx.setLineDash([]);
+    // couronne posée au sol au centre de la colline (repère visuel)
+    const [cx, cy] = hill.center;
+    const onCenter = hill.cellSet.has(m.grid.idx(cx, cy));
+    if (onCenter && !held) {
+      ctx.save();
+      ctx.globalAlpha = 0.55 + pulse * 0.3;
+      ctx.font = `${Math.round(s * 0.55)}px sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("👑", cx * s + s / 2, cy * s + s / 2);
+      ctx.restore();
+    }
   }
 
   private drawPlayer(m: Match, id: number, x: number, y: number) {

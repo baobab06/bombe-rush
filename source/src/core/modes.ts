@@ -1,5 +1,6 @@
 import type { Match } from "./match";
 import { ChaosDirector } from "./chaos";
+import { HillState } from "./hill";
 
 /**
  * Modes de jeu : des crochets appelés par la simulation.
@@ -11,6 +12,10 @@ export interface ModeDef {
   name: string;
   tagline: string;
   available: boolean;
+  /** emoji affiché sur les boutons du mode */
+  emoji?: string;
+  /** false : pas de mort subite (murs qui tombent) dans ce mode */
+  suddenDeath?: boolean;
   onStart?(m: Match): void;
   onTick?(m: Match, dt: number): void;
 }
@@ -19,12 +24,14 @@ export const MODES: ModeDef[] = [
   {
     id: "classic",
     name: "Classique",
+    emoji: "🎮",
     tagline: "Le dernier debout gagne.",
     available: true,
   },
   {
     id: "chaos",
     name: "Chaos",
+    emoji: "💀",
     tagline: "Pluie de bombes, tempêtes, explosions géantes…",
     available: true,
     onStart(m) {
@@ -32,6 +39,20 @@ export const MODES: ModeDef[] = [
     },
     onTick(m, dt) {
       m.chaos?.update(dt);
+    },
+  },
+  {
+    id: "koth",
+    name: "Roi de la colline",
+    tagline: "Reste seul sur la colline pour marquer. Premier à 25 points !",
+    available: true,
+    emoji: "👑",
+    suddenDeath: false,
+    onStart(m) {
+      m.hill = new HillState(m);
+    },
+    onTick(m) {
+      m.hill?.update();
     },
   },
 ];

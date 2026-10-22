@@ -26,6 +26,8 @@ export interface Snapshot {
   bonuses: [number, string, number, number, number, number][];
   pending: [number, number, number][];
   chaos: { pending: [string, number, number[]] | null; active: [string, number, number[]][]; nextAt: number; fog: boolean; rangeBonus: number; fuseMul: number } | null;
+  /** Roi de la colline : points, réapparitions en attente, joueur qui marque */
+  hill?: { scores: number[]; respawn: number[]; holder: number; contested: boolean } | null;
   events: SimEvent[];
 }
 
@@ -51,6 +53,9 @@ export function encodeSnapshot(m: Match, acks: number[], events: SimEvent[]): Sn
     bombs: [...m.bombs.values()].map((b) => [b.id, b.ownerId, b.tx, b.ty, r2(b.fuse), b.range, b.passable, b.fuseTotal]),
     bonuses: [...m.bonuses.values()].map((b) => [b.id, b.type, b.tx, b.ty, r2(b.invuln), r2(b.age)]),
     pending: m.pendingDrops.map(([x, y, l]) => [x, y, r2(l)]),
+    hill: m.hill
+      ? { scores: m.hill.scores.map(r2), respawn: m.hill.respawnIn.map(r2), holder: m.hill.holder, contested: m.hill.contested }
+      : null,
     chaos: m.chaos
       ? {
           pending: m.chaos.pending ? [m.chaos.pending.def.id, r2(m.chaos.pendingLeft), m.chaos.pending.zone] : null,
@@ -108,6 +113,12 @@ export function applySnapshot(m: Match, s: Snapshot, keep = -1): void {
   }
   m.pendingDrops.length = 0;
   for (const d of s.pending) m.pendingDrops.push(d);
+  if (m.hill && s.hill) {
+    s.hill.scores.forEach((v, i) => (m.hill!.scores[i] = v));
+    s.hill.respawn.forEach((v, i) => (m.hill!.respawnIn[i] = v));
+    m.hill.holder = s.hill.holder;
+    m.hill.contested = s.hill.contested;
+  }
   if (m.chaos && s.chaos) {
     const def = (id: string) => CHAOS_EVENTS.find((e) => e.id === id)!;
     m.chaos.pending = s.chaos.pending ? { def: def(s.chaos.pending[0]), zone: s.chaos.pending[2], timer: 0, data: {} } : null;

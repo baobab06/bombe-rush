@@ -125,6 +125,9 @@ export type SimEvent =
   | { t: "chaosStart"; id: string; label: string; emoji: string; via?: string }
   | { t: "chaosEnd"; id: string }
   | { t: "chaosSkip" }
+  | { t: "hillTaken"; player: number }
+  | { t: "hillPoints"; player: number; points: number }
+  | { t: "respawn"; player: number; x: number; y: number }
   | { t: "eruption"; x: number; y: number }
   | { t: "matchEnd"; winner: number };
 

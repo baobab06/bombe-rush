@@ -19,6 +19,7 @@
       <div class="chaos-badge" id="hudChaos" hidden>💀 MODE CHAOS</div>
       <div class="timer" id="hudTimer">2:30</div>
       <div class="alive" id="hudAlive"></div>
+      <div class="hill-board" id="hudHill" hidden></div>
       <div class="powers" id="hudPowers"></div>
     </div>
   </div>
@@ -99,6 +100,7 @@
         <div class="mode-switch" id="homeModes" role="radiogroup" aria-label="Mode de jeu">
           <button data-mode="classic" role="radio"><span>🎮 CLASSIQUE</span></button>
           <button data-mode="chaos" role="radio"><span>💀 CHAOS</span><em class="ev-tag" id="homeEvent" hidden></em></button>
+          <button data-mode="koth" role="radio"><span>👑 COLLINE</span></button>
         </div>
         <button class="btn btn-play" id="btnPlay"><i data-icon="play"></i><span class="lbl">JOUER</span></button>
         <button class="play-setup" id="btnPlaySetup"><span id="playSub">Normal · 3 bots · Forêt</span><i data-icon="gear"></i></button>
@@ -178,6 +180,7 @@
         <div class="mode-pick" id="lobbyModes">
           <button data-mode="classic">🎮 CLASSIQUE</button>
           <button data-mode="chaos">💀 CHAOS</button>
+          <button data-mode="koth">👑 COLLINE</button>
         </div>
         <h3 class="label">Carte</h3>
         <div class="map-chips" id="lobbyMaps"></div>

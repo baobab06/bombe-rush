@@ -364,6 +364,105 @@ console.log("Nouvelle map : Labyrinthe");
   }
 }
 
+console.log("Mode Roi de la colline");
+{
+  const { HILL_RULES } = await import("../src/core/hill");
+  const slots = (n: number, bot = false) => Array.from({ length: n }, (_, i) => ({ name: "P" + i, characterId: "pip", isBot: bot, difficulty: "normal" as Difficulty }));
+  // colline valide sur chaque carte : praticable, dégagée, symétrique
+  for (const map of MAPS) {
+    const m = new Match({ seed: 9, map, modeId: "koth", players: slots(4) });
+    const g = m.grid;
+    const h = m.hill!;
+    const cells = h.cells.map((i) => [i % g.w, Math.floor(i / g.w)] as [number, number]);
+    const okCells = cells.every(([x, y]) => g.tile(x, y) === TILE.FLOOR && !g.isHazard(x, y));
+    const sym = cells.every(([x, y]) => h.isHill(g.w - 1 - x, y) && h.isHill(x, g.h - 1 - y));
+    check(cells.length >= 2 && okCells && sym, `${map.name} : colline de ${cells.length} cases, praticables, sans bloc, symétrique`);
+  }
+  const fresh = () => {
+    const m = new Match({ seed: 4, map: FOREST, modeId: "koth", players: slots(3) });
+    m.phase = "playing";
+    const g = m.grid;
+    for (let i = 0; i < g.tiles.length; i++) if (g.tiles[i] === TILE.BLOCK) g.tiles[i] = TILE.FLOOR;
+    return m;
+  };
+  const hc = (m: Match, k = 0) => { const i = m.hill!.cells[k]; return [i % m.grid.w, Math.floor(i / m.grid.w)]; };
+  {
+    const m = fresh();
+    const [x, y] = hc(m);
+    place(m, 0, x, y); place(m, 1, 1, 1); place(m, 2, 11, 9);
+    run(m, 5);
+    const pts = m.hill!.points(0);
+    check(pts >= 4 && pts <= 5 && m.hill!.points(1) === 0, `seul sur la colline : 1 point par seconde (${pts} en 5 s)`);
+    const [x2, y2] = hc(m, 1);
+    place(m, 1, x2, y2);
+    run(m, 3);
+    check(m.hill!.points(0) === pts && m.hill!.points(1) === 0 && m.hill!.contested, "à deux sur la colline : disputée, personne ne marque");
+  }
+  {
+    const m = fresh();
+    place(m, 1, 1, 1); place(m, 2, 11, 9);
+    m.players[0].maxBombs = 5; m.players[0].range = 4;
+    m.kill(m.players[0], 1);
+    run(m, HILL_RULES.respawnDelay - 0.2);
+    check(!m.players[0].alive, `éliminé : absent pendant ${HILL_RULES.respawnDelay} s`);
+    run(m, 0.4);
+    const p = m.players[0];
+    const [cx, cy] = m.hill!.center;
+    const far = Math.abs(Math.floor(p.x) - cx) + Math.abs(Math.floor(p.y) - cy) >= HILL_RULES.respawnHillGap;
+    check(p.alive && p.shieldTime > 1.5 && p.maxBombs === RULES.startBombs && p.range === RULES.startRange && far && m.grid.fire[m.grid.idx(Math.floor(p.x), Math.floor(p.y))] <= 0,
+      "réapparition : protégé par un bouclier, pouvoirs de départ, loin de la colline, sur une case sûre");
+    check(m.players[1].stats.kills === 1, "l'élimination compte bien pour le tueur");
+  }
+  {
+    const m = fresh();
+    const [x, y] = hc(m);
+    place(m, 0, x, y); place(m, 1, 1, 1); place(m, 2, 11, 9);
+    m.hill!.scores[1] = 10;
+    run(m, HILL_RULES.target + RULES.endDelay + 1);
+    const st = m.standings();
+    check(m.isOver && m.winnerId === 0 && m.hill!.points(0) === HILL_RULES.target, `premier à ${HILL_RULES.target} points : victoire et fin de partie`);
+    check(st[0].id === 0 && st[0].place === 1 && st[1].id === 1 && st[1].place === 2 && st[2].place === 3, "classement aux points (1er, 2e, 3e)");
+  }
+  {
+    // au temps : meilleur score ; égalité = match nul
+    const m = fresh();
+    place(m, 0, 1, 1); place(m, 1, 11, 1); place(m, 2, 11, 9);
+    m.hill!.scores[0] = 7; m.hill!.scores[1] = 7;
+    m.time = RULES.matchDuration - 0.1;
+    run(m, RULES.endDelay + 0.5);
+    check(m.isOver && m.winnerId === -1 && m.standings().filter((r) => r.place === 1).length === 2, "fin du temps à égalité de points : match nul, deux premiers ex aequo");
+  }
+  {
+    // pas de mort subite dans ce mode, les autres modes inchangés
+    let sd = false;
+    const m = new Match({ seed: 2, map: FOREST, modeId: "koth", players: slots(2) });
+    m.phase = "playing"; m.time = RULES.matchDuration - RULES.suddenDeathAt + 5;
+    for (const p of m.players) p.shieldTime = 999;
+    run(m, 10);
+    sd = m.suddenDeath || m.pendingDrops.length > 0;
+    const c = new Match({ seed: 2, map: FOREST, modeId: "classic", players: slots(2) });
+    check(!sd && c.hill === null && new Match({ seed: 2, map: FOREST, modeId: "chaos", players: slots(2) }).hill === null, "pas de mort subite en Roi de la colline ; Classique et Chaos sans colline");
+  }
+  // parties complètes de bots : se terminent, la colline rapporte des points
+  for (const map of MAPS) {
+    let ended = 0, scored = 0, stuck = 0, respawns = 0;
+    const N = 8;
+    for (let sd = 1; sd <= N; sd++) {
+      const m = new Match({ seed: sd * 211, map, modeId: "koth", players: slots(4, true) });
+      const brains = m.players.map((p) => new BotBrain(p.id, (["easy", "normal", "hard", "expert"] as Difficulty[])[sd % 4], sd));
+      let guard = 0;
+      while (m.phase !== "over" && guard++ < 60 * 200) {
+        m.step(brains.map((b) => b.update(m, DT)));
+        for (const e of m.events) if (e.t === "respawn") respawns++;
+        for (const p of m.players) if (p.alive && m.grid.blocksMove(Math.floor(p.x), Math.floor(p.y))) stuck++;
+      }
+      if (m.isOver) ended++;
+      if (Math.max(...m.hill!.scores) >= 5) scored++;
+    }
+    check(ended === N && stuck === 0 && scored >= N - 1 && respawns > 0, `${map.name} : ${N} parties de bots terminées, la colline est jouée (${scored}/${N} avec 5 points ou plus), ${respawns} réapparitions`);
+  }
+}
+
 console.log("Maps");
 for (const map of MAPS) {
   for (const n of [2, 4, 6]) {

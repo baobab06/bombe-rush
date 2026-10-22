@@ -356,6 +356,19 @@ durée du bouclier, mort subite…), la mèche des bombes dans `src/core/bombs.t
 probabilité et répartition des bonus). Les profils des bots sont en tête de
 `src/ai/bot.ts`.
 
+### Mode Roi de la colline (`koth`)
+
+- Règles : `src/core/hill.ts` (réglages dans `HILL_RULES`), branché par `src/core/modes.ts`.
+- Colline : jusqu'à 3×3 cases au centre (sans murs ni eau / lave), dégagée au départ ;
+  si le centre est occupé (lagon de la Plage, autel du Labyrinthe), les cases
+  praticables les plus proches, à même distance (symétrique).
+- Seul sur la colline : 1 point / s. À deux ou plus : disputée, personne ne marque.
+- Éliminé : réapparition après 3 s, loin des autres et de la colline, bouclier 2,5 s,
+  pouvoirs de départ. Pas de mort subite dans ce mode.
+- Premier à 25 points, sinon meilleur score à la fin du temps (égalité = match nul).
+- Bots : tiennent la colline, y vont, cassent les blocs qui en rapprochent.
+- En ligne : points, joueur qui marque et réapparitions recopiés dans les instantanés.
+
 ### Map Labyrinthe
 
 - Plan : `src/maps/labyrinth.ts` (13×11, symétrique). Dessin : `LABYRINTH_HD` dans

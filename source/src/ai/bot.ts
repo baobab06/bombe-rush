@@ -162,6 +162,9 @@ export class BotBrain {
 
     if (this.path.length) return;
 
+    // 4 bis. Roi de la colline : tenir la colline, sinon y aller
+    if (m.hill && this.playHill(m, p, danger)) return;
+
     // 5. Les bots faciles flânent parfois
     if (this.prof.aggression < 0.5 && this.rng.chance(0.25)) {
       const wander = this.findTarget(m, p, danger, 3, () => this.rng.chance(0.3));
@@ -186,6 +189,78 @@ export class BotBrain {
     // 7. Rien à faire : se rapprocher de l'ennemi le plus proche
     const chase = this.pathToNearestEnemy(m, p, danger);
     if (chase) this.path = chase;
+  }
+
+  /**
+   * Roi de la colline : sur la colline, on reste (les bombes se décident plus
+   * haut, comme d'habitude). Sinon on y va ; si le chemin est bouché, on casse
+   * le bloc qui en rapproche le plus. Les bots faciles s'y intéressent moins.
+   */
+  private playHill(m: Match, p: PlayerState, danger: DangerMap): boolean {
+    const hill = m.hill!;
+    const g = m.grid;
+    const [px, py] = [Math.floor(p.x), Math.floor(p.y)];
+    if (hill.isHill(px, py)) {
+      this.path = [];
+      this.lastDecision = "hill";
+      return true;
+    }
+    if (this.prof.aggression < 0.5 && this.rng.chance(0.35)) return false;
+    const toHill = this.findTarget(m, p, danger, 40, (i) => hill.cellSet.has(i) && g.bombAt[i] < 0);
+    if (toHill && toHill.length) {
+      this.path = toHill;
+      this.lastDecision = "hill";
+      return true;
+    }
+    // colline inaccessible pour l'instant : casser vers elle
+    const dist = this.hillDistance(m);
+    const mine = dist[g.idx(px, py)];
+    const goal = this.findTarget(m, p, danger, 30, (i) => {
+      if (g.bombAt[i] >= 0) return false;
+      const x = i % g.w;
+      const y = Math.floor(i / g.w);
+      for (const [dx, dy] of DIRS) {
+        const n = g.idx(x + dx, y + dy);
+        if (g.tile(x + dx, y + dy) === TILE.BLOCK && dist[n] < mine) return true;
+      }
+      return false;
+    });
+    if (goal && goal.length) {
+      this.path = goal;
+      this.lastDecision = "hill";
+      return true;
+    }
+    return false;
+  }
+
+  /** Distance (en cases) de chaque case à la colline, blocs considérés franchissables. */
+  private hillCache: { tick: number; dist: Int16Array } | null = null;
+  private hillDistance(m: Match): Int16Array {
+    if (this.hillCache && m.tick - this.hillCache.tick < 30) return this.hillCache.dist;
+    const g = m.grid;
+    const dist = new Int16Array(g.w * g.h).fill(32000);
+    const q: number[] = [];
+    for (const c of m.hill!.cells) {
+      dist[c] = 0;
+      q.push(c);
+    }
+    for (let k = 0; k < q.length; k++) {
+      const c = q[k];
+      const x = c % g.w;
+      const y = Math.floor(c / g.w);
+      for (const [dx, dy] of DIRS) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (g.tile(nx, ny) === TILE.WALL || g.isHazard(nx, ny)) continue;
+        const n = g.idx(nx, ny);
+        if (dist[n] > dist[c] + 1) {
+          dist[n] = dist[c] + 1;
+          q.push(n);
+        }
+      }
+    }
+    this.hillCache = { tick: m.tick, dist };
+    return dist;
   }
 
   private blocksLeft(m: Match): number {
