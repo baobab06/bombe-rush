@@ -21,6 +21,7 @@ import {
   type Accessory,
   type AuraId,
   type BodyKind,
+  type SpriteKind,
   type EyeStyle,
   type Palette,
   type Pattern,
@@ -1146,7 +1147,7 @@ function accessory(ctx: Ctx, kind: Accessory, a: Anchor, s: number, look: Look, 
 }
 
 // ---------------------------------------------------------------- entrée
-const BODY: Record<Exclude<BodyKind, "blaze">, (ctx: Ctx, cx: number, by: number, s: number, c: Palette, pose: CharPose, ink: string, look: Look) => Anchor> = {
+const BODY: Record<Exclude<BodyKind, SpriteKind>, (ctx: Ctx, cx: number, by: number, s: number, c: Palette, pose: CharPose, ink: string, look: Look) => Anchor> = {
   fox,
   robot,
   frog,
@@ -1231,7 +1232,7 @@ export function drawCharacter(ctx: Ctx, cx: number, cy: number, s: number, look:
     // les mains passent derrière en vue de dos
     let a: Anchor | null = null;
     if (back) {
-      const probe = BODY[look.kind as Exclude<BodyKind, "blaze">];
+      const probe = BODY[look.kind as Exclude<BodyKind, SpriteKind>];
       // ancres connues sans dessiner : on dessine le corps d'abord puis les mains par-dessus
       a = probe(g, cx, by, s, c, pose, ink, look);
       g.strokeStyle = ink;
@@ -1239,7 +1240,7 @@ export function drawCharacter(ctx: Ctx, cx: number, cy: number, s: number, look:
       hands(g, a, s, c, look, pose);
       return a;
     }
-    a = BODY[look.kind as Exclude<BodyKind, "blaze">](g, cx, by, s, c, pose, ink, look);
+    a = BODY[look.kind as Exclude<BodyKind, SpriteKind>](g, cx, by, s, c, pose, ink, look);
     g.strokeStyle = ink;
     g.lineWidth = Math.max(1.2, s * 0.045);
     hands(g, a, s, c, look, pose);
@@ -1305,6 +1306,7 @@ export function drawCharacter(ctx: Ctx, cx: number, cy: number, s: number, look:
  */
 const SPRITE_META: Partial<Record<BodyKind, { w: number; h: number; foot: number; cx: number; walk: number }>> = {
   blaze: { w: 135, h: 232, foot: 0.9483, cx: 0.4963, walk: 8 },
+  nova: { w: 158, h: 247, foot: 0.9595, cx: 0.5, walk: 8 },
 };
 const spriteImgs = new Map<string, HTMLImageElement>();
 function spriteImg(kind: BodyKind): HTMLImageElement | null {
