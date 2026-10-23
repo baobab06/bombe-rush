@@ -1,8 +1,10 @@
 /**
  * Mode « Roi de la colline ».
  *
- * - Une colline (au plus 3×3 cases au centre de la carte, sans les murs ni
- *   l'eau / la lave) est dégagée au début de la partie.
+ * - La zone (au plus 3×3 cases, sans les murs ni l'eau / la lave) commence au
+ *   centre puis SE DÉPLACE toutes les HILL_RULES.moveEvery secondes vers un
+ *   autre emplacement (centre ou un des 4 quarts, placés en miroir). Le nouvel
+ *   emplacement est annoncé moveWarn secondes avant (et dégagé des blocs).
  * - Un joueur SEUL sur la colline marque 1 point par seconde. À deux ou plus,
  *   la colline est disputée : personne ne marque.
  * - Un joueur éliminé réapparaît après quelques secondes, loin des autres,
@@ -26,13 +28,27 @@ export const HILL_RULES = {
   respawnShield: 2.5,
   /** distance minimale (cases) entre la réapparition et la colline */
   respawnHillGap: 3,
+  /** la zone change de place toutes les N secondes */
+  moveEvery: 20,
+  /** annonce (contour + compte à rebours) avant le déplacement */
+  moveWarn: 4,
 } as const;
 
+interface Site {
+  center: [number, number];
+  cells: number[];
+  set: Set<number>;
+}
+
 export class HillState {
-  /** cases de la colline (index de grille) */
-  readonly cells: number[];
-  readonly cellSet: Set<number>;
-  readonly center: [number, number];
+  /** emplacements possibles (0 = centre) */
+  readonly sites: Site[];
+  /** emplacement actuel */
+  site = 0;
+  /** prochain emplacement annoncé (-1 = pas encore) */
+  next = -1;
+  /** secondes avant le prochain déplacement */
+  moveIn: number = HILL_RULES.moveEvery;
   /** points de chaque joueur (secondes passées seul sur la colline) */
   readonly scores: number[];
   /** temps restant avant la réapparition de chaque joueur (≤ 0 = rien en attente) */
@@ -46,14 +62,38 @@ export class HillState {
     const g = m.grid;
     const cx = Math.floor((g.w - 1) / 2);
     const cy = Math.floor((g.h - 1) / 2);
-    this.center = [cx, cy];
+    const qx = Math.round((g.w - 1) * 0.25);
+    const qy = Math.round((g.h - 1) * 0.3);
+    const centers: [number, number][] = [
+      [cx, cy],
+      [qx, qy],
+      [g.w - 1 - qx, qy],
+      [qx, g.h - 1 - qy],
+      [g.w - 1 - qx, g.h - 1 - qy],
+    ];
+    this.sites = [];
+    for (const c of centers) {
+      const cells = HillState.cellsAround(m, c[0], c[1]);
+      if (cells.length >= 2 && !this.sites.some((o) => o.center[0] === c[0] && o.center[1] === c[1])) this.sites.push({ center: c, cells, set: new Set(cells) });
+    }
+    if (!this.sites.length) {
+      const cells = HillState.cellsAround(m, cx, cy);
+      this.sites.push({ center: [cx, cy], cells, set: new Set(cells) });
+    }
+    this.clearBlocks(this.sites[0]);
+    this.scores = m.players.map(() => 0);
+    this.respawnIn = m.players.map(() => 0);
+  }
+
+  /** Cases d'une zone : le 3×3 autour de (cx, cy) ; s'il est trop occupé, l'anneau praticable le plus proche. */
+  private static cellsAround(m: Match, cx: number, cy: number): number[] {
+    const g = m.grid;
     const usable = (x: number, y: number) => x > 0 && y > 0 && x < g.w - 1 && y < g.h - 1 && g.tile(x, y) !== TILE.WALL && !g.isHazard(x, y);
     let cells: number[] = [];
     for (let y = cy - 1; y <= cy + 1; y++) for (let x = cx - 1; x <= cx + 1; x++) if (usable(x, y)) cells.push(g.idx(x, y));
     if (cells.length < 3) {
-      // centre occupé (lagon, autel…) : les cases praticables les plus proches du
-      // centre, toutes à la même distance (la carte étant symétrique, c'est équitable)
-      for (let d = 1; d < g.w + g.h; d++) {
+      // centre occupé (lagon, autel…) : les cases praticables les plus proches, toutes à la même distance
+      for (let d = 1; d < 4; d++) {
         const ring: number[] = [];
         for (let y = 1; y < g.h - 1; y++)
           for (let x = 1; x < g.w - 1; x++) if (Math.abs(x - cx) + Math.abs(y - cy) === d && usable(x, y)) ring.push(g.idx(x, y));
@@ -63,16 +103,33 @@ export class HillState {
         }
       }
     }
-    // la colline est dégagée dès le départ
-    for (const i of cells)
+    return cells;
+  }
+
+  private clearBlocks(site: Site): void {
+    const g = this.m.grid;
+    for (const i of site.cells)
       if (g.tiles[i] === TILE.BLOCK) {
         g.tiles[i] = TILE.FLOOR;
         g.hiddenBonus[i] = null;
       }
-    this.cells = cells;
-    this.cellSet = new Set(cells);
-    this.scores = m.players.map(() => 0);
-    this.respawnIn = m.players.map(() => 0);
+  }
+
+  get cells(): number[] {
+    return this.sites[this.site].cells;
+  }
+  get cellSet(): Set<number> {
+    return this.sites[this.site].set;
+  }
+  get center(): [number, number] {
+    return this.sites[this.site].center;
+  }
+  /** cases du prochain emplacement annoncé (vide si rien d'annoncé) */
+  get nextCells(): number[] {
+    return this.next >= 0 ? this.sites[this.next].cells : [];
+  }
+  get nextSet(): Set<number> | null {
+    return this.next >= 0 ? this.sites[this.next].set : null;
   }
 
   isHill(x: number, y: number): boolean {
@@ -107,6 +164,26 @@ export class HillState {
       if (after !== before && after % 10 === 0) m.events.push({ t: "hillPoints", player: this.holder, points: after });
     }
     if (this.holder !== prev && this.holder >= 0) m.events.push({ t: "hillTaken", player: this.holder });
+    // déplacement de la zone
+    if (this.sites.length > 1) {
+      this.moveIn -= DT;
+      if (this.next < 0 && this.moveIn <= HILL_RULES.moveWarn) {
+        // tirage déterministe (rng de la partie), jamais le même emplacement
+        let k = Math.floor(m.rng.next() * (this.sites.length - 1));
+        if (k >= this.site) k++;
+        this.next = k;
+        this.clearBlocks(this.sites[k]);
+        m.events.push({ t: "hillWarn", x: this.sites[k].center[0], y: this.sites[k].center[1] });
+      }
+      if (this.moveIn <= 0 && this.next >= 0) {
+        this.site = this.next;
+        this.next = -1;
+        this.moveIn = HILL_RULES.moveEvery;
+        this.holder = -1;
+        this.contested = false;
+        m.events.push({ t: "hillMoved", x: this.center[0], y: this.center[1] });
+      }
+    }
     // réapparitions
     // ordre tournant : à réapparition simultanée, personne ne choisit toujours sa case en premier
     const n = m.players.length;

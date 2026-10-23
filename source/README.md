@@ -369,6 +369,13 @@ probabilité et répartition des bonus). Les profils des bots sont en tête de
 - Bots : tiennent la colline, y vont, cassent les blocs qui en rapprochent.
 - En ligne : points, joueur qui marque et réapparitions recopiés dans les instantanés.
 
+- **Zone mobile** : la zone commence au centre puis change de place toutes les
+  20 s (`HILL_RULES.moveEvery`) parmi 5 emplacements en miroir (centre + 4 quarts).
+  Le prochain emplacement est annoncé 4 s avant (`moveWarn`) : contour bleu,
+  compte à rebours, ligne « zone bouge » dans le tableau ; il est dégagé des blocs.
+- **Bots** : partent vers la prochaine zone dès l'annonce et, si la zone est
+  disputée, se placent dans l'axe d'un adversaire et posent des bombes.
+
 ### Map Labyrinthe
 
 - Plan : `src/maps/labyrinth.ts` (13×11, symétrique). Dessin : `LABYRINTH_HD` dans

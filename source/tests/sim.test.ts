@@ -364,6 +364,43 @@ console.log("Nouvelle map : Labyrinthe");
   }
 }
 
+console.log("Domination : zone qui se déplace");
+{
+  const { HILL_RULES } = await import("../src/core/hill");
+  const slots = (n: number) => Array.from({ length: n }, (_, i) => ({ name: "P" + i, characterId: "pip", isBot: false, difficulty: "normal" as Difficulty }));
+  for (const map of MAPS) {
+    const m = new Match({ seed: 5, map, modeId: "koth", players: slots(4) });
+    const g = m.grid;
+    const h = m.hill!;
+    // emplacements praticables et disposés en miroir (équité)
+    const okSites = h.sites.every((st) => st.cells.length >= 2 && st.cells.every((i) => g.tiles[i] !== TILE.WALL && !g.isHazard(i % g.w, Math.floor(i / g.w))));
+    const centers = new Set(h.sites.map((st) => st.center.join(",")));
+    const mirrored = h.sites.every((st) => centers.has(`${g.w - 1 - st.center[0]},${st.center[1]}`) && centers.has(`${st.center[0]},${g.h - 1 - st.center[1]}`));
+    check(h.sites.length >= 3 && okSites && mirrored, `${map.name} : ${h.sites.length} emplacements de zone, praticables, en miroir`);
+  }
+  {
+    const m = new Match({ seed: 6, map: FOREST, modeId: "koth", players: slots(2) });
+    m.phase = "playing";
+    const h = m.hill!;
+    const first = h.site;
+    let warnAt = -1, movedAt = -1;
+    const t0 = m.time;
+    for (let k = 0; k < Math.round((HILL_RULES.moveEvery + 1) / DT); k++) {
+      m.step(idle(m));
+      for (const e of m.events) {
+        if (e.t === "hillWarn" && warnAt < 0) warnAt = m.time - t0;
+        if (e.t === "hillMoved" && movedAt < 0) movedAt = m.time - t0;
+      }
+      if (warnAt >= 0 && movedAt < 0 && h.next >= 0) {
+        // la prochaine zone est déjà dégagée des blocs
+        if (h.nextCells.some((i) => m.grid.tiles[i] === TILE.BLOCK)) warnAt = -99;
+      }
+    }
+    check(warnAt > 0 && Math.abs(warnAt - (HILL_RULES.moveEvery - HILL_RULES.moveWarn)) < 0.2, `annonce ${HILL_RULES.moveWarn} s avant (à ${warnAt.toFixed(1)} s), nouvelle zone dégagée`);
+    check(movedAt > 0 && Math.abs(movedAt - HILL_RULES.moveEvery) < 0.2 && h.site !== first && h.next === -1, `la zone change de place après ${HILL_RULES.moveEvery} s (à ${movedAt.toFixed(1)} s)`);
+  }
+}
+
 console.log("Mode Roi de la colline");
 {
   const { HILL_RULES } = await import("../src/core/hill");

@@ -191,6 +191,10 @@ export class Renderer {
           P.spawn("ring", e.x + 0.5, e.y + 0.5, { life: 0.5, size: 0.3, color: "#ffd64a" });
           break;
         }
+        case "hillMoved":
+          P.spawn("ring", e.x + 0.5, e.y + 0.5, { life: 0.7, size: 1.4, color: "#ffd64a" });
+          for (let k = 0; k < 18; k++) P.spawn("twinkle", e.x + 0.5 + (Math.random() - 0.5) * 2.6, e.y + 0.5 + (Math.random() - 0.5) * 2.6, { z: 0.2 + Math.random(), vz: 0.8, life: 0.8, size: 0.1, color: "#ffe27a" });
+          break;
         case "hillTaken":
           P.spawn("ring", m.players[e.player].x, m.players[e.player].y, { life: 0.45, size: 0.35, color: "#ffd64a" });
           break;
@@ -758,6 +762,37 @@ export class Renderer {
       ctx.strokeRect(X + s * 0.08, Y + s * 0.08, s * 0.84, s * 0.84);
     }
     ctx.setLineDash([]);
+    // prochaine zone annoncée : contour bleu qui clignote + compte à rebours
+    const next = hill.nextCells;
+    if (next.length) {
+      const blink = 0.5 + 0.5 * Math.sin(t * 12);
+      ctx.strokeStyle = `rgba(120,220,255,${0.55 + blink * 0.45})`;
+      ctx.fillStyle = `rgba(120,220,255,${0.08 + blink * 0.1})`;
+      ctx.lineWidth = Math.max(1.5, s * 0.06);
+      ctx.setLineDash([s * 0.12, s * 0.12]);
+      ctx.lineDashOffset = t * s * 0.5;
+      for (const i of next) {
+        const X = (i % w) * s;
+        const Y = Math.floor(i / w) * s;
+        ctx.fillRect(X + 1, Y + 1, s - 2, s - 2);
+        ctx.strokeRect(X + s * 0.1, Y + s * 0.1, s * 0.8, s * 0.8);
+      }
+      ctx.setLineDash([]);
+      const nc = hill.sites[hill.next].center;
+      const n = Math.max(1, Math.ceil(hill.moveIn));
+      ctx.save();
+      ctx.font = `900 ${Math.round(s * 0.62)}px system-ui, sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.lineWidth = s * 0.1;
+      ctx.strokeStyle = "rgba(10,30,60,0.85)";
+      ctx.fillStyle = "#bff0ff";
+      const X = nc[0] * s + s / 2;
+      const Y = nc[1] * s + s / 2;
+      ctx.strokeText(String(n), X, Y);
+      ctx.fillText(String(n), X, Y);
+      ctx.restore();
+    }
     // couronne posée au sol au centre de la colline (repère visuel)
     const [cx, cy] = hill.center;
     const onCenter = hill.cellSet.has(m.grid.idx(cx, cy));

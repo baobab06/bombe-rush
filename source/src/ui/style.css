@@ -1337,6 +1337,7 @@ button:focus-visible, input:focus-visible + i { outline: 3px solid var(--coin); 
 .hill-board .hb-state { font-size: max(9px, .55em); text-align: center; color: #cfd3ff; }
 .hill-board .hb-state.contested { color: #ff8a8a; }
 .hill-board .hb-state.dead { color: #ffd64a; }
+.hill-board .hb-state.move { color: #8fe3ff; font-weight: 800; }
 #hud.compact .hill-board .hb-bar { display: none; }
 .rk-pts { font-weight: 800; color: #ffd64a; }
 

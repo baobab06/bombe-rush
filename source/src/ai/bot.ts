@@ -200,21 +200,46 @@ export class BotBrain {
     const hill = m.hill!;
     const g = m.grid;
     const [px, py] = [Math.floor(p.x), Math.floor(p.y)];
-    if (hill.isHill(px, py)) {
+    const here = g.idx(px, py);
+    // zone annoncée : les bots partent en avance (les plus malins plus tôt)
+    const lead = 1.5 + this.prof.aggression * 2.5;
+    const goNext = hill.nextSet && hill.moveIn < lead;
+    const target = goNext ? hill.nextSet! : hill.cellSet;
+    if (target.has(here)) {
+      // zone disputée : on se bat au lieu d'attendre
+      if (!goNext && hill.contested) {
+        if (p.activeBombs < p.maxBombs && g.bombAt[here] < 0 && this.enemyInLine(m, p, px, py, p.range) && this.rng.chance(0.35 + this.prof.aggression * 0.55)) {
+          if (this.placeIfEscapable(m, p, false)) return true;
+        }
+        // se placer dans l'axe d'un adversaire (dans la zone ou juste à côté)
+        if (!this.enemyInLine(m, p, px, py, p.range) && this.rng.chance(0.3 + this.prof.aggression * 0.5)) {
+          const aim = this.findTarget(m, p, danger, 4, (i) => {
+            if (g.bombAt[i] >= 0) return false;
+            const x = i % g.w;
+            const y = Math.floor(i / g.w);
+            return this.enemyInLine(m, p, x, y, p.range);
+          });
+          if (aim && aim.length) {
+            this.path = aim;
+            this.lastDecision = "hill-fight";
+            return true;
+          }
+        }
+      }
       this.path = [];
       this.lastDecision = "hill";
       return true;
     }
     if (this.prof.aggression < 0.5 && this.rng.chance(0.35)) return false;
-    const toHill = this.findTarget(m, p, danger, 40, (i) => hill.cellSet.has(i) && g.bombAt[i] < 0);
+    const toHill = this.findTarget(m, p, danger, 40, (i) => target.has(i) && g.bombAt[i] < 0);
     if (toHill && toHill.length) {
       this.path = toHill;
       this.lastDecision = "hill";
       return true;
     }
-    // colline inaccessible pour l'instant : casser vers elle
-    const dist = this.hillDistance(m);
-    const mine = dist[g.idx(px, py)];
+    // zone inaccessible pour l'instant : casser vers elle
+    const dist = this.hillDistance(m, target);
+    const mine = dist[here];
     const goal = this.findTarget(m, p, danger, 30, (i) => {
       if (g.bombAt[i] >= 0) return false;
       const x = i % g.w;
@@ -233,14 +258,14 @@ export class BotBrain {
     return false;
   }
 
-  /** Distance (en cases) de chaque case à la colline, blocs considérés franchissables. */
-  private hillCache: { tick: number; dist: Int16Array } | null = null;
-  private hillDistance(m: Match): Int16Array {
-    if (this.hillCache && m.tick - this.hillCache.tick < 30) return this.hillCache.dist;
+  /** Distance (en cases) de chaque case à la zone visée, blocs considérés franchissables. */
+  private hillCache: { tick: number; set: Set<number>; dist: Int16Array } | null = null;
+  private hillDistance(m: Match, target: Set<number>): Int16Array {
+    if (this.hillCache && this.hillCache.set === target && m.tick - this.hillCache.tick < 30) return this.hillCache.dist;
     const g = m.grid;
     const dist = new Int16Array(g.w * g.h).fill(32000);
     const q: number[] = [];
-    for (const c of m.hill!.cells) {
+    for (const c of target) {
       dist[c] = 0;
       q.push(c);
     }
@@ -259,7 +284,7 @@ export class BotBrain {
         }
       }
     }
-    this.hillCache = { tick: m.tick, dist };
+    this.hillCache = { tick: m.tick, set: target, dist };
     return dist;
   }
 

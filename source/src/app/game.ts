@@ -468,6 +468,15 @@ export class GameScreen {
           audio.play(e.player === me.id ? "coin" : "whoosh", e.player === me.id ? 1 : 0.35);
           if (e.player === me.id) haptics.pulse(25);
           break;
+        case "hillWarn":
+          audio.play("whoosh", 0.8);
+          this.onHud?.();
+          break;
+        case "hillMoved":
+          audio.play("unlock", 0.5);
+          haptics.pulse(15);
+          this.onHud?.();
+          break;
         case "hillPoints":
           if (e.player === me.id) audio.play("unlock", 0.6);
           break;
@@ -588,6 +597,7 @@ export class GameScreen {
             target: HILL_RULES.target,
             holder: m.hill.holder,
             contested: m.hill.contested,
+            moveIn: m.hill.next >= 0 ? Math.max(1, Math.ceil(m.hill.moveIn)) : 0,
             myRespawn: me.alive ? 0 : Math.max(1, Math.ceil(m.hill.respawnIn[me.id])),
             rows: m.players.map((p) => ({ color: lookOf(p.characterId, p.skinId).palette.main, points: m.hill!.points(p.id), me: p.id === me.id, holder: m.hill!.holder === p.id })),
           }

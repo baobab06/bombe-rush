@@ -1467,7 +1467,10 @@ class App implements AppCtx {
       if (hb.dataset.sig !== sig) {
         hb.dataset.sig = sig;
         const rows = [...hl.rows].sort((a, b) => b.points - a.points);
-        const state = hl.myRespawn > 0
+        const state = hl.myRespawn > 0 && hl.moveIn > 0
+          ? `<span class="hb-state dead">💀 retour dans ${hl.myRespawn} s</span><span class="hb-state move">🔀 zone bouge : ${hl.moveIn} s</span>`
+          : hl.moveIn > 0 ? `<span class="hb-state move">🔀 zone bouge : ${hl.moveIn} s</span>`
+          : hl.myRespawn > 0
           ? `<span class="hb-state dead">💀 retour dans ${hl.myRespawn} s</span>`
           : hl.contested ? '<span class="hb-state contested">⚔️ zone disputée</span>'
           : hl.holder < 0 ? '<span class="hb-state">zone libre</span>' : "";

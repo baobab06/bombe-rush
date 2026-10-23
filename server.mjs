@@ -708,14 +708,17 @@ var HILL_RULES = {
   target: 25,
   respawnDelay: 3,
   respawnShield: 2.5,
-  respawnHillGap: 3
+  respawnHillGap: 3,
+  moveEvery: 20,
+  moveWarn: 4
 };
 
 class HillState {
   m;
-  cells;
-  cellSet;
-  center;
+  sites;
+  site = 0;
+  next = -1;
+  moveIn = HILL_RULES.moveEvery;
   scores;
   respawnIn;
   holder = -1;
@@ -725,7 +728,31 @@ class HillState {
     const g = m.grid;
     const cx = Math.floor((g.w - 1) / 2);
     const cy = Math.floor((g.h - 1) / 2);
-    this.center = [cx, cy];
+    const qx = Math.round((g.w - 1) * 0.25);
+    const qy = Math.round((g.h - 1) * 0.3);
+    const centers = [
+      [cx, cy],
+      [qx, qy],
+      [g.w - 1 - qx, qy],
+      [qx, g.h - 1 - qy],
+      [g.w - 1 - qx, g.h - 1 - qy]
+    ];
+    this.sites = [];
+    for (const c of centers) {
+      const cells = HillState.cellsAround(m, c[0], c[1]);
+      if (cells.length >= 2 && !this.sites.some((o) => o.center[0] === c[0] && o.center[1] === c[1]))
+        this.sites.push({ center: c, cells, set: new Set(cells) });
+    }
+    if (!this.sites.length) {
+      const cells = HillState.cellsAround(m, cx, cy);
+      this.sites.push({ center: [cx, cy], cells, set: new Set(cells) });
+    }
+    this.clearBlocks(this.sites[0]);
+    this.scores = m.players.map(() => 0);
+    this.respawnIn = m.players.map(() => 0);
+  }
+  static cellsAround(m, cx, cy) {
+    const g = m.grid;
     const usable = (x, y) => x > 0 && y > 0 && x < g.w - 1 && y < g.h - 1 && g.tile(x, y) !== TILE.WALL && !g.isHazard(x, y);
     let cells = [];
     for (let y = cy - 1;y <= cy + 1; y++)
@@ -733,7 +760,7 @@ class HillState {
         if (usable(x, y))
           cells.push(g.idx(x, y));
     if (cells.length < 3) {
-      for (let d = 1;d < g.w + g.h; d++) {
+      for (let d = 1;d < 4; d++) {
         const ring = [];
         for (let y = 1;y < g.h - 1; y++)
           for (let x = 1;x < g.w - 1; x++)
@@ -745,15 +772,30 @@ class HillState {
         }
       }
     }
-    for (const i of cells)
+    return cells;
+  }
+  clearBlocks(site) {
+    const g = this.m.grid;
+    for (const i of site.cells)
       if (g.tiles[i] === TILE.BLOCK) {
         g.tiles[i] = TILE.FLOOR;
         g.hiddenBonus[i] = null;
       }
-    this.cells = cells;
-    this.cellSet = new Set(cells);
-    this.scores = m.players.map(() => 0);
-    this.respawnIn = m.players.map(() => 0);
+  }
+  get cells() {
+    return this.sites[this.site].cells;
+  }
+  get cellSet() {
+    return this.sites[this.site].set;
+  }
+  get center() {
+    return this.sites[this.site].center;
+  }
+  get nextCells() {
+    return this.next >= 0 ? this.sites[this.next].cells : [];
+  }
+  get nextSet() {
+    return this.next >= 0 ? this.sites[this.next].set : null;
   }
   isHill(x, y) {
     return this.cellSet.has(this.m.grid.idx(x, y));
@@ -784,6 +826,25 @@ class HillState {
     }
     if (this.holder !== prev && this.holder >= 0)
       m.events.push({ t: "hillTaken", player: this.holder });
+    if (this.sites.length > 1) {
+      this.moveIn -= DT;
+      if (this.next < 0 && this.moveIn <= HILL_RULES.moveWarn) {
+        let k = Math.floor(m.rng.next() * (this.sites.length - 1));
+        if (k >= this.site)
+          k++;
+        this.next = k;
+        this.clearBlocks(this.sites[k]);
+        m.events.push({ t: "hillWarn", x: this.sites[k].center[0], y: this.sites[k].center[1] });
+      }
+      if (this.moveIn <= 0 && this.next >= 0) {
+        this.site = this.next;
+        this.next = -1;
+        this.moveIn = HILL_RULES.moveEvery;
+        this.holder = -1;
+        this.contested = false;
+        m.events.push({ t: "hillMoved", x: this.center[0], y: this.center[1] });
+      }
+    }
     const n = m.players.length;
     for (let k = 0;k < n; k++) {
       const p = m.players[(k + m.tick) % n];
@@ -1397,21 +1458,45 @@ class BotBrain {
     const hill = m.hill;
     const g = m.grid;
     const [px, py] = [Math.floor(p.x), Math.floor(p.y)];
-    if (hill.isHill(px, py)) {
+    const here = g.idx(px, py);
+    const lead = 1.5 + this.prof.aggression * 2.5;
+    const goNext = hill.nextSet && hill.moveIn < lead;
+    const target = goNext ? hill.nextSet : hill.cellSet;
+    if (target.has(here)) {
+      if (!goNext && hill.contested) {
+        if (p.activeBombs < p.maxBombs && g.bombAt[here] < 0 && this.enemyInLine(m, p, px, py, p.range) && this.rng.chance(0.35 + this.prof.aggression * 0.55)) {
+          if (this.placeIfEscapable(m, p, false))
+            return true;
+        }
+        if (!this.enemyInLine(m, p, px, py, p.range) && this.rng.chance(0.3 + this.prof.aggression * 0.5)) {
+          const aim = this.findTarget(m, p, danger, 4, (i) => {
+            if (g.bombAt[i] >= 0)
+              return false;
+            const x = i % g.w;
+            const y = Math.floor(i / g.w);
+            return this.enemyInLine(m, p, x, y, p.range);
+          });
+          if (aim && aim.length) {
+            this.path = aim;
+            this.lastDecision = "hill-fight";
+            return true;
+          }
+        }
+      }
       this.path = [];
       this.lastDecision = "hill";
       return true;
     }
     if (this.prof.aggression < 0.5 && this.rng.chance(0.35))
       return false;
-    const toHill = this.findTarget(m, p, danger, 40, (i) => hill.cellSet.has(i) && g.bombAt[i] < 0);
+    const toHill = this.findTarget(m, p, danger, 40, (i) => target.has(i) && g.bombAt[i] < 0);
     if (toHill && toHill.length) {
       this.path = toHill;
       this.lastDecision = "hill";
       return true;
     }
-    const dist = this.hillDistance(m);
-    const mine = dist[g.idx(px, py)];
+    const dist = this.hillDistance(m, target);
+    const mine = dist[here];
     const goal = this.findTarget(m, p, danger, 30, (i) => {
       if (g.bombAt[i] >= 0)
         return false;
@@ -1432,13 +1517,13 @@ class BotBrain {
     return false;
   }
   hillCache = null;
-  hillDistance(m) {
-    if (this.hillCache && m.tick - this.hillCache.tick < 30)
+  hillDistance(m, target) {
+    if (this.hillCache && this.hillCache.set === target && m.tick - this.hillCache.tick < 30)
       return this.hillCache.dist;
     const g = m.grid;
     const dist = new Int16Array(g.w * g.h).fill(32000);
     const q = [];
-    for (const c of m.hill.cells) {
+    for (const c of target) {
       dist[c] = 0;
       q.push(c);
     }
@@ -1458,7 +1543,7 @@ class BotBrain {
         }
       }
     }
-    this.hillCache = { tick: m.tick, dist };
+    this.hillCache = { tick: m.tick, set: target, dist };
     return dist;
   }
   blocksLeft(m) {
@@ -2840,7 +2925,7 @@ function encodeSnapshot(m, acks, events) {
     bombs: [...m.bombs.values()].map((b) => [b.id, b.ownerId, b.tx, b.ty, r2(b.fuse), b.range, b.passable, b.fuseTotal]),
     bonuses: [...m.bonuses.values()].map((b) => [b.id, b.type, b.tx, b.ty, r2(b.invuln), r2(b.age)]),
     pending: m.pendingDrops.map(([x, y, l]) => [x, y, r2(l)]),
-    hill: m.hill ? { scores: m.hill.scores.map(r2), respawn: m.hill.respawnIn.map(r2), holder: m.hill.holder, contested: m.hill.contested } : null,
+    hill: m.hill ? { scores: m.hill.scores.map(r2), respawn: m.hill.respawnIn.map(r2), holder: m.hill.holder, contested: m.hill.contested, site: m.hill.site, next: m.hill.next, moveIn: r2(m.hill.moveIn) } : null,
     chaos: m.chaos ? {
       pending: m.chaos.pending ? [m.chaos.pending.def.id, r2(m.chaos.pendingLeft), m.chaos.pending.zone] : null,
       active: m.chaos.active.map((a) => [a.def.id, r2(a.timer), a.zone]),
