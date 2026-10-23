@@ -128,6 +128,7 @@ console.log("Positions de départ aléatoires");
     let overlap = 0, onObstacle = 0, tooClose = 0, cantMove = 0, sharedZone = 0, notMirror = 0, checked = 0;
     const configs = new Set<string>();
     const p0cells = new Set<string>();
+    const p0count = new Map<string, number>();
     const quadCount = [0, 0, 0, 0];
     for (const n of [1, 2, 3, 4, 5, 6])
       for (let seed = 1; seed <= 150; seed++) {
@@ -143,10 +144,13 @@ console.log("Positions de départ aléatoires");
           // et jamais en cul-de-sac : au moins 2 cases libres autour
           if ([[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([dx, dy]) => !g.blocksMove(x + dx, y + dy)).length < 2) cantMove++;
         }
-        for (let a = 0; a < n; a++) for (let b = a + 1; b < n; b++) if (man(cells[a], cells[b]) < 5) tooClose++;
+        // (cartes Domination à départs fixes, 5-6 joueurs : 4 cases au moins, le plan ne permet pas plus)
+        const minGap = map.fixedSpawns && n > 4 ? 4 : 5;
+        for (let a = 0; a < n; a++) for (let b = a + 1; b < n; b++) if (man(cells[a], cells[b]) < minGap) tooClose++;
         // deux joueurs ne partagent jamais la même zone libre au départ
         const comps = floorComponents(m);
-        for (const c of comps) if (cells.filter(([x, y]) => c.has(g.idx(x, y))).length > 1) sharedZone++;
+        // (cartes Domination à 5-6 joueurs : les zones, toujours libres, peuvent relier les départs du milieu)
+        if (!(map.modes?.includes("koth") && n > 4)) for (const c of comps) if (cells.filter(([x, y]) => c.has(g.idx(x, y))).length > 1) sharedZone++;
         // équité : arène et positions symétriques (miroirs haut/bas et gauche/droite)
         const set = new Set(cells.map((c) => c.join(",")));
         if (n === 4) {
@@ -154,19 +158,28 @@ console.log("Positions de départ aléatoires");
           for (let y = 0; y < g.h; y++) for (let x = 0; x < g.w; x++) if (g.tile(x, y) !== g.tile(g.w - 1 - x, y) || g.tile(x, y) !== g.tile(x, g.h - 1 - y)) { notMirror++; y = g.h; break; }
           configs.add([...set].sort().join(" "));
           p0cells.add(cells[0].join(","));
+          p0count.set(cells[0].join(","), (p0count.get(cells[0].join(",")) ?? 0) + 1);
           quadCount[m.loot.quadrant(cells[0][0], cells[0][1])]++;
         }
       }
     check(overlap === 0, `${map.name} : jamais deux joueurs sur la même case (${checked} parties, 1 à 6 joueurs)`);
     check(onObstacle === 0, `${map.name} : jamais de départ sur un mur, un bloc, une bombe, du feu, de la lave, de l'eau, de la glace ou une cheminée`);
     check(cantMove === 0, `${map.name} : chaque joueur a au moins 2 cases libres à côté de lui (pas de cul-de-sac)`);
-    check(tooClose === 0, `${map.name} : au moins 5 cases entre deux joueurs`);
+    check(tooClose === 0, `${map.name} : au moins ${map.fixedSpawns ? "5 cases (4 à 5-6 joueurs)" : "5 cases"} entre deux joueurs`);
     check(sharedZone === 0, `${map.name} : chaque joueur commence dans sa propre zone, séparée des autres par des blocs`);
     check(notMirror === 0, `${map.name} : positions et blocs symétriques (aucun joueur avantagé)`);
-    check(configs.size >= 4, `${map.name} : les positions changent d'une partie à l'autre (${configs.size} dispositions différentes à 4 joueurs)`);
-    check(p0cells.size >= 16, `${map.name} : le joueur 1 change de case (${p0cells.size} cases différentes)`);
-    const share = quadCount.map((q) => q / 150);
-    check(share.every((s) => s > 0.15 && s < 0.35), `${map.name} : le joueur 1 n'a pas de coin favori (${share.map((s) => Math.round(s * 100) + "%").join(" ")})`);
+    if (map.fixedSpawns) {
+      // départs du plan (S) : toujours les mêmes cases, mais le joueur 1 tombe sur chacune à parts égales
+      const plan = map.layout.flatMap((r, y) => [...r].map((c, x) => (c === "S" ? `${x},${y}` : "")).filter(Boolean));
+      const share = plan.map((k) => (p0count.get(k) ?? 0) / 150);
+      check(configs.size === 1 && [...configs][0] === plan.slice().sort().join(" "), `${map.name} : départs fixes du plan (${plan.length} cases)`);
+      check(share.every((s) => s > 0.15 && s < 0.35), `${map.name} : le joueur 1 n'a pas de départ favori (${share.map((s) => Math.round(s * 100) + "%").join(" ")})`);
+    } else {
+      check(configs.size >= 4, `${map.name} : les positions changent d'une partie à l'autre (${configs.size} dispositions différentes à 4 joueurs)`);
+      check(p0cells.size >= 16, `${map.name} : le joueur 1 change de case (${p0cells.size} cases différentes)`);
+      const share = quadCount.map((q) => q / 150);
+      check(share.every((s) => s > 0.15 && s < 0.35), `${map.name} : le joueur 1 n'a pas de coin favori (${share.map((s) => Math.round(s * 100) + "%").join(" ")})`);
+    }
   }
   // même graine = mêmes positions (serveur et téléphones calculent la même chose)
   const a = new Match({ seed: 123456, map: MAPS[2], modeId: "chaos", players: slots(4) });
@@ -455,6 +468,7 @@ console.log("Mode Roi de la colline");
     const [x, y] = hc(m);
     place(m, 0, x, y); place(m, 1, 1, 1); place(m, 2, 11, 9);
     m.hill!.scores[1] = 10;
+    m.hill!.moveIn = 1e9; // zone fixe pour ce test (le déplacement est testé à part)
     run(m, HILL_RULES.target + RULES.endDelay + 1);
     const st = m.standings();
     check(m.isOver && m.winnerId === 0 && m.hill!.points(0) === HILL_RULES.target, `premier à ${HILL_RULES.target} points : victoire et fin de partie`);

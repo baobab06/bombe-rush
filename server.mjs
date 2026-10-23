@@ -738,11 +738,17 @@ class HillState {
       [g.w - 1 - qx, g.h - 1 - qy]
     ];
     this.sites = [];
-    for (const c of centers) {
-      const cells = HillState.cellsAround(m, c[0], c[1]);
-      if (cells.length >= 2 && !this.sites.some((o) => o.center[0] === c[0] && o.center[1] === c[1]))
-        this.sites.push({ center: c, cells, set: new Set(cells) });
+    const drawn = HillState.drawnSites(m);
+    if (drawn.length) {
+      drawn.sort((a, b) => Math.abs(a.center[0] - cx) + Math.abs(a.center[1] - cy) - (Math.abs(b.center[0] - cx) + Math.abs(b.center[1] - cy)));
+      this.sites.push(...drawn);
     }
+    if (!this.sites.length)
+      for (const c of centers) {
+        const cells = HillState.cellsAround(m, c[0], c[1]);
+        if (cells.length >= 2 && !this.sites.some((o) => o.center[0] === c[0] && o.center[1] === c[1]))
+          this.sites.push({ center: c, cells, set: new Set(cells) });
+      }
     if (!this.sites.length) {
       const cells = HillState.cellsAround(m, cx, cy);
       this.sites.push({ center: [cx, cy], cells, set: new Set(cells) });
@@ -750,6 +756,43 @@ class HillState {
     this.clearBlocks(this.sites[0]);
     this.scores = m.players.map(() => 0);
     this.respawnIn = m.players.map(() => 0);
+  }
+  static drawnSites(m) {
+    const layout = m.config.map.layout;
+    const g = m.grid;
+    const seen = new Set;
+    const out = [];
+    for (let y = 0;y < g.h; y++)
+      for (let x = 0;x < g.w; x++) {
+        const i0 = g.idx(x, y);
+        if (layout[y]?.[x] !== "z" || seen.has(i0))
+          continue;
+        const cells = [];
+        const q = [[x, y]];
+        seen.add(i0);
+        while (q.length) {
+          const [qx, qy] = q.pop();
+          cells.push(g.idx(qx, qy));
+          for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            const nx = qx + dx;
+            const ny = qy + dy;
+            const n = g.idx(nx, ny);
+            if (layout[ny]?.[nx] === "z" && !seen.has(n)) {
+              seen.add(n);
+              q.push([nx, ny]);
+            }
+          }
+        }
+        const mx = cells.reduce((a, i) => a + i % g.w, 0) / cells.length;
+        const my = cells.reduce((a, i) => a + Math.floor(i / g.w), 0) / cells.length;
+        let best = cells[0];
+        for (const i of cells)
+          if (Math.hypot(i % g.w - mx, Math.floor(i / g.w) - my) < Math.hypot(best % g.w - mx, Math.floor(best / g.w) - my))
+            best = i;
+        cells.sort((a, b) => a - b);
+        out.push({ center: [best % g.w, Math.floor(best / g.w)], cells, set: new Set(cells) });
+      }
+    return out;
   }
   static cellsAround(m, cx, cy) {
     const g = m.grid;
@@ -990,6 +1033,33 @@ var BEACH = {
   available: true
 };
 
+// src/maps/castle.ts
+var CASTLE = {
+  id: "castle",
+  name: "Château",
+  subtitle: "Cour royale",
+  theme: "castle",
+  layout: [
+    "#############",
+    "#s..._S_...s#",
+    "#.#z#._.#z#.#",
+    "#.zzz...zzz.#",
+    "#.#z##z##z#.#",
+    "#S_..zzz.._S#",
+    "#.#z##z##z#.#",
+    "#.zzz...zzz.#",
+    "#.#z#._.#z#.#",
+    "#s..._S_...s#",
+    "#############"
+  ],
+  blockDensity: 0.72,
+  spawnClear: 1,
+  startRange: 1,
+  available: true,
+  modes: ["koth"],
+  fixedSpawns: true
+};
+
 // src/maps/forest.ts
 var FOREST = {
   id: "forest",
@@ -1065,6 +1135,32 @@ var LABYRINTH = {
   available: true
 };
 
+// src/maps/temple.ts
+var TEMPLE = {
+  id: "temple",
+  name: "Temple du Roi",
+  subtitle: "Ruines dorées",
+  theme: "temple",
+  layout: [
+    "#############",
+    "#S_..#z#.._S#",
+    "#_.#.zzz.#._#",
+    "#.#..#.#..#.#",
+    "##z#.#z#.#z##",
+    "#zzz.zzz.zzz#",
+    "##z#.#z#.#z##",
+    "#.#..#.#..#.#",
+    "#_.#.zzz.#._#",
+    "#S_..#z#.._S#",
+    "#############"
+  ],
+  blockDensity: 0.8,
+  spawnClear: 1,
+  startRange: 1,
+  available: true,
+  modes: ["koth"]
+};
+
 // src/maps/volcano.ts
 var VOLCANO = {
   id: "volcano",
@@ -1091,14 +1187,23 @@ var VOLCANO = {
 };
 
 // src/maps/index.ts
-var MAPS = [FOREST, VOLCANO, ICE, BEACH, LABYRINTH];
+var MAPS = [FOREST, VOLCANO, ICE, BEACH, LABYRINTH, TEMPLE, CASTLE];
+var DEFAULT_MODES = ["classic", "chaos"];
+function mapAllows(map, modeId) {
+  return (map.modes ?? DEFAULT_MODES).includes(modeId);
+}
+function mapsFor(modeId) {
+  const list = MAPS.filter((m) => mapAllows(m, modeId));
+  return list.length ? list : MAPS.filter((m) => !m.modes);
+}
 var RANDOM_MAP = "random";
 function getMap(id) {
   return MAPS.find((m) => m.id === id) ?? MAPS[0];
 }
-function pickMap(id, rand = Math.random) {
-  if (id === RANDOM_MAP || !MAPS.some((m) => m.id === id))
-    return MAPS[Math.floor(rand() * MAPS.length)];
+function pickMap(id, rand = Math.random, modeId) {
+  const pool = modeId ? mapsFor(modeId) : MAPS.filter((m) => !m.modes);
+  if (id === RANDOM_MAP || !pool.some((m) => m.id === id))
+    return pool[Math.floor(rand() * pool.length)];
   return getMap(id);
 }
 
@@ -1874,13 +1979,13 @@ var TERRAIN_OF = {
   i: TERRAIN.ICE,
   V: TERRAIN.VENT
 };
-var WALKABLE = [".", "_", "S", "s", "I", "i", "V"];
+var WALKABLE = [".", "_", "S", "s", "I", "i", "V", "z"];
 var SPAWN_RULES = {
   minDistance: [5, 4, 3, 2],
   noDeadEnd: true,
   ventMargin: 2
 };
-var ALWAYS_FREE = ["_", "i"];
+var ALWAYS_FREE = ["_", "i", "z"];
 var SPAWNABLE = [".", "_", "S", "s"];
 function generateArena(map, playerCount, seed) {
   const rng = new Rng(seed ^ 24301);
@@ -2073,6 +2178,8 @@ function pickSpawns(map, count, seed, tools) {
     }
     return zoneCache.get(k);
   };
+  if (map.fixedSpawns)
+    return fixedSpawns(map, count, rng, zoneOf);
   const reach = (zone) => reachFree(layout, zone);
   const separated = (zonesIn) => {
     const zones = zonesIn.map(reach);
@@ -2203,7 +2310,13 @@ function fixedSpawns(map, count, rng, zoneOf) {
   const quad = ([x, y]) => (x < cx ? 0 : 1) + (y < cy ? 0 : 2);
   const order = [0, 3, 1, 2];
   main.sort((a, b) => order.indexOf(quad(a)) - order.indexOf(quad(b)));
+  extra.sort((a, b) => order.indexOf(quad(a)) - order.indexOf(quad(b)));
   const useExtra = count > main.length;
+  if (count === 2 && main.length >= 2) {
+    const a = main[Math.floor(rng.next() * main.length)];
+    const b = main.filter((c) => c !== a).sort((p, q) => manhattan(a, q) - manhattan(a, p))[0];
+    main.splice(0, main.length, a, b, ...main.filter((c) => c !== a && c !== b));
+  }
   const chosen = [...main, ...useExtra ? extra : []].slice(0, count);
   while (chosen.length < count && free.length) {
     let best = 0;
@@ -2975,7 +3088,7 @@ class GameRunner {
       }
     }
     const seed = Math.random() * 2 ** 31 | 0;
-    this.match = new Match({ seed, map: pickMap(opts.modeId === "classic" ? RANDOM_MAP : opts.mapId), modeId: opts.modeId, players: this.slots });
+    this.match = new Match({ seed, map: pickMap(opts.modeId === "classic" ? RANDOM_MAP : opts.mapId, Math.random, opts.modeId), modeId: opts.modeId, players: this.slots });
     this.slots.forEach((slot, i) => {
       this.queues.push([]);
       this.lastCmd.push(NO_INPUT);
@@ -3265,6 +3378,9 @@ class Lobby {
       r.mapId = s.mapId;
     if (typeof s.fillBots === "boolean")
       r.fillBots = s.fillBots;
+    const mp = MAPS.find((m) => m.id === r.mapId);
+    if (mp && !mapAllows(mp, r.modeId))
+      r.mapId = RANDOM_MAP;
     this.broadcast(r);
   }
   blocker(r) {

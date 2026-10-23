@@ -5,7 +5,7 @@ import { CHARACTERS, getCharacter, getSkin } from "../core/characters";
 import { EMOTE_SLOTS, getEmote } from "../core/cosmetics";
 import { MODES } from "../core/modes";
 import type { Difficulty } from "../core/types";
-import { MAPS, RANDOM_MAP } from "../maps";
+import { MAPS, RANDOM_MAP, mapAllows } from "../maps";
 import { activeEvents } from "../meta/economy";
 import { applyMatch, xpToNext, type RewardSummary } from "../meta/progression";
 import { ONLINE_STAKE, STAKES, STAKE_ORDER, placeMedal, placeName, type StakeId } from "../meta/economy";
@@ -552,7 +552,7 @@ class App implements AppCtx {
       b.classList.toggle("sel", b.dataset.mode === modeId);
       b.setAttribute("aria-checked", String(b.dataset.mode === modeId));
     });
-    const map = MAPS.find((m) => m.id === p.lastSetup.mapId)?.name ?? "Carte au hasard";
+    const map = MAPS.find((m) => m.id === p.lastSetup.mapId && mapAllows(m, modeId))?.name ?? "Carte au hasard";
     const sid = (p.lastSetup.difficulty as StakeId) in STAKES ? (p.lastSetup.difficulty as StakeId) : "normal";
     const tbl = stakeTable(sid, p.lastSetup.botCount + 1);
     const bots = p.lastSetup.botCount;
@@ -689,7 +689,13 @@ class App implements AppCtx {
         drawMapThumb(c, m);
       }
     }
-    mapRow.querySelectorAll<HTMLElement>(".map[data-id]").forEach((el) => el.classList.toggle("sel", el.dataset.id === st.mapId));
+    // seules les cartes du mode (Domination : ses cartes à elle)
+    const okMap = (id?: string) => !!id && MAPS.some((mm) => mm.id === id && mapAllows(mm, st.modeId));
+    if (st.mapId !== RANDOM_MAP && !okMap(st.mapId)) st.mapId = RANDOM_MAP;
+    mapRow.querySelectorAll<HTMLElement>(".map[data-id]").forEach((el) => {
+      el.hidden = !okMap(el.dataset.id);
+      el.classList.toggle("sel", el.dataset.id === st.mapId);
+    });
     const rnd = $("btnRandomMap");
     // Classique : carte tirée au hasard, on ne la choisit pas
     const surprise = st.modeId === "classic";
@@ -1268,6 +1274,8 @@ class App implements AppCtx {
       b.disabled = !host;
     });
     $("lobbyMaps").querySelectorAll<HTMLButtonElement>("button").forEach((b) => {
+      const mp = MAPS.find((mm) => mm.id === b.dataset.map);
+      b.hidden = !!mp && !mapAllows(mp, r.modeId);
       b.classList.toggle("sel", b.dataset.map === r.mapId);
       b.disabled = !host;
     });

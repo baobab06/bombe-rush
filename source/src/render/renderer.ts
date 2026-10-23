@@ -748,6 +748,21 @@ export class Renderer {
     const hot = hill.contested;
     const held = hill.holder >= 0;
     const pulse = 0.5 + 0.5 * Math.sin(t * (hot ? 10 : 3));
+    // emplacements possibles (cartes Domination) : dalles dorées discrètes au sol
+    if (m.config.map.modes?.includes("koth")) {
+      for (let k = 0; k < hill.sites.length; k++) {
+        if (k === hill.site || k === hill.next) continue;
+        for (const i of hill.sites[k].cells) {
+          const X = (i % w) * s;
+          const Y = Math.floor(i / w) * s;
+          ctx.fillStyle = "rgba(255,215,90,0.10)";
+          ctx.fillRect(X + s * 0.06, Y + s * 0.06, s * 0.88, s * 0.88);
+          ctx.strokeStyle = "rgba(255,225,130,0.28)";
+          ctx.lineWidth = Math.max(1, s * 0.03);
+          ctx.strokeRect(X + s * 0.12, Y + s * 0.12, s * 0.76, s * 0.76);
+        }
+      }
+    }
     const fill = hot ? `rgba(255,70,70,${0.18 + pulse * 0.18})` : `rgba(255,205,60,${0.16 + pulse * (held ? 0.2 : 0.1)})`;
     const edge = hot ? `rgba(255,110,110,${0.7 + pulse * 0.3})` : `rgba(255,225,120,${0.65 + pulse * 0.3})`;
     for (const i of hill.cells) {

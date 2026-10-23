@@ -62,7 +62,7 @@ export class GameRunner {
     }
     const seed = (Math.random() * 2 ** 31) | 0;
     // Classique : la carte est toujours tirée au hasard (surprise)
-    this.match = new Match({ seed, map: pickMap(opts.modeId === "classic" ? RANDOM_MAP : opts.mapId), modeId: opts.modeId, players: this.slots });
+    this.match = new Match({ seed, map: pickMap(opts.modeId === "classic" ? RANDOM_MAP : opts.mapId, Math.random, opts.modeId), modeId: opts.modeId, players: this.slots });
     this.slots.forEach((slot, i) => {
       this.queues.push([]);
       this.lastCmd.push(NO_INPUT);

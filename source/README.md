@@ -369,6 +369,13 @@ probabilité et répartition des bonus). Les profils des bots sont en tête de
 - Bots : tiennent la colline, y vont, cassent les blocs qui en rapprochent.
 - En ligne : points, joueur qui marque et réapparitions recopiés dans les instantanés.
 
+- **Cartes dédiées** : en Domination on ne joue que sur les cartes `modes: ["koth"]`
+  (Temple du Roi, Château) ; Classique et Chaos ne les proposent jamais
+  (`mapsFor`, `pickMap(id, rand, modeId)`, serveur compris). Les zones y sont
+  dessinées dans le plan avec des dalles `z` (toujours libres) : chaque groupe
+  de dalles = un emplacement ; tous les emplacements sont marqués au sol.
+  Château : départs fixes du plan (`fixedSpawns`), milieu des bords.
+  Décors provisoires (Forêt / Banquise) en attendant les images Leonardo.
 - **Zone mobile** : la zone commence au centre puis change de place toutes les
   20 s (`HILL_RULES.moveEvery`) parmi 5 emplacements en miroir (centre + 4 quarts).
   Le prochain emplacement est annoncé 4 s avant (`moveWarn`) : contour bleu,

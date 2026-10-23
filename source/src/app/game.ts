@@ -134,7 +134,7 @@ export class GameScreen {
       })),
     ];
     // Classique : la carte est toujours tirée au hasard (surprise)
-    this.begin(players, pickMap(setup.modeId === "classic" ? RANDOM_MAP : setup.mapId).id, setup.modeId, 0, (Math.random() * 1e9) | 0);
+    this.begin(players, pickMap(setup.modeId === "classic" ? RANDOM_MAP : setup.mapId, Math.random, setup.modeId).id, setup.modeId, 0, (Math.random() * 1e9) | 0);
   }
 
   restart() {

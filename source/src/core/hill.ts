@@ -72,7 +72,13 @@ export class HillState {
       [g.w - 1 - qx, g.h - 1 - qy],
     ];
     this.sites = [];
-    for (const c of centers) {
+    // cartes Domination : les zones sont dessinées dans le plan (dalles « z »)
+    const drawn = HillState.drawnSites(m);
+    if (drawn.length) {
+      drawn.sort((a, b) => Math.abs(a.center[0] - cx) + Math.abs(a.center[1] - cy) - (Math.abs(b.center[0] - cx) + Math.abs(b.center[1] - cy)));
+      this.sites.push(...drawn);
+    }
+    if (!this.sites.length) for (const c of centers) {
       const cells = HillState.cellsAround(m, c[0], c[1]);
       if (cells.length >= 2 && !this.sites.some((o) => o.center[0] === c[0] && o.center[1] === c[1])) this.sites.push({ center: c, cells, set: new Set(cells) });
     }
@@ -83,6 +89,43 @@ export class HillState {
     this.clearBlocks(this.sites[0]);
     this.scores = m.players.map(() => 0);
     this.respawnIn = m.players.map(() => 0);
+  }
+
+  /** Groupes de dalles « z » du plan (4-connexes) : un groupe = un emplacement. */
+  private static drawnSites(m: Match): Site[] {
+    const layout = m.config.map.layout;
+    const g = m.grid;
+    const seen = new Set<number>();
+    const out: Site[] = [];
+    for (let y = 0; y < g.h; y++)
+      for (let x = 0; x < g.w; x++) {
+        const i0 = g.idx(x, y);
+        if (layout[y]?.[x] !== "z" || seen.has(i0)) continue;
+        const cells: number[] = [];
+        const q = [[x, y]];
+        seen.add(i0);
+        while (q.length) {
+          const [qx, qy] = q.pop()!;
+          cells.push(g.idx(qx, qy));
+          for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            const nx = qx + dx;
+            const ny = qy + dy;
+            const n = g.idx(nx, ny);
+            if (layout[ny]?.[nx] === "z" && !seen.has(n)) {
+              seen.add(n);
+              q.push([nx, ny]);
+            }
+          }
+        }
+        // centre : la case du groupe la plus proche du barycentre
+        const mx = cells.reduce((a, i) => a + (i % g.w), 0) / cells.length;
+        const my = cells.reduce((a, i) => a + Math.floor(i / g.w), 0) / cells.length;
+        let best = cells[0];
+        for (const i of cells) if (Math.hypot((i % g.w) - mx, Math.floor(i / g.w) - my) < Math.hypot((best % g.w) - mx, Math.floor(best / g.w) - my)) best = i;
+        cells.sort((a, b) => a - b);
+        out.push({ center: [best % g.w, Math.floor(best / g.w)], cells, set: new Set(cells) });
+      }
+    return out;
   }
 
   /** Cases d'une zone : le 3×3 autour de (cx, cy) ; s'il est trop occupé, l'anneau praticable le plus proche. */

@@ -555,7 +555,8 @@ const BEACH: Art = {
 };
 
 
-const ARTS: Record<string, Art> = { forest: FOREST, volcano: VOLCANO, ice: ICE, beach: BEACH, labyrinth: LABYRINTH_HD };
+// temple / castle : décors provisoires en attendant leurs images (cartes Domination)
+const ARTS: Record<string, Art> = { forest: FOREST, volcano: VOLCANO, ice: ICE, beach: BEACH, labyrinth: LABYRINTH_HD, temple: FOREST, castle: ICE };
 
 
 export function getArt(id: string): Art {

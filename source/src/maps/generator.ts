@@ -30,7 +30,7 @@ const TERRAIN_OF: Record<string, number> = {
   V: TERRAIN.VENT,
 };
 /** Cases où l'on peut marcher (une fois le bloc éventuel détruit). */
-const WALKABLE = [".", "_", "S", "s", "I", "i", "V"];
+const WALKABLE = [".", "_", "S", "s", "I", "i", "V", "z"];
 
 /** Réglages du tirage des positions de départ. */
 export const SPAWN_RULES = {
@@ -46,7 +46,8 @@ export const SPAWN_RULES = {
 } as const;
 
 /** Cases qui ne reçoivent jamais de bloc (hors positions de départ). */
-const ALWAYS_FREE = ["_", "i"];
+/** (z = dalle de zone des cartes Domination) */
+const ALWAYS_FREE = ["_", "i", "z"];
 /** Cases où un joueur peut commencer (pas de glace, de cheminée, de lave, d'eau ni de mur). */
 const SPAWNABLE = [".", "_", "S", "s"];
 
@@ -309,6 +310,8 @@ export function pickSpawns(map: MapDef, count: number, seed: number, tools: Spaw
     }
     return zoneCache.get(k)!;
   };
+  // carte au plan pensé pour ses départs (ex. Château) : positions du plan
+  if (map.fixedSpawns) return fixedSpawns(map, count, rng, zoneOf);
 
   /**
    * Une zone de départ s'étend aussi aux cases qui ne reçoivent jamais de bloc
@@ -446,7 +449,15 @@ function fixedSpawns(
   const quad = ([x, y]: [number, number]) => (x < cx ? 0 : 1) + (y < cy ? 0 : 2);
   const order = [0, 3, 1, 2];
   main.sort((a, b) => order.indexOf(quad(a)) - order.indexOf(quad(b)));
+  // départs en plus : en diagonale d'abord (5e et 6e joueurs face à face)
+  extra.sort((a, b) => order.indexOf(quad(a)) - order.indexOf(quad(b)));
   const useExtra = count > main.length;
+  // 2 joueurs : deux départs opposés (les plus éloignés), tirés au sort
+  if (count === 2 && main.length >= 2) {
+    const a = main[Math.floor(rng.next() * main.length)];
+    const b = main.filter((c) => c !== a).sort((p, q) => manhattan(a, q) - manhattan(a, p))[0];
+    main.splice(0, main.length, a, b, ...main.filter((c) => c !== a && c !== b));
+  }
   const chosen = [...main, ...(useExtra ? extra : [])].slice(0, count);
   // complément, sans doublon ni boucle infinie (liste finie)
   while (chosen.length < count && free.length) {

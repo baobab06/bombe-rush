@@ -25,4 +25,12 @@ export interface MapDef {
   /** portée de bombe au départ (sert à garantir une cachette au spawn) */
   startRange: number;
   available: boolean;
+  /**
+   * Modes où la carte est jouable (absent = Classique et Chaos).
+   * Les cartes Domination listent "koth" et dessinent leurs zones avec des
+   * dalles « z » : chaque groupe de dalles connexe = un emplacement de zone.
+   */
+  modes?: string[];
+  /** départs toujours aux positions S / s du plan (pas de tirage au sort) */
+  fixedSpawns?: boolean;
 }

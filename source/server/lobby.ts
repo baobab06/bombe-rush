@@ -5,7 +5,7 @@
  */
 import { CHARACTERS } from "../src/core/characters";
 import { MODES } from "../src/core/modes";
-import { MAPS, RANDOM_MAP } from "../src/maps";
+import { MAPS, RANDOM_MAP, mapAllows } from "../src/maps";
 import {
   MAX_ROOM_PLAYERS,
   RECONNECT_GRACE_S,
@@ -224,6 +224,9 @@ export class Lobby {
     if (s.modeId && MODES.some((m) => m.id === s.modeId && m.available)) r.modeId = s.modeId;
     if (s.mapId && (s.mapId === RANDOM_MAP || MAPS.some((m) => m.id === s.mapId))) r.mapId = s.mapId;
     if (typeof s.fillBots === "boolean") r.fillBots = s.fillBots;
+    // carte pas faite pour le mode choisi (ex. passage en Domination) : au hasard
+    const mp = MAPS.find((m) => m.id === r.mapId);
+    if (mp && !mapAllows(mp, r.modeId)) r.mapId = RANDOM_MAP;
     this.broadcast(r);
   }
 
