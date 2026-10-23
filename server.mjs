@@ -22,7 +22,10 @@ function normalizeCode(input) {
 }
 
 // src/core/characters.ts
+var SPRITE_KINDS = ["blaze"];
+var isSpriteKind = (k) => SPRITE_KINDS.includes(k);
 var CHARACTERS = [
+  { id: "blaze", name: "Blaze", kind: "blaze", tagline: "Bagarreur au bandeau", bio: "Le poing serré, le bandeau rouge, et toujours une bombe d'avance." },
   { id: "renard", name: "Flamme", kind: "fox", tagline: "Renard malin", bio: "Toujours un coup d'avance… et une bombe dans la poche." },
   { id: "boulon", name: "Boulon", kind: "robot", tagline: "Robot de chantier", bio: "Programmé pour tout démolir. Bloc par bloc." },
   { id: "rainette", name: "Rainette", kind: "frog", tagline: "Grenouille sauteuse", bio: "Elle saute de joie à chaque explosion." },
@@ -33,6 +36,7 @@ var CHARACTERS = [
 ];
 var P = (main, dark, light, accent) => ({ main, dark, light, accent });
 var CLASSIC = {
+  blaze: { name: "Classique", palette: P("#e8343a", "#7a1418", "#ffd9b8", "#2a1d1d") },
   renard: { name: "Classique", palette: P("#ff8a2b", "#c4520c", "#fff1df", "#3a2418"), aura: "leaves" },
   boulon: { name: "Classique", palette: P("#5aa0ff", "#2c5fb8", "#d6e8ff", "#ffd23f") },
   rainette: { name: "Classique", palette: P("#4fd46a", "#22893c", "#e8ffd0", "#1f6e33") },
@@ -182,6 +186,8 @@ function buildSkins() {
       aura: base.aura ?? "none",
       desc: "La tenue d'origine."
     });
+    if (isSpriteKind(c.kind))
+      continue;
     for (const l of LEGACY.filter((s) => s.characterId === c.id)) {
       out.push({
         id: l.id,

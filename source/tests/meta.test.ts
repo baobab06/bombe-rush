@@ -1,5 +1,5 @@
 /* Tests de l'économie, de la boutique et de la sauvegarde : `bun tests/meta.test.ts` */
-import { CHARACTERS, SKINS, THEMES } from "../src/core/characters";
+import { CHARACTERS, SKINS, THEMES, isSpriteKind } from "../src/core/characters";
 import { ACCESSORIES, EMOTES, TRAILS } from "../src/core/cosmetics";
 import { CATALOG, getItem, isBuyable } from "../src/meta/catalog";
 import { BOMBER_PRICES, BOMBER_WELCOME_GIFT, NAME_CHANGE_PRICE, PACKS, PRICES, STARTER_GIFT } from "../src/meta/economy";
@@ -31,7 +31,7 @@ function check(cond: boolean, msg: string) {
 console.log("Catalogue");
 check(new Set(CATALOG.map((i) => i.id)).size === CATALOG.length, "identifiants uniques");
 check(THEMES.length >= 10, `${THEMES.length} thèmes de skins`);
-for (const c of CHARACTERS) check(SKINS.filter((s) => s.characterId === c.id).length >= 11, `${c.name} : ${SKINS.filter((s) => s.characterId === c.id).length} skins`);
+for (const c of CHARACTERS) check(isSpriteKind(c.kind) ? SKINS.filter((s) => s.characterId === c.id).length === 1 : SKINS.filter((s) => s.characterId === c.id).length >= 11, `${c.name} : ${SKINS.filter((s) => s.characterId === c.id).length} skins`);
 check(["renard-or", "boulon-neon", "bruno-panda", "kage-sakura"].every((id) => !!getItem(id)), "skins V1 conservés (mêmes identifiants)");
 check(getItem("renard-pirate")!.price === PRICES.rare, "prix d'un skin = prix de sa rareté");
 check(CATALOG.filter((i) => i.kind === "skin" && i.free).length === CHARACTERS.length, "un skin offert par personnage");

@@ -13,8 +13,10 @@
  * `drawCharacter` par des drawImage ; le reste du jeu ne change pas.
  */
 import {
+  SPRITE_KINDS,
   WEAR_SLOT,
   getCharacter,
+  isSpriteKind,
   getSkin,
   type Accessory,
   type AuraId,
@@ -1144,7 +1146,7 @@ function accessory(ctx: Ctx, kind: Accessory, a: Anchor, s: number, look: Look, 
 }
 
 // ---------------------------------------------------------------- entrée
-const BODY: Record<BodyKind, (ctx: Ctx, cx: number, by: number, s: number, c: Palette, pose: CharPose, ink: string, look: Look) => Anchor> = {
+const BODY: Record<Exclude<BodyKind, "blaze">, (ctx: Ctx, cx: number, by: number, s: number, c: Palette, pose: CharPose, ink: string, look: Look) => Anchor> = {
   fox,
   robot,
   frog,
@@ -1200,6 +1202,11 @@ export function drawCharacter(ctx: Ctx, cx: number, cy: number, s: number, look:
     ctx.fill();
   }
 
+  if (isSpriteKind(look.kind)) {
+    drawSpriteBody(ctx, look, pose, cx + shake, footY - bob, s, sx, sy, lean);
+    return;
+  }
+
   // transformation commune au corps et aux accessoires
   const apply = (g: Ctx) => {
     g.translate(cx + shake, footY);
@@ -1224,7 +1231,7 @@ export function drawCharacter(ctx: Ctx, cx: number, cy: number, s: number, look:
     // les mains passent derrière en vue de dos
     let a: Anchor | null = null;
     if (back) {
-      const probe = BODY[look.kind];
+      const probe = BODY[look.kind as Exclude<BodyKind, "blaze">];
       // ancres connues sans dessiner : on dessine le corps d'abord puis les mains par-dessus
       a = probe(g, cx, by, s, c, pose, ink, look);
       g.strokeStyle = ink;
@@ -1232,7 +1239,7 @@ export function drawCharacter(ctx: Ctx, cx: number, cy: number, s: number, look:
       hands(g, a, s, c, look, pose);
       return a;
     }
-    a = BODY[look.kind](g, cx, by, s, c, pose, ink, look);
+    a = BODY[look.kind as Exclude<BodyKind, "blaze">](g, cx, by, s, c, pose, ink, look);
     g.strokeStyle = ink;
     g.lineWidth = Math.max(1.2, s * 0.045);
     hands(g, a, s, c, look, pose);
@@ -1290,7 +1297,66 @@ export function drawCharacter(ctx: Ctx, cx: number, cy: number, s: number, look:
   }
 }
 
+// ------------------------------------------------------- personnages 3D (images)
+/**
+ * Planches générées depuis le modèle 3D (scripts/sprites-3d) : une ligne par
+ * direction (face, profil gauche, dos), colonne 0 = immobile, 1-8 = marche.
+ * Le profil droit est le profil gauche retourné.
+ */
+const SPRITE_META: Partial<Record<BodyKind, { w: number; h: number; foot: number; cx: number; walk: number }>> = {
+  blaze: { w: 135, h: 232, foot: 0.9483, cx: 0.4963, walk: 8 },
+};
+const spriteImgs = new Map<string, HTMLImageElement>();
+function spriteImg(kind: BodyKind): HTMLImageElement | null {
+  if (typeof Image === "undefined") return null;
+  let im = spriteImgs.get(kind);
+  if (!im) {
+    im = new Image();
+    im.decoding = "async";
+    im.src = `chars/${kind}.webp`;
+    spriteImgs.set(kind, im);
+  }
+  return im.complete && im.naturalWidth > 0 ? im : null;
+}
+// préchargement
+if (typeof window !== "undefined") for (const k of SPRITE_KINDS) spriteImg(k);
+
+/** Hauteur affichée d'un personnage 3D (en unités « s »). */
+const SPRITE_HEIGHT = 1.3;
+
+function drawSpriteBody(ctx: Ctx, look: Look, pose: CharPose, x: number, footY: number, s: number, sx: number, sy: number, lean: number) {
+  const meta = SPRITE_META[look.kind];
+  const im = spriteImg(look.kind);
+  ctx.save();
+  ctx.translate(x, footY);
+  ctx.rotate(lean);
+  ctx.scale(sx, sy);
+  if (!meta || !im) {
+    // image pas encore chargée : silhouette simple aux couleurs du perso
+    ctx.fillStyle = look.palette.main;
+    ctx.beginPath();
+    ctx.ellipse(0, -s * 0.5, s * 0.32, s * 0.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    return;
+  }
+  const horiz = Math.abs(pose.faceX) > Math.abs(pose.faceY);
+  const row = horiz ? 1 : pose.faceY < 0 ? 2 : 0;
+  const flip = horiz && pose.faceX > 0;
+  const col = pose.moving ? 1 + (Math.floor(((((pose.walk / 2) % 1) + 1) % 1) * meta.walk) % meta.walk) : 0;
+  const H = s * SPRITE_HEIGHT;
+  const W = (H * meta.w) / meta.h;
+  if (flip) ctx.scale(-1, 1);
+  const flash = pose.hurt !== undefined && pose.hurt < 0.35 && Math.floor(pose.hurt * 24) % 2 === 0;
+  if (flash) ctx.filter = "brightness(2.6) saturate(0.4)";
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(im, col * meta.w, row * meta.h, meta.w, meta.h, -meta.cx * W, -meta.foot * H, W, H);
+  ctx.restore();
+}
+
 /** Point d'ancrage au-dessus de la tête (bulles d'emote, repères). */
 export function headTopOffset(kind: BodyKind): number {
+  if (isSpriteKind(kind)) return SPRITE_HEIGHT * 0.95 - 0.3;
   return kind === "mushroom" || kind === "ninja" ? 0.62 : kind === "frog" ? 0.5 : 0.6;
 }

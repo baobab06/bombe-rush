@@ -1,0 +1,97 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><style>body{margin:0;background:transparent}</style>
+<script type="importmap">{"imports":{"three":"./three/build/three.module.js","three/addons/":"./three/examples/jsm/"}}</script>
+</head><body>
+<script type="module">
+/*
+ * Rendu de sprites « vue du dessus 3/4 » à partir d'un modèle GLB animé.
+ * window.renderSheet({ url, clip, frames, cell, elev, dirs }) → dataURL PNG
+ * Disposition : une ligne par direction (bas, gauche, droite, haut), une colonne par image.
+ */
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.NoToneMapping;
+document.body.appendChild(renderer.domElement);
+
+const cache = new Map();
+async function load(url) {
+  if (!cache.has(url)) cache.set(url, await new GLTFLoader().loadAsync(url));
+  return cache.get(url);
+}
+
+window.listClips = async (url) => (await load(url)).animations.map((a) => ({ name: a.name, duration: a.duration }));
+
+window.renderSheet = async ({ url, clip = null, frames = 1, cell = 128, elev = 55, dirs = ["down", "left", "right", "up"], fit = 1.0, loop = true }) => {
+  const gltf = await load(url);
+  const scene = new THREE.Scene();
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8fa8, 2.4));
+  const sun = new THREE.DirectionalLight(0xffffff, 1.8);
+  sun.position.set(-2, 5, 3);
+  scene.add(sun);
+  const rim = new THREE.DirectionalLight(0xbcd4ff, 0.9);
+  rim.position.set(2, 3, -4);
+  scene.add(rim);
+
+  const root = gltf.scene;
+  root.rotation.set(0, 0, 0);
+  root.position.set(0, 0, 0);
+  root.scale.setScalar(1);
+  scene.add(root);
+  root.traverse((o) => { if (o.isMesh || o.isSkinnedMesh) { o.frustumCulled = false; } });
+
+  // taille de référence : boîte au repos (pose de départ du clip)
+  const mixer = new THREE.AnimationMixer(root);
+  let action = null, dur = 0;
+  if (clip !== null) {
+    const a = gltf.animations.find((c) => c.name === clip) ?? gltf.animations[clip] ?? gltf.animations[0];
+    if (a) { action = mixer.clipAction(a); action.play(); dur = a.duration; }
+  }
+  mixer.setTime(0);
+  root.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(root, true);
+  const size = box.getSize(new THREE.Vector3());
+  const h = size.y;
+  // personnage : pieds à y=0, centré
+  const c = box.getCenter(new THREE.Vector3());
+  const pivot = new THREE.Group();
+  scene.add(pivot);
+  pivot.add(root);
+  root.position.set(-c.x, -box.min.y, -c.z);
+
+  const W = cell, H = cell;
+  const span = h * 0.56 * fit;
+  const cam = new THREE.OrthographicCamera(-span, span, span, -span, 0.01, 100);
+  const e = (elev * Math.PI) / 180;
+  const d = 10;
+  const look = new THREE.Vector3(0, h * 0.45, 0);
+  cam.position.set(0, look.y + Math.sin(e) * d, Math.cos(e) * d);
+  cam.lookAt(look);
+
+  const ANG = { down: 0, right: Math.PI / 2, up: Math.PI, left: -Math.PI / 2 };
+  const out = document.createElement("canvas");
+  out.width = W * frames;
+  out.height = H * dirs.length;
+  const octx = out.getContext("2d");
+  renderer.setSize(W, H, false);
+  renderer.setClearColor(0x000000, 0);
+  for (let r = 0; r < dirs.length; r++) {
+    pivot.rotation.y = ANG[dirs[r]];
+    for (let f = 0; f < frames; f++) {
+      const t = action ? (loop ? (f / frames) * dur : (f / Math.max(1, frames - 1)) * dur) : 0;
+      mixer.setTime(t);
+      renderer.render(scene, cam);
+      octx.drawImage(renderer.domElement, f * W, r * H);
+    }
+  }
+  scene.remove(pivot);
+  pivot.remove(root);
+  mixer.stopAllAction();
+  return out.toDataURL("image/png");
+};
+window.ready = true;
+</script>
+</body></html>

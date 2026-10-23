@@ -116,7 +116,7 @@ export interface Profile {
   settings: Settings;
 }
 
-export const DEFAULT_CHARACTERS = ["renard", "boulon", "rainette", "kage", "champi", "bruno"];
+export const DEFAULT_CHARACTERS = ["blaze", "renard", "boulon", "rainette", "kage", "champi", "bruno"];
 
 export function defaultProfile(): Profile {
   return {
@@ -138,7 +138,7 @@ export function defaultProfile(): Profile {
     blocksDestroyed: 0,
     bonusesPicked: 0,
     bestSurvival: 0,
-    characterId: "renard",
+    characterId: "blaze",
     equippedSkins: {},
     equipped: { accessory: null, trail: DEFAULT_TRAIL, emotes: [...DEFAULT_EMOTES], boom: DEFAULT_BOOM, title: DEFAULT_TITLE },
     owned: [],

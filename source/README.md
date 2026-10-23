@@ -381,6 +381,15 @@ probabilité et répartition des bonus). Les profils des bots sont en tête de
 - Sur cette map moins remplie, chaque zone de départ est fermée par des caisses
   (`generateArena`), comme sur les maps pleines.
 
+### Personnages 3D (Blaze)
+
+- Blaze est le premier personnage modélisé en 3D (Tripo) puis rendu en images
+  (`public/chars/blaze.webp`, outil dans `scripts/sprites-3d/`). Vue 3/4 du dessus,
+  4 directions, immobile + marche (8 images). Offert et choisi par défaut.
+- Dessin : `drawSpriteBody` (render/bodies.ts) ; les effets (rebond, écrasement,
+  saut de victoire, clignotement) restent ceux du jeu.
+- Pas de skins recolorés pour ces personnages : leurs skins seront de vrais modèles.
+
 ### Choix de la carte
 
 - Classique : carte toujours tirée au hasard (« carte surprise »), en solo comme en
