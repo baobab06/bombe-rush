@@ -400,6 +400,9 @@ probabilité et répartition des bonus). Les profils des bots sont en tête de
 - 1.7.0 : seuls les personnages 3D restent (Blaze, Nova, Zoe, Jax). Les anciens
   (Flamme, Boulon, Rainette, Kage, Champi, Bruno, Pingo) sont retirés ; leurs skins
   et Pingo sont remboursés une fois en pièces (`meta/legacy-refund.ts`, `meta/save.ts`).
+- 1.7.1 : accessoires retirés (invisibles sur les personnages 3D) : plus en boutique ni
+  dans les coffres, ceux possédés remboursés une fois au prix de leur rareté.
+  Sélection du jour : tirage borné (plus de blocage s'il reste peu de sortes d'objets).
 - Blaze, Nova, Zoe et Jax sont modélisés en 3D (Tripo) puis rendu en images
   (`public/chars/<kind>.webp`, outil `scripts/sprites-3d/make_sheet.py`). Vue 3/4 du dessus,
   4 directions, immobile + marche (8 images). Offert et choisi par défaut.

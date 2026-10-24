@@ -1,7 +1,7 @@
 import { audio } from "../audio/audio";
 import { CHARACTERS, getCharacter, skinsOf } from "../core/characters";
 import { CHAOS_EVENTS } from "../core/chaos";
-import { ACCESSORIES, EMOTES, BOOMS, TRAILS } from "../core/cosmetics";
+import { EMOTES, BOOMS, TRAILS } from "../core/cosmetics";
 import { lookOf } from "../render/bodies";
 import { HILL_RULES } from "../core/hill";
 import { DT, RULES } from "../core/rules";
@@ -34,7 +34,7 @@ function randomLook(characterId: string, flashy: boolean) {
   return {
     skinId: flashy || Math.random() < 0.6 ? pick(sk).id : sk[0].id,
     trailId: flashy || Math.random() < 0.5 ? pick(TRAILS).id : undefined,
-    accessoryId: Math.random() < (flashy ? 0.4 : 0.2) ? pick(ACCESSORIES).id : undefined,
+    accessoryId: undefined,
     boomId: flashy || Math.random() < 0.35 ? pick(BOOMS.filter((b) => !b.exclusive)).id : undefined,
   };
 }

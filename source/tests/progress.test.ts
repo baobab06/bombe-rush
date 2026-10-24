@@ -271,8 +271,8 @@ console.log("Séries de victoires");
 
 console.log("13. Ancienne sauvegarde migrée");
 {
-  const old = migrate({ version: 2 as never, coins: 900, level: 12, xp: 9999, wins: 30, played: 80, winStreak: 4, owned: ["acc-cap"], daily: { last: "2026-10-01", streak: 9 } } as never);
-  check(old.coins === 900 && old.level === 12 && old.xp < levelXp(12) && owns(old, "acc-cap"), "pièces, niveau et achats gardés");
+  const old = migrate({ version: 2 as never, coins: 900, level: 12, xp: 9999, wins: 30, played: 80, winStreak: 4, owned: ["boom-neon"], daily: { last: "2026-10-01", streak: 9 } } as never);
+  check(old.coins === 900 && old.level === 12 && old.xp < levelXp(12) && owns(old, "boom-neon"), "pièces, niveau et achats gardés");
   check(old.levelRewardsUpTo === 12 && old.stats.bestWinStreak === 4 && old.equipped.boom === "boom-classic" && old.rank.points === 0, "nouveaux champs initialisés sans récompense rétroactive");
   check(LEVEL_REWARDS[10].length > 0, "table des récompenses de niveau");
 }

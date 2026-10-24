@@ -602,6 +602,11 @@ class App implements AppCtx {
       this.persist();
       window.setTimeout(() => this.toast(`🎉 Nouveaux personnages ! Tes anciens skins t'ont été remboursés : +${fmt(p.legacyRefund!)} 🪙`, "good"), 600);
     }
+    if (p.accRefund && !p.accRefundSeen) {
+      p.accRefundSeen = true;
+      this.persist();
+      window.setTimeout(() => this.toast(`🎩 Les accessoires sont retirés du jeu : +${fmt(p.accRefund!)} 🪙 remboursées`, "good"), p.legacyRefund && p.legacyRefundSeen ? 2600 : 600);
+    }
     if (!p.starterGift) {
       window.setTimeout(() => {
         if (this.screen !== "home" || p.starterGift) return;

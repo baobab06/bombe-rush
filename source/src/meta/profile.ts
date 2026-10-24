@@ -115,6 +115,9 @@ export interface Profile {
   legacyRefund?: number;
   /** message du remboursement déjà affiché */
   legacyRefundSeen?: boolean;
+  /** pièces rendues pour les accessoires retirés (1.7.1) ; undefined = pas encore traité */
+  accRefund?: number;
+  accRefundSeen?: boolean;
   winStreak: number;
   lastSetup: { botCount: number; difficulty: "easy" | "normal" | "hard" | "expert"; mapId: string; modeId: string };
   settings: Settings;

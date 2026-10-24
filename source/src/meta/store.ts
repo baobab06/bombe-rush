@@ -63,10 +63,15 @@ export function featured(now = new Date()): Featured {
   // une pièce maîtresse épique/légendaire + des objets variés
   const big = pool.filter((i) => i.rarity === "legend" || i.rarity === "epic");
   picks.push(big[Math.floor(rnd() * big.length)]);
-  while (picks.length < FEATURED.count) {
+  // un objet par sorte tant que possible ; s'il manque des sortes, on complète
+  // avec des objets différents (nombre d'essais borné : jamais de boucle sans fin)
+  const want = Math.min(FEATURED.count, pool.length);
+  for (let tries = 0; picks.length < want && tries < 400; tries++) {
     const it = pool[Math.floor(rnd() * pool.length)];
-    if (!picks.some((p) => p.id === it.id || (p.kind === it.kind && p.kind !== "skin"))) picks.push(it);
+    const sameKind = tries < 200 && picks.some((p) => p.kind === it.kind && p.kind !== "skin");
+    if (!picks.some((p) => p.id === it.id) && !sameKind) picks.push(it);
   }
+  for (const it of pool) if (picks.length < want && !picks.includes(it)) picks.push(it);
   const midnight = new Date(now);
   midnight.setHours(24, 0, 0, 0);
   return { items: picks, dealId: picks[0].id, refreshIn: midnight.getTime() - now.getTime() };
