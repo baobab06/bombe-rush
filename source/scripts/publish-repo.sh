@@ -12,6 +12,7 @@ cp "$ROOT/dist/server.mjs" server.mjs
 cp -r "$ROOT/dist/www" www
 [ -f "$ROOT/dist/BombeRush.apk" ] && cp "$ROOT/dist/BombeRush.apk" www/BombeRush.apk
 cp "$ROOT/deploy/package.json" "$ROOT/deploy/Dockerfile" .
+printf "__pycache__/\n" > .gitignore
 cat > render.yaml <<'YAML'
 # Render « Blueprint » : se met à jour tout seul à chaque envoi sur GitHub.
 services:
