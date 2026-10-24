@@ -99,8 +99,11 @@ export class Renderer {
     this.groundKey = "";
   }
 
+  /** résolution maximale (baissée automatiquement si le téléphone peine) */
+  maxDpr = 2;
+
   resize(w: number, h: number) {
-    this.dpr = Math.min(window.devicePixelRatio || 1, 2);
+    this.dpr = Math.min(window.devicePixelRatio || 1, this.maxDpr);
     this.viewW = w;
     this.viewH = h;
     this.canvas.width = Math.round(w * this.dpr);

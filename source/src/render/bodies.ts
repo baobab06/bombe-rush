@@ -1308,16 +1308,56 @@ export function drawCharacter(ctx: Ctx, cx: number, cy: number, s: number, look:
  * 9 = victoire, 10 = défaite, 11 = pose de bombe.
  * Le profil droit est le profil gauche retourné.
  */
-const SPRITE_META: Partial<Record<BodyKind, { w: number; h: number; bh: number; foot: number; cx: number; walk: number }>> = {
-  blaze: { w: 174, h: 239, bh: 232, foot: 0.9372, cx: 0.5, walk: 8 },
-  nova: { w: 159, h: 254, bh: 250, foot: 0.9606, cx: 0.5031, walk: 8 },
-  zoe: { w: 176, h: 251, bh: 247, foot: 0.9721, cx: 0.5, walk: 8 },
-  jax: { w: 181, h: 235, bh: 235, foot: 0.9489, cx: 0.4807, walk: 8 },
+/**
+ * idle / walk / win = nombre d'images de chaque animation (dans cet ordre),
+ * puis 1 image de défaite et 1 image de pose de bombe.
+ */
+interface SpriteMeta { w: number; h: number; bh: number; foot: number; cx: number; idle: number; walk: number; win: number }
+const SPRITE_META: Partial<Record<BodyKind, SpriteMeta>> = {
+  blaze: { w: 189, h: 241, bh: 237, foot: 0.9295, cx: 0.5026, idle: 6, walk: 8, win: 4 },
+  nova: { w: 159, h: 254, bh: 250, foot: 0.9606, cx: 0.5031, idle: 1, walk: 8, win: 1 },
+  zoe: { w: 176, h: 251, bh: 247, foot: 0.9721, cx: 0.5, idle: 1, walk: 8, win: 1 },
+  jax: { w: 181, h: 235, bh: 235, foot: 0.9489, cx: 0.4807, idle: 1, walk: 8, win: 1 },
 };
-/** colonnes des poses fixes (après immobile + 8 de marche) */
-const COL_WIN = 9;
-const COL_LOSE = 10;
-const COL_BOMB = 11;
+
+/**
+ * Cache des images déjà mises à la bonne taille : redimensionner une grande
+ * planche à chaque image coûte cher sur téléphone ; on le fait une seule fois
+ * par taille, puis on copie l'image prête (quasiment 1 pour 1).
+ */
+const frameCache = new Map<string, HTMLCanvasElement>();
+function cachedFrame(im: HTMLImageElement, sheet: string, meta: SpriteMeta, col: number, row: number, pxH: number, flash: boolean): HTMLCanvasElement | null {
+  if (typeof document === "undefined") return null;
+  const qh = Math.max(8, Math.min(1024, Math.ceil(pxH / 4) * 4));
+  const key = `${sheet}|${col}|${row}|${qh}|${flash ? 1 : 0}`;
+  let c = frameCache.get(key);
+  if (c) return c;
+  if (frameCache.size > 600) frameCache.clear();
+  c = document.createElement("canvas");
+  c.height = qh;
+  c.width = Math.max(1, Math.round((qh * meta.w) / meta.h));
+  const g = c.getContext("2d")!;
+  g.imageSmoothingEnabled = true;
+  g.imageSmoothingQuality = "high";
+  // réduction en deux temps si l'image est beaucoup plus petite (plus net)
+  if (meta.h > qh * 2.2) {
+    const mid = document.createElement("canvas");
+    mid.height = qh * 2;
+    mid.width = c.width * 2;
+    const mg = mid.getContext("2d")!;
+    mg.imageSmoothingQuality = "high";
+    mg.drawImage(im, col * meta.w, row * meta.h, meta.w, meta.h, 0, 0, mid.width, mid.height);
+    g.drawImage(mid, 0, 0, c.width, c.height);
+  } else g.drawImage(im, col * meta.w, row * meta.h, meta.w, meta.h, 0, 0, c.width, c.height);
+  if (flash) {
+    // éclair blanc quand le personnage est touché (sans ctx.filter, lent sur mobile)
+    g.globalCompositeOperation = "source-atop";
+    g.fillStyle = "rgba(255,255,255,0.7)";
+    g.fillRect(0, 0, c.width, c.height);
+  }
+  frameCache.set(key, c);
+  return c;
+}
 const spriteImgs = new Map<string, HTMLImageElement>();
 function spriteImg(kind: string): HTMLImageElement | null {
   if (typeof Image === "undefined") return null;
@@ -1355,18 +1395,25 @@ function drawSpriteBody(ctx: Ctx, look: Look, pose: CharPose, x: number, footY: 
   const horiz = Math.abs(pose.faceX) > Math.abs(pose.faceY);
   const row = horiz ? 1 : pose.faceY < 0 ? 2 : 0;
   const flip = horiz && pose.faceX > 0;
-  let col = pose.moving ? 1 + (Math.floor(((((pose.walk / 2) % 1) + 1) % 1) * meta.walk) % meta.walk) : 0;
-  if (pose.action !== undefined && pose.action > 0 && pose.action < 1) col = COL_BOMB;
-  else if (pose.celebrate) col = COL_WIN;
-  else if (pose.expr === "dizzy" && !pose.moving) col = COL_LOSE;
+  const walk0 = meta.idle;
+  const win0 = walk0 + meta.walk;
+  const lose = win0 + meta.win;
+  const bomb = lose + 1;
+  let col = pose.moving
+    ? walk0 + (Math.floor(((((pose.walk / 2) % 1) + 1) % 1) * meta.walk) % meta.walk)
+    : Math.floor(pose.t * 6) % meta.idle;
+  if (pose.action !== undefined && pose.action > 0 && pose.action < 1) col = bomb;
+  else if (pose.celebrate) col = win0 + (Math.floor(pose.t * 7) % meta.win);
+  else if (pose.expr === "dizzy" && !pose.moving) col = lose;
   const H = s * SPRITE_HEIGHT * (meta.h / meta.bh);
   const W = (H * meta.w) / meta.h;
   if (flip) ctx.scale(-1, 1);
   const flash = pose.hurt !== undefined && pose.hurt < 0.35 && Math.floor(pose.hurt * 24) % 2 === 0;
-  if (flash) ctx.filter = "brightness(2.6) saturate(0.4)";
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = "high";
-  ctx.drawImage(im, col * meta.w, row * meta.h, meta.w, meta.h, -meta.cx * W, -meta.foot * H, W, H);
+  const tr = ctx.getTransform();
+  const pxH = H * Math.hypot(tr.c, tr.d);
+  const fr = cachedFrame(im, look.sprite && spriteImg(look.sprite) ? look.sprite : look.kind, meta, col, row, pxH, flash);
+  if (fr) ctx.drawImage(fr, -meta.cx * W, -meta.foot * H, W, H);
+  else ctx.drawImage(im, col * meta.w, row * meta.h, meta.w, meta.h, -meta.cx * W, -meta.foot * H, W, H);
   ctx.restore();
 }
 

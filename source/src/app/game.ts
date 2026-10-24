@@ -236,12 +236,32 @@ export class GameScreen {
   }
 
   // ---------------------------------------------------------------- boucle
+  // ---- fluidité : si le téléphone n'arrive pas à suivre, on baisse un peu la résolution
+  private perfT = 0;
+  private perfN = 0;
+  private watchPerf(dt: number) {
+    if (dt <= 0 || document.hidden) return;
+    this.perfT += dt;
+    this.perfN++;
+    if (this.perfT < 2) return;
+    const fps = this.perfN / this.perfT;
+    this.perfT = 0;
+    this.perfN = 0;
+    const R = this.renderer;
+    const real = Math.min(window.devicePixelRatio || 1, R.maxDpr);
+    if (fps < 45 && real > 1.25) {
+      R.maxDpr = Math.max(1.25, real - 0.25);
+      this.resize();
+    }
+  }
+
   private loop(now: number) {
     this.raf = requestAnimationFrame(this.loop);
     const dt = Math.min(0.1, (now - (this.last || now)) / 1000);
     this.last = now;
     const s = this.session;
     if (!s) return;
+    this.watchPerf(dt);
     const m = s.match;
     // en ligne, le menu pause n'arrête pas la partie (les autres jouent)
     if (!this.paused || this.online) {
