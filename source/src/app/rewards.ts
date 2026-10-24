@@ -37,7 +37,7 @@ export function grantCard(g: Granted, ctx: AppCtx): HTMLElement {
     const p = ctx.profile;
     drawItemArt(cv, it, { characterId: p.characterId, skinId: p.equippedSkins[p.characterId] });
     el.appendChild(cv);
-    const kind = { skin: "Skin", accessory: "Accessoire", trail: "Effet", emote: "Emote", boom: "Explosion", title: "Titre", character: "Perso" }[it.kind];
+    const kind = { skin: "Skin", accessory: "Accessoire", trail: "Effet", emote: "Emote", boom: "Bombe", title: "Titre", character: "Perso" }[it.kind];
     const name = it.kind === "skin" ? `${getCharacter(it.characterId!).name} ${it.name}` : it.name;
     el.insertAdjacentHTML("beforeend", `<small>${kind} ${RARITY_LABEL[it.rarity].toLowerCase()}</small><b>${name}</b>${g.duplicate ? `<em>doublon → <i class="coin"></i>+${fmt(g.coins)}</em>` : `<em class="new">NOUVEAU !</em>`}`);
   } else {

@@ -23,9 +23,34 @@ async function load(url) {
   return cache.get(url);
 }
 
+window.listBones = async (url) => { const n=[]; (await load(url)).scene.traverse(o=>{ if(o.isBone) n.push(o.name) }); return n; };
 window.listClips = async (url) => (await load(url)).animations.map((a) => ({ name: a.name, duration: a.duration }));
 
-window.renderSheet = async ({ url, clip = null, frames = 1, cell = 128, elev = 55, dirs = ["down", "left", "right", "up"], fit = 1.0, loop = true }) => {
+// Pose fixe : chaque os nommé est tourné pour pointer vers une direction (repère du
+// personnage, face à +z, sa gauche vers +x). Parents avant enfants.
+function applyPose(root, pose) {
+  const bones = [];
+  root.traverse((o) => { if (o.isBone) bones.push(o); });
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), qw = new THREE.Quaternion(), qp = new THREE.Quaternion();
+  for (const bone of bones) {
+    const spec = pose[bone.name.replace("mixamorig", "")];
+    if (!spec) continue;
+    const child = bone.children.find((c) => c.isBone);
+    if (!child) continue;
+    root.updateMatrixWorld(true);
+    bone.getWorldPosition(a);
+    child.getWorldPosition(b);
+    const d = b.sub(a).normalize();
+    const t = new THREE.Vector3(...spec).normalize();
+    const rot = new THREE.Quaternion().setFromUnitVectors(d, t);
+    bone.getWorldQuaternion(qw);
+    bone.parent.getWorldQuaternion(qp);
+    bone.quaternion.copy(qp.invert().multiply(rot.multiply(qw)));
+  }
+  root.updateMatrixWorld(true);
+}
+
+window.renderSheet = async ({ url, clip = null, frames = 1, cell = 128, elev = 55, dirs = ["down", "left", "right", "up"], fit = 1.0, loop = true, pose = null }) => {
   const gltf = await load(url);
   const scene = new THREE.Scene();
   scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8fa8, 2.4));
@@ -83,6 +108,15 @@ window.renderSheet = async ({ url, clip = null, frames = 1, cell = 128, elev = 5
     for (let f = 0; f < frames; f++) {
       const t = action ? (loop ? (f / frames) * dur : (f / Math.max(1, frames - 1)) * dur) : 0;
       mixer.setTime(t);
+      if (pose) {
+        pivot.rotation.y = 0;
+        pivot.position.y = 0;
+        applyPose(root, pose);
+        const pb = new THREE.Box3().setFromObject(root, true);
+        pivot.position.y = -pb.min.y;
+        pivot.rotation.y = ANG[dirs[r]];
+        pivot.updateMatrixWorld(true);
+      }
       renderer.render(scene, cam);
       octx.drawImage(renderer.domElement, f * W, r * H);
     }

@@ -39,6 +39,8 @@ export interface Look {
   aura: AuraId;
   eyes: EyeStyle;
   special?: "shimmer" | "rainbow";
+  /** personnage 3D : planche d'image du skin (sinon celle du personnage) */
+  sprite?: string;
   /** compat V1 */
   accessory?: Accessory;
 }
@@ -102,6 +104,7 @@ export function lookOf(characterId: string, skinId?: string, accessoryId?: strin
     aura: sk.aura,
     eyes: sk.eyes ?? "normal",
     special: sk.special,
+    sprite: sk.sprite,
   };
 }
 
@@ -1301,17 +1304,22 @@ export function drawCharacter(ctx: Ctx, cx: number, cy: number, s: number, look:
 // ------------------------------------------------------- personnages 3D (images)
 /**
  * Planches générées depuis le modèle 3D (scripts/sprites-3d) : une ligne par
- * direction (face, profil gauche, dos), colonne 0 = immobile, 1-8 = marche.
+ * direction (face, profil gauche, dos), colonne 0 = immobile, 1-8 = marche,
+ * 9 = victoire, 10 = défaite, 11 = pose de bombe.
  * Le profil droit est le profil gauche retourné.
  */
-const SPRITE_META: Partial<Record<BodyKind, { w: number; h: number; foot: number; cx: number; walk: number }>> = {
-  blaze: { w: 135, h: 232, foot: 0.9483, cx: 0.4963, walk: 8 },
-  nova: { w: 158, h: 247, foot: 0.9595, cx: 0.5, walk: 8 },
-  zoe: { w: 160, h: 241, foot: 0.971, cx: 0.5, walk: 8 },
-  jax: { w: 165, h: 235, foot: 0.9489, cx: 0.5091, walk: 8 },
+const SPRITE_META: Partial<Record<BodyKind, { w: number; h: number; bh: number; foot: number; cx: number; walk: number }>> = {
+  blaze: { w: 174, h: 239, bh: 232, foot: 0.9372, cx: 0.5, walk: 8 },
+  nova: { w: 159, h: 254, bh: 250, foot: 0.9606, cx: 0.5031, walk: 8 },
+  zoe: { w: 176, h: 251, bh: 247, foot: 0.9721, cx: 0.5, walk: 8 },
+  jax: { w: 181, h: 235, bh: 235, foot: 0.9489, cx: 0.4807, walk: 8 },
 };
+/** colonnes des poses fixes (après immobile + 8 de marche) */
+const COL_WIN = 9;
+const COL_LOSE = 10;
+const COL_BOMB = 11;
 const spriteImgs = new Map<string, HTMLImageElement>();
-function spriteImg(kind: BodyKind): HTMLImageElement | null {
+function spriteImg(kind: string): HTMLImageElement | null {
   if (typeof Image === "undefined") return null;
   let im = spriteImgs.get(kind);
   if (!im) {
@@ -1330,7 +1338,7 @@ const SPRITE_HEIGHT = 1.3;
 
 function drawSpriteBody(ctx: Ctx, look: Look, pose: CharPose, x: number, footY: number, s: number, sx: number, sy: number, lean: number) {
   const meta = SPRITE_META[look.kind];
-  const im = spriteImg(look.kind);
+  const im = (look.sprite && spriteImg(look.sprite)) || spriteImg(look.kind);
   ctx.save();
   ctx.translate(x, footY);
   ctx.rotate(lean);
@@ -1347,8 +1355,11 @@ function drawSpriteBody(ctx: Ctx, look: Look, pose: CharPose, x: number, footY: 
   const horiz = Math.abs(pose.faceX) > Math.abs(pose.faceY);
   const row = horiz ? 1 : pose.faceY < 0 ? 2 : 0;
   const flip = horiz && pose.faceX > 0;
-  const col = pose.moving ? 1 + (Math.floor(((((pose.walk / 2) % 1) + 1) % 1) * meta.walk) % meta.walk) : 0;
-  const H = s * SPRITE_HEIGHT;
+  let col = pose.moving ? 1 + (Math.floor(((((pose.walk / 2) % 1) + 1) % 1) * meta.walk) % meta.walk) : 0;
+  if (pose.action !== undefined && pose.action > 0 && pose.action < 1) col = COL_BOMB;
+  else if (pose.celebrate) col = COL_WIN;
+  else if (pose.expr === "dizzy" && !pose.moving) col = COL_LOSE;
+  const H = s * SPRITE_HEIGHT * (meta.h / meta.bh);
   const W = (H * meta.w) / meta.h;
   if (flip) ctx.scale(-1, 1);
   const flash = pose.hurt !== undefined && pose.hurt < 0.35 && Math.floor(pose.hurt * 24) % 2 === 0;

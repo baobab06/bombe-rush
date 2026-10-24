@@ -32,7 +32,7 @@ export interface Granted {
 }
 
 const KIND_LABEL: Record<string, string> = {
-  skin: "Skin", accessory: "Accessoire", trail: "Effet", emote: "Emote", boom: "Explosion", title: "Titre", character: "Personnage",
+  skin: "Skin", accessory: "Accessoire", trail: "Effet", emote: "Emote", boom: "Bombe", title: "Titre", character: "Personnage",
 };
 export const itemLabel = (it: CatalogItem) => `${KIND_LABEL[it.kind] ?? "Objet"} : ${it.name}`;
 export const fmtN = (n: number) => Math.round(n).toLocaleString("fr-FR").replace(/ | /g, " ");

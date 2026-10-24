@@ -9,6 +9,7 @@ import { icon } from "./icons";
 import type { CatalogItem } from "../meta/catalog";
 import { EMOJI_FONT } from "../render/emote";
 import { Particles } from "../render/particles";
+import { drawBomb } from "../render/sprites";
 import { drawPortrait } from "./thumbs";
 
 export interface Wearer {
@@ -103,6 +104,9 @@ function drawBoomArt(cv: HTMLCanvasElement, id: string) {
   }
   P.update(0.3);
   P.draw(ctx, 0, 0, sc);
+  // la bombe assortie, au centre
+  const ts = Math.min(w, h) * 0.62;
+  drawBomb(ctx, w / 2, h / 2 + ts * 0.05, ts, 0.8, 0.4, 5, 9, 0.55, d.bomb);
 }
 
 /** Titre : une banderole avec le texte. */

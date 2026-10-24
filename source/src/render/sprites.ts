@@ -1,3 +1,4 @@
+import type { BombLook } from "../core/cosmetics";
 /**
  * Sprites procéduraux (aucune image externe). Chaque fonction dessine
  * un élément à une taille de case `s` donnée. Pour remplacer un
@@ -227,7 +228,7 @@ export function drawShield(ctx: Ctx, cx: number, cy: number, s: number, t: numbe
 }
 
 // ---------------------------------------------------------------- bombe
-export function drawBomb(ctx: Ctx, cx: number, cy: number, s: number, fuseRatio: number, t: number, spawnT: number, fuseLeft = 9, warn = 0.55) {
+export function drawBomb(ctx: Ctx, cx: number, cy: number, s: number, fuseRatio: number, t: number, spawnT: number, fuseLeft = 9, warn = 0.55, look?: BombLook) {
   // pulsation qui s'accélère quand la mèche raccourcit
   const urgency = 1 - fuseRatio;
   // phase d'alerte : 0 → 1 pendant les dernières `warn` secondes
@@ -246,6 +247,19 @@ export function drawBomb(ctx: Ctx, cx: number, cy: number, s: number, fuseRatio:
   ctx.beginPath();
   ctx.ellipse(cx, cy + s * 0.32, s * 0.3, s * 0.09, 0, 0, Math.PI * 2);
   ctx.fill();
+  // halo coloré de la bombe spéciale
+  if (look?.aura && alarm === 0) {
+    const ar = r * (1.55 + 0.08 * Math.sin(t * 4));
+    const ag = ctx.createRadialGradient(cx, by, r * 0.7, cx, by, ar);
+    ag.addColorStop(0, hexA(look.aura, 0.45));
+    ag.addColorStop(1, hexA(look.aura, 0));
+    ctx.fillStyle = ag;
+    ctx.beginPath();
+    ctx.arc(cx, by, ar, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // anneau de planète (derrière la bombe)
+  if (look?.deco === "ring") bombRing(ctx, cx, by, r, true);
   // halo rouge d'alerte
   if (alarm > 0) {
     const hr = r * (1.6 + alarm * 0.6);
@@ -261,8 +275,9 @@ export function drawBomb(ctx: Ctx, cx: number, cy: number, s: number, fuseRatio:
   const flash = alarm > 0 || (fuseRatio < 0.45 && Math.sin(t * freq) > 0.3);
   const white = alarm > 0.2 && Math.sin(t * freq) > 0.55 - alarm * 0.4;
   const g = ctx.createRadialGradient(cx - r * 0.35, by - r * 0.4, r * 0.1, cx, by, r);
-  g.addColorStop(0, white ? "#ffffff" : flash ? "#ff8a7a" : "#5b5f8a");
-  g.addColorStop(1, white ? "#ffb0a0" : flash ? "#c2182b" : "#1b1c33");
+  const body = look?.body ?? ["#5b5f8a", "#1b1c33"];
+  g.addColorStop(0, white ? "#ffffff" : flash ? "#ff8a7a" : body[0]);
+  g.addColorStop(1, white ? "#ffb0a0" : flash ? "#c2182b" : body[1]);
   ctx.fillStyle = g;
   ctx.strokeStyle = "#0e0f1d";
   ctx.lineWidth = Math.max(1.2, s * 0.045);
@@ -270,8 +285,12 @@ export function drawBomb(ctx: Ctx, cx: number, cy: number, s: number, fuseRatio:
   ctx.arc(cx, by, r, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
+  if (look?.deco && !white) bombDeco(ctx, cx, by, r, t, look.deco, s);
+  if (look?.deco === "ring") bombRing(ctx, cx, by, r, false);
   // bouchon
-  ctx.fillStyle = "#8b8fb3";
+  ctx.strokeStyle = "#0e0f1d";
+  ctx.lineWidth = Math.max(1.2, s * 0.045);
+  ctx.fillStyle = look?.cap ?? "#8b8fb3";
   ctx.beginPath();
   ctx.roundRect(cx + r * 0.25, by - r * 1.08, r * 0.45, r * 0.32, r * 0.08);
   ctx.fill();
@@ -308,6 +327,130 @@ export function drawBomb(ctx: Ctx, cx: number, cy: number, s: number, fuseRatio:
   ctx.beginPath();
   ctx.ellipse(cx - r * 0.38, by - r * 0.38, r * 0.2, r * 0.13, -0.7, 0, Math.PI * 2);
   ctx.fill();
+}
+
+function hexA(hex: string, a: number): string {
+  const h = hex.replace("#", "");
+  const n = parseInt(h, 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+}
+
+/** Anneau de planète (bombe Galaxie) : moitié arrière puis moitié avant. */
+function bombRing(ctx: Ctx, cx: number, cy: number, r: number, back: boolean) {
+  ctx.save();
+  ctx.strokeStyle = back ? "rgba(255,214,10,0.55)" : "#ffd60a";
+  ctx.lineWidth = r * 0.16;
+  ctx.beginPath();
+  ctx.ellipse(cx, cy + r * 0.05, r * 1.55, r * 0.42, -0.35, back ? Math.PI : 0, back ? Math.PI * 2 : Math.PI);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** Décor dessiné sur le corps de la bombe (découpé au cercle). */
+function bombDeco(ctx: Ctx, cx: number, cy: number, r: number, t: number, deco: NonNullable<BombLook["deco"]>, s: number) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 0.97, 0, Math.PI * 2);
+  ctx.clip();
+  switch (deco) {
+    case "flame": {
+      // flammes qui lèchent la bombe par le bas
+      for (let k = 0; k < 5; k++) {
+        const x = cx - r + (k + 0.5) * (r * 0.4);
+        const hgt = r * (0.75 + 0.25 * Math.sin(t * 9 + k * 1.7));
+        ctx.fillStyle = k % 2 ? "rgba(255,210,63,0.85)" : "rgba(255,106,31,0.9)";
+        ctx.beginPath();
+        ctx.moveTo(x - r * 0.24, cy + r);
+        ctx.quadraticCurveTo(x - r * 0.2, cy + r - hgt * 0.5, x, cy + r - hgt);
+        ctx.quadraticCurveTo(x + r * 0.2, cy + r - hgt * 0.5, x + r * 0.24, cy + r);
+        ctx.fill();
+      }
+      break;
+    }
+    case "ice": {
+      // facettes de cristal
+      ctx.strokeStyle = "rgba(255,255,255,0.75)";
+      ctx.lineWidth = Math.max(1, r * 0.07);
+      ctx.beginPath();
+      ctx.moveTo(cx - r * 0.2, cy - r);
+      ctx.lineTo(cx + r * 0.1, cy - r * 0.1);
+      ctx.lineTo(cx - r * 0.5, cy + r * 0.5);
+      ctx.moveTo(cx + r * 0.1, cy - r * 0.1);
+      ctx.lineTo(cx + r * 0.8, cy + r * 0.3);
+      ctx.moveTo(cx + r * 0.1, cy - r * 0.1);
+      ctx.lineTo(cx + r * 0.2, cy + r);
+      ctx.stroke();
+      break;
+    }
+    case "skull": {
+      // tête de mort
+      const k = r * 0.5;
+      ctx.fillStyle = "rgba(240,255,230,0.92)";
+      ctx.beginPath();
+      ctx.arc(cx, cy - k * 0.1, k * 0.62, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillRect(cx - k * 0.35, cy + k * 0.25, k * 0.7, k * 0.35);
+      ctx.fillStyle = "#123a12";
+      ctx.beginPath();
+      ctx.arc(cx - k * 0.24, cy - k * 0.12, k * 0.17, 0, Math.PI * 2);
+      ctx.arc(cx + k * 0.24, cy - k * 0.12, k * 0.17, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    case "stars":
+    case "ring": {
+      // petites étoiles scintillantes
+      ctx.fillStyle = "#ffffff";
+      for (let k = 0; k < 7; k++) {
+        const a = k * 2.4;
+        const d = r * (0.25 + (k % 3) * 0.25);
+        const tw = 0.5 + 0.5 * Math.sin(t * 5 + k);
+        ctx.globalAlpha = 0.4 + tw * 0.6;
+        ctx.beginPath();
+        ctx.arc(cx + Math.cos(a) * d, cy + Math.sin(a) * d, Math.max(0.8, r * 0.06), 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      break;
+    }
+    case "hearts": {
+      ctx.fillStyle = "rgba(255,255,255,0.85)";
+      for (const [dx, dy, z] of [[-0.35, -0.2, 0.28], [0.35, 0.25, 0.22], [-0.05, 0.5, 0.18]]) {
+        const x = cx + dx * r;
+        const y = cy + dy * r;
+        const q = z * r;
+        ctx.beginPath();
+        ctx.moveTo(x, y + q * 0.9);
+        ctx.bezierCurveTo(x - q * 1.4, y - q * 0.2, x - q * 0.5, y - q * 1.2, x, y - q * 0.35);
+        ctx.bezierCurveTo(x + q * 0.5, y - q * 1.2, x + q * 1.4, y - q * 0.2, x, y + q * 0.9);
+        ctx.fill();
+      }
+      break;
+    }
+    case "dots": {
+      const cols = ["#ff5d8f", "#ffd60a", "#4cc9f0", "#8ac926"];
+      for (let k = 0; k < 9; k++) {
+        ctx.fillStyle = cols[k % 4];
+        ctx.beginPath();
+        ctx.arc(cx + Math.cos(k * 2.1) * r * 0.6, cy + Math.sin(k * 2.1) * r * 0.6, r * 0.12, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      break;
+    }
+    case "stripes": {
+      ctx.strokeStyle = "rgba(63,240,255,0.8)";
+      ctx.lineWidth = Math.max(1, r * 0.12);
+      for (let k = -2; k <= 2; k++) {
+        ctx.beginPath();
+        ctx.moveTo(cx - r, cy + k * r * 0.45 - r * 0.3);
+        ctx.lineTo(cx + r, cy + k * r * 0.45 + r * 0.3);
+        ctx.stroke();
+      }
+      break;
+    }
+  }
+  ctx.restore();
+  void s;
 }
 
 // ---------------------------------------------------------------- bonus

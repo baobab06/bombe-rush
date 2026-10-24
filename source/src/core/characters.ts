@@ -110,6 +110,8 @@ export interface SkinDef {
   /** reflet doré qui balaie le corps / couleurs animées */
   special?: "shimmer" | "rainbow";
   desc?: string;
+  /** personnage 3D : nom de la planche d'image (chars/<sprite>.webp) */
+  sprite?: string;
   /** skin exclusif (non vendu en boutique) : comment il se débloque */
   exclusive?: "mastery";
 }
@@ -228,6 +230,26 @@ export const THEMES: ThemeDef[] = [
   },
 ];
 
+/** Skins des personnages 3D (planches recolorées : scripts/sprites-3d/recolor.py). */
+const SPRITE_SKINS: Record<string, { id: string; name: string; rarity: Rarity; main: string; desc: string }[]> = {
+  blaze: [
+    { id: "glace", name: "Glace", rarity: "rare", main: "#2f8fe0", desc: "Blaze version banquise : même fougue, tenue bleu glacier." },
+    { id: "toxique", name: "Toxique", rarity: "epic", main: "#3ccf3c", desc: "Une tenue vert radioactif, à ne pas toucher." },
+  ],
+  nova: [
+    { id: "menthe", name: "Menthe", rarity: "rare", main: "#2ee6c8", desc: "Nova en version menthe fraîche." },
+    { id: "soleil", name: "Soleil", rarity: "epic", main: "#ffd23f", desc: "Toute dorée, elle brille comme le soleil." },
+  ],
+  zoe: [
+    { id: "braise", name: "Braise", rarity: "rare", main: "#e8343a", desc: "Zoe se met au rouge braise." },
+    { id: "ocean", name: "Océan", rarity: "epic", main: "#1fb5e0", desc: "Une tenue bleu lagon, fraîche comme l'océan." },
+  ],
+  jax: [
+    { id: "ombre", name: "Ombre", rarity: "rare", main: "#6b6b75", desc: "Jax tout en gris : discret comme une ombre." },
+    { id: "neon", name: "Néon", rarity: "epic", main: "#e040ff", desc: "Un sweat violet néon qui ne passe pas inaperçu." },
+  ],
+};
+
 function buildSkins(): SkinDef[] {
   const out: SkinDef[] = [];
   for (const c of CHARACTERS) {
@@ -237,8 +259,17 @@ function buildSkins(): SkinDef[] {
       palette: base.palette, wear: base.wear ?? [], pattern: base.pattern ?? "none", aura: base.aura ?? "none",
       desc: "La tenue d'origine.",
     });
-    // personnage 3D : ses skins seront de vrais modèles (feu, glace…), pas des recolorations
-    if (isSpriteKind(c.kind)) continue;
+    // personnage 3D : variantes de couleur du modèle (planches pré-rendues)
+    if (isSpriteKind(c.kind)) {
+      for (const v of SPRITE_SKINS[c.id] ?? []) {
+        out.push({
+          id: `${c.id}-${v.id}`, characterId: c.id, name: v.name, theme: v.id, rarity: v.rarity,
+          palette: { ...base.palette, main: v.main }, wear: [], pattern: "none", aura: "none",
+          desc: v.desc, sprite: `${c.kind}-${v.id}`,
+        });
+      }
+      continue;
+    }
     for (const l of LEGACY.filter((s) => s.characterId === c.id)) {
       out.push({
         id: l.id, characterId: c.id, name: l.name, theme: "collection", rarity: l.rarity, palette: l.palette,

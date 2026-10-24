@@ -1,3 +1,5 @@
+// @ts-ignore -- module Node (tests lancés avec bun)
+import { existsSync } from "node:fs";
 /* Tests de l'économie, de la boutique et de la sauvegarde : `bun tests/meta.test.ts` */
 import { LEGACY_REFUND } from "../src/meta/legacy-refund";
 import { CHARACTERS, SKINS, THEMES, isSpriteKind } from "../src/core/characters";
@@ -32,7 +34,7 @@ function check(cond: boolean, msg: string) {
 console.log("Catalogue");
 check(new Set(CATALOG.map((i) => i.id)).size === CATALOG.length, "identifiants uniques");
 check(THEMES.length >= 10, `${THEMES.length} thèmes de skins`);
-for (const c of CHARACTERS) check(isSpriteKind(c.kind) ? SKINS.filter((s) => s.characterId === c.id).length === 1 : SKINS.filter((s) => s.characterId === c.id).length >= 11, `${c.name} : ${SKINS.filter((s) => s.characterId === c.id).length} skins`);
+for (const c of CHARACTERS) check(isSpriteKind(c.kind) ? SKINS.filter((s) => s.characterId === c.id).length === 3 && SKINS.filter((s) => s.characterId === c.id && s.sprite).every((s) => existsSync(`public/chars/${s.sprite}.webp`)) : SKINS.filter((s) => s.characterId === c.id).length >= 11, `${c.name} : ${SKINS.filter((s) => s.characterId === c.id).length} skins`);
 check(["renard-or", "boulon-neon", "bruno-panda", "kage-sakura", "chr-pingo"].every((id) => !getItem(id)), "anciens personnages retirés : plus en vente");
 check(CHARACTERS.map((c) => c.id).join() === "blaze,nova,zoe,jax", "personnages : Blaze, Nova, Zoe, Jax");
 check(getItem("fx-fire")!.price === PRICES[getItem("fx-fire")!.rarity], "prix d'un objet = prix de sa rareté");

@@ -1,7 +1,7 @@
 import type { Match } from "../core/match";
 import { drawCharacter, headTopOffset, lookOf, type Expr } from "./bodies";
 import { abilityBurst, emitAura, emitTrail, speedLines } from "./charfx";
-import { getEmote } from "../core/cosmetics";
+import { getBoom, getEmote } from "../core/cosmetics";
 import { EMOTE_DURATION, drawEmoteBubble } from "./emote";
 import { RULES } from "../core/rules";
 import { TERRAIN, TILE, type SimEvent } from "../core/types";
@@ -529,7 +529,8 @@ export class Renderer {
           const b = m.bombs.get(bombId);
           if (b) {
             if (!this.bombBorn.has(b.id)) this.bombBorn.set(b.id, t);
-            drawBomb(ctx, X + s / 2, Y + s / 2, s, b.fuse / b.fuseTotal, t, t - this.bombBorn.get(b.id)!, b.fuse, RULES.bombWarn);
+            const owner = b.ownerId >= 0 ? m.players[b.ownerId] : undefined;
+            drawBomb(ctx, X + s / 2, Y + s / 2, s, b.fuse / b.fuseTotal, t, t - this.bombBorn.get(b.id)!, b.fuse, RULES.bombWarn, owner?.boomId ? getBoom(owner.boomId).bomb : undefined);
           }
         }
       }

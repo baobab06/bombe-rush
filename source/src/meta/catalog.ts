@@ -35,7 +35,7 @@ export const CATEGORIES: { id: ItemKind; label: string; short: string }[] = [
   { id: "character", label: "Personnages", short: "Persos" },
   { id: "trail", label: "Effets", short: "Effets" },
   { id: "emote", label: "Emotes", short: "Emotes" },
-  { id: "boom", label: "Explosions", short: "Explosions" },
+  { id: "boom", label: "Bombes", short: "Bombes" },
   { id: "title", label: "Titres", short: "Titres" },
 ];
 

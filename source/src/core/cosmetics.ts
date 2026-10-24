@@ -107,21 +107,32 @@ export interface BoomDef {
   glow: string;
   /** petites formes en plus (confettis, flocons, étoiles…) */
   extra?: "confetti" | "snow" | "stars" | "hearts" | "bubbles";
+  /** apparence de la bombe posée (corps clair → foncé, décor) */
+  bomb: BombLook;
   free?: boolean;
   /** objet exclusif (non vendu) : comment il se débloque */
   exclusive?: "mastery" | "achievement" | "level" | "chest" | "rank";
 }
+export interface BombLook {
+  body: [string, string];
+  /** couleur du bouchon */
+  cap: string;
+  deco?: "flame" | "ice" | "ring" | "skull" | "stars" | "hearts" | "dots" | "stripes";
+  /** halo coloré autour de la bombe */
+  aura?: string;
+}
 export const BOOMS: BoomDef[] = [
-  { id: "boom-classic", name: "Classique", rarity: "common", desc: "La bonne vieille explosion orange.", spark: ["#ffe066", "#ff8a2a"], smoke: ["#e9e2d6", "#bdb4a6"], ring: "#ffb347", glow: "#fffbe0", free: true },
-  { id: "boom-confetti", name: "Confettis", rarity: "common", desc: "Boum… et c'est la fête !", spark: ["#ff5d8f", "#ffd60a", "#4cc9f0", "#8ac926"], smoke: ["#fff0f6", "#e8e2ff"], ring: "#ff9ec4", glow: "#ffffff", extra: "confetti" },
-  { id: "boom-toxic", name: "Toxique", rarity: "rare", desc: "Un nuage vert qui pique les yeux.", spark: ["#b8ff3a", "#4cd137"], smoke: ["#9be15d", "#5f8f3a"], ring: "#7bff6a", glow: "#eaffd0", extra: "bubbles" },
-  { id: "boom-ice", name: "Givre", rarity: "rare", desc: "Une explosion glaciale pleine de flocons.", spark: ["#ffffff", "#9ad7ff"], smoke: ["#e6f4ff", "#b6d4ee"], ring: "#8fd3ff", glow: "#f2fbff", extra: "snow" },
-  { id: "boom-love", name: "Coup de cœur", rarity: "epic", desc: "Ça explose… d'amour.", spark: ["#ff5d8f", "#ffb3c6"], smoke: ["#ffe0ea", "#ffc2d4"], ring: "#ff5d8f", glow: "#fff0f5", extra: "hearts" },
-  { id: "boom-neon", name: "Néon", rarity: "epic", desc: "Rose et bleu électrique, comme en boîte.", spark: ["#ff3fb4", "#3ff0ff"], smoke: ["#3a2a5c", "#25204a"], ring: "#ff3fb4", glow: "#d6fbff" },
-  { id: "boom-cosmic", name: "Cosmique", rarity: "legend", desc: "Une supernova en miniature.", spark: ["#c77dff", "#ffd60a", "#ffffff"], smoke: ["#2a1b5c", "#4b2a8f"], ring: "#c77dff", glow: "#fff3b0", extra: "stars" },
+  { id: "boom-classic", name: "Classique", rarity: "common", desc: "La bonne vieille explosion orange.", spark: ["#ffe066", "#ff8a2a"], smoke: ["#e9e2d6", "#bdb4a6"], ring: "#ffb347", glow: "#fffbe0", free: true, bomb: { body: ["#5b5f8a", "#1b1c33"], cap: "#8b8fb3" } },
+  { id: "boom-confetti", name: "Confettis", rarity: "common", desc: "Boum… et c'est la fête !", spark: ["#ff5d8f", "#ffd60a", "#4cc9f0", "#8ac926"], smoke: ["#fff0f6", "#e8e2ff"], ring: "#ff9ec4", glow: "#ffffff", extra: "confetti", bomb: { body: ["#ffffff", "#ff8ab8"], cap: "#ffd60a", deco: "dots" } },
+  { id: "boom-fire", name: "Feu", rarity: "rare", desc: "Une bombe rouge en flammes, et un souffle brûlant.", spark: ["#ffd23f", "#ff6a1f", "#ff2e2e"], smoke: ["#5a2a1a", "#2a1410"], ring: "#ff6a1f", glow: "#fff0c0", bomb: { body: ["#ff8a5a", "#9a1010"], cap: "#ffb020", deco: "flame", aura: "#ff6a1f" } },
+  { id: "boom-toxic", name: "Toxique", rarity: "rare", desc: "Un nuage vert qui pique les yeux.", spark: ["#b8ff3a", "#4cd137"], smoke: ["#9be15d", "#5f8f3a"], ring: "#7bff6a", glow: "#eaffd0", extra: "bubbles", bomb: { body: ["#8dff6a", "#1f7a2a"], cap: "#2a3a2a", deco: "skull", aura: "#7bff6a" } },
+  { id: "boom-ice", name: "Glace", rarity: "rare", desc: "Une explosion glaciale pleine de flocons.", spark: ["#ffffff", "#9ad7ff"], smoke: ["#e6f4ff", "#b6d4ee"], ring: "#8fd3ff", glow: "#f2fbff", extra: "snow", bomb: { body: ["#e6f7ff", "#2f8fe0"], cap: "#bfe8ff", deco: "ice", aura: "#8fd3ff" } },
+  { id: "boom-love", name: "Coup de cœur", rarity: "epic", desc: "Ça explose… d'amour.", spark: ["#ff5d8f", "#ffb3c6"], smoke: ["#ffe0ea", "#ffc2d4"], ring: "#ff5d8f", glow: "#fff0f5", extra: "hearts", bomb: { body: ["#ffc2d4", "#e0306a"], cap: "#ffffff", deco: "hearts" } },
+  { id: "boom-neon", name: "Néon", rarity: "epic", desc: "Rose et bleu électrique, comme en boîte.", spark: ["#ff3fb4", "#3ff0ff"], smoke: ["#3a2a5c", "#25204a"], ring: "#ff3fb4", glow: "#d6fbff", bomb: { body: ["#5a3a8f", "#1b1035"], cap: "#3ff0ff", deco: "stripes", aura: "#ff3fb4" } },
+  { id: "boom-cosmic", name: "Galaxie", rarity: "legend", desc: "Une bombe-planète et une supernova en miniature.", spark: ["#c77dff", "#ffd60a", "#ffffff"], smoke: ["#2a1b5c", "#4b2a8f"], ring: "#c77dff", glow: "#fff3b0", extra: "stars", bomb: { body: ["#b07dff", "#2a1065"], cap: "#ffd60a", deco: "ring", aura: "#c77dff" } },
   // exclusifs
-  { id: "boom-gold", name: "Pluie d'or", rarity: "legend", desc: "Réservé aux meilleurs : une explosion en or massif.", spark: ["#ffd23f", "#fff4c2", "#c98a10"], smoke: ["#fff1c4", "#e8c56a"], ring: "#ffd23f", glow: "#fffbe0", extra: "stars", exclusive: "rank" },
-  { id: "boom-veteran", name: "Vétéran", rarity: "epic", desc: "Pour ceux qui ont joué des centaines de parties.", spark: ["#ff6a1f", "#ffcf4a", "#ffffff"], smoke: ["#5a5a5a", "#3a3a3a"], ring: "#ff6a1f", glow: "#fff0d0", exclusive: "achievement" },
+  { id: "boom-gold", name: "Pluie d'or", rarity: "legend", desc: "Réservé aux meilleurs : une explosion en or massif.", spark: ["#ffd23f", "#fff4c2", "#c98a10"], smoke: ["#fff1c4", "#e8c56a"], ring: "#ffd23f", glow: "#fffbe0", extra: "stars", exclusive: "rank", bomb: { body: ["#fff1a8", "#c98a10"], cap: "#fff8dc", deco: "stars", aura: "#ffd23f" } },
+  { id: "boom-veteran", name: "Vétéran", rarity: "epic", desc: "Pour ceux qui ont joué des centaines de parties.", spark: ["#ff6a1f", "#ffcf4a", "#ffffff"], smoke: ["#5a5a5a", "#3a3a3a"], ring: "#ff6a1f", glow: "#fff0d0", exclusive: "achievement", bomb: { body: ["#7a7a7a", "#2a2a2a"], cap: "#ff6a1f", deco: "stripes" } },
 ];
 export const DEFAULT_BOOM = "boom-classic";
 export const getBoom = (id: string | null | undefined) => BOOMS.find((b) => b.id === id) ?? BOOMS[0];
