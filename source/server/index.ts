@@ -18,6 +18,7 @@ import { createServer } from "node:http";
 import { existsSync } from "node:fs";
 import { dirname, extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { CHARACTERS } from "../src/core/characters";
 import { PROTOCOL_VERSION, type ClientMsg, type ServerMsg } from "../src/net/protocol";
 import { Lobby, type Client } from "./lobby";
 import { Matchmaker } from "./matchmaking";
@@ -59,6 +60,8 @@ const cleanName = (n: unknown) =>
 
 /** Identifiant cosmétique reçu d'un client : court et sans caractères exotiques. */
 const cosm = (v: unknown): string | undefined => (typeof v === "string" && /^[a-z0-9-]{1,40}$/.test(v) ? v : undefined);
+/** Personnage reçu d'un client : seulement un personnage qui existe. */
+const charId = (v: unknown, fallback = "blaze"): string => (typeof v === "string" && CHARACTERS.some((c) => c.id === v) ? v : fallback);
 const MAX_MSG_PER_SEC = 150; // 60 entrées/s + marge
 const MAX_ROOMS = 2000;
 
@@ -93,7 +96,7 @@ function onMessage(conn: WsConn, raw: string, state: { token: string | null; win
     state.token = token;
     c.connected = true;
     c.name = cleanName(msg.name);
-    c.characterId = String(msg.characterId || "blaze");
+    c.characterId = charId(msg.characterId);
     c.skinId = cosm(msg.skinId);
     c.accessoryId = cosm(msg.accessoryId);
     c.trailId = cosm(msg.trailId);
@@ -134,7 +137,7 @@ function onMessage(conn: WsConn, raw: string, state: { token: string | null; win
       lobby.updateProfile(c);
       break;
     case "setLook":
-      c.characterId = String(msg.characterId || c.characterId);
+      c.characterId = charId(msg.characterId, c.characterId);
       c.skinId = cosm(msg.skinId);
       c.accessoryId = cosm(msg.accessoryId);
       c.trailId = cosm(msg.trailId);

@@ -7,11 +7,16 @@ import { createHash } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
 
+/** Taille maximale d'un message reçu (le jeu n'envoie que de petits messages). */
+const MAX_MESSAGE = 64 * 1024;
+
 const GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
 export class WsConn {
   private buf = Buffer.alloc(0);
   private frag: Buffer[] = [];
+  /** taille cumulée des morceaux d'un message en cours (anti-saturation mémoire) */
+  private fragSize = 0;
   private alive = true;
   closed = false;
   onMessage: (text: string) => void = () => {};
@@ -50,7 +55,7 @@ export class WsConn {
       } else if (len === 127) {
         if (this.buf.length < 10) return;
         const big = this.buf.readBigUInt64BE(2);
-        if (big > BigInt(1 << 20)) return this.close(1009);
+        if (big > BigInt(MAX_MESSAGE)) return this.close(1009);
         len = Number(big);
         off = 10;
       }
@@ -70,10 +75,13 @@ export class WsConn {
       case 0x0: // continuation
       case 0x1: // texte
       case 0x2: // binaire (non utilisé : traité comme texte)
+        this.fragSize += payload.length;
+        if (this.fragSize > MAX_MESSAGE) return this.close(1009);
         this.frag.push(payload);
         if (fin) {
           const msg = Buffer.concat(this.frag).toString("utf8");
           this.frag = [];
+          this.fragSize = 0;
           this.onMessage(msg);
         }
         break;

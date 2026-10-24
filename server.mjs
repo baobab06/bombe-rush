@@ -6,21 +6,6 @@ import { existsSync } from "node:fs";
 import { dirname, extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-// src/net/protocol.ts
-var PROTOCOL_VERSION = 1;
-var MAX_ROOM_PLAYERS = 4;
-var RECONNECT_GRACE_S = 45;
-var ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-function generateRoomCode(rand = Math.random) {
-  let s = "";
-  for (let i = 0;i < 5; i++)
-    s += ALPHABET[Math.floor(rand() * ALPHABET.length)];
-  return s;
-}
-function normalizeCode(input) {
-  return input.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 5);
-}
-
 // src/core/characters.ts
 var SPRITE_KINDS = ["blaze", "nova", "zoe", "jax"];
 var isSpriteKind = (k) => SPRITE_KINDS.includes(k);
@@ -271,6 +256,21 @@ function buildSkins() {
   return out;
 }
 var SKINS = buildSkins();
+
+// src/net/protocol.ts
+var PROTOCOL_VERSION = 1;
+var MAX_ROOM_PLAYERS = 4;
+var RECONNECT_GRACE_S = 45;
+var ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+function generateRoomCode(rand = Math.random) {
+  let s = "";
+  for (let i = 0;i < 5; i++)
+    s += ALPHABET[Math.floor(rand() * ALPHABET.length)];
+  return s;
+}
+function normalizeCode(input) {
+  return input.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 5);
+}
 
 // src/core/bombs.ts
 var BOMB_KINDS = {
@@ -3622,12 +3622,14 @@ class PushService {
 
 // server/ws.ts
 import { createHash } from "node:crypto";
+var MAX_MESSAGE = 64 * 1024;
 var GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
 class WsConn {
   socket;
   buf = Buffer.alloc(0);
   frag = [];
+  fragSize = 0;
   alive = true;
   closed = false;
   onMessage = () => {};
@@ -3667,7 +3669,7 @@ class WsConn {
         if (this.buf.length < 10)
           return;
         const big = this.buf.readBigUInt64BE(2);
-        if (big > BigInt(1 << 20))
+        if (big > BigInt(MAX_MESSAGE))
           return this.close(1009);
         len = Number(big);
         off = 10;
@@ -3691,10 +3693,14 @@ class WsConn {
       case 0:
       case 1:
       case 2:
+        this.fragSize += payload.length;
+        if (this.fragSize > MAX_MESSAGE)
+          return this.close(1009);
         this.frag.push(payload);
         if (fin) {
           const msg = Buffer.concat(this.frag).toString("utf8");
           this.frag = [];
+          this.fragSize = 0;
           this.onMessage(msg);
         }
         break;
@@ -3789,6 +3795,7 @@ var matchmaker = new Matchmaker(lobby);
 setInterval(() => matchmaker.tick(), 1000);
 var cleanName = (n) => String(n ?? "").replace(/[<>&"]/g, "").trim().slice(0, 16) || "Joueur";
 var cosm = (v) => typeof v === "string" && /^[a-z0-9-]{1,40}$/.test(v) ? v : undefined;
+var charId = (v, fallback = "blaze") => typeof v === "string" && CHARACTERS.some((c) => c.id === v) ? v : fallback;
 var MAX_MSG_PER_SEC = 150;
 var MAX_ROOMS = 2000;
 function onMessage(conn, raw, state) {
@@ -3821,7 +3828,7 @@ function onMessage(conn, raw, state) {
     state.token = token;
     c.connected = true;
     c.name = cleanName(msg.name);
-    c.characterId = String(msg.characterId || "blaze");
+    c.characterId = charId(msg.characterId);
     c.skinId = cosm(msg.skinId);
     c.accessoryId = cosm(msg.accessoryId);
     c.trailId = cosm(msg.trailId);
@@ -3865,7 +3872,7 @@ function onMessage(conn, raw, state) {
       lobby.updateProfile(c);
       break;
     case "setLook":
-      c.characterId = String(msg.characterId || c.characterId);
+      c.characterId = charId(msg.characterId, c.characterId);
       c.skinId = cosm(msg.skinId);
       c.accessoryId = cosm(msg.accessoryId);
       c.trailId = cosm(msg.trailId);
