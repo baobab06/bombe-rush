@@ -397,7 +397,7 @@ probabilité et répartition des bonus). Les profils des bots sont en tête de
 
 ### Personnages 3D (Blaze)
 
-- Blaze et Nova sont modélisés en 3D (Tripo) puis rendu en images
+- Blaze, Nova et Zoe sont modélisés en 3D (Tripo) puis rendu en images
   (`public/chars/<kind>.webp`, outil `scripts/sprites-3d/make_sheet.py`). Vue 3/4 du dessus,
   4 directions, immobile + marche (8 images). Offert et choisi par défaut.
 - Dessin : `drawSpriteBody` (render/bodies.ts) ; les effets (rebond, écrasement,

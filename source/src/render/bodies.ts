@@ -1307,6 +1307,7 @@ export function drawCharacter(ctx: Ctx, cx: number, cy: number, s: number, look:
 const SPRITE_META: Partial<Record<BodyKind, { w: number; h: number; foot: number; cx: number; walk: number }>> = {
   blaze: { w: 135, h: 232, foot: 0.9483, cx: 0.4963, walk: 8 },
   nova: { w: 158, h: 247, foot: 0.9595, cx: 0.5, walk: 8 },
+  zoe: { w: 160, h: 241, foot: 0.971, cx: 0.5, walk: 8 },
 };
 const spriteImgs = new Map<string, HTMLImageElement>();
 function spriteImg(kind: BodyKind): HTMLImageElement | null {

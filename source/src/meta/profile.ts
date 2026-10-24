@@ -116,7 +116,7 @@ export interface Profile {
   settings: Settings;
 }
 
-export const DEFAULT_CHARACTERS = ["blaze", "nova", "renard", "boulon", "rainette", "kage", "champi", "bruno"];
+export const DEFAULT_CHARACTERS = ["blaze", "nova", "zoe", "renard", "boulon", "rainette", "kage", "champi", "bruno"];
 
 export function defaultProfile(): Profile {
   return {

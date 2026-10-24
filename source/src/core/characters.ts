@@ -12,13 +12,13 @@
  *   s'il précise `price`.
  */
 /** personnages 3D (images rendues depuis un modèle Tripo) */
-export type SpriteKind = "blaze" | "nova";
+export type SpriteKind = "blaze" | "nova" | "zoe";
 export type BodyKind = "fox" | "robot" | "frog" | "ninja" | "mushroom" | "bear" | "penguin" | SpriteKind;
 /**
  * Personnages modélisés en 3D (Tripo) puis rendus en images (public/chars/<kind>.webp).
  * Ils ne sont pas dessinés par des formes : pas de skins « thématiques » recolorés.
  */
-export const SPRITE_KINDS: readonly BodyKind[] = ["blaze", "nova"];
+export const SPRITE_KINDS: readonly BodyKind[] = ["blaze", "nova", "zoe"];
 export const isSpriteKind = (k: BodyKind): boolean => SPRITE_KINDS.includes(k);
 export type Rarity = "common" | "rare" | "epic" | "legend";
 
@@ -117,6 +117,7 @@ export interface SkinDef {
 export const CHARACTERS: CharacterDef[] = [
   { id: "blaze", name: "Blaze", kind: "blaze", tagline: "Bagarreur au bandeau", bio: "Le poing serré, le bandeau rouge, et toujours une bombe d'avance." },
   { id: "nova", name: "Nova", kind: "nova", tagline: "Hackeuse néon", bio: "Lunettes sur le front, baskets qui brillent : elle pirate l'arène à coups de bombes." },
+  { id: "zoe", name: "Zoe", kind: "zoe", tagline: "Boxeuse étoile", bio: "Deux chignons, deux gants, zéro pitié : elle cogne aussi fort que ses bombes." },
   { id: "renard", name: "Flamme", kind: "fox", tagline: "Renard malin", bio: "Toujours un coup d'avance… et une bombe dans la poche." },
   { id: "boulon", name: "Boulon", kind: "robot", tagline: "Robot de chantier", bio: "Programmé pour tout démolir. Bloc par bloc." },
   { id: "rainette", name: "Rainette", kind: "frog", tagline: "Grenouille sauteuse", bio: "Elle saute de joie à chaque explosion." },
@@ -139,6 +140,7 @@ interface BaseSkin {
 const CLASSIC: Record<string, BaseSkin> = {
   blaze: { name: "Classique", palette: P("#e8343a", "#7a1418", "#ffd9b8", "#2a1d1d") },
   nova: { name: "Classique", palette: P("#ff3fb4", "#8a1460", "#ffe0ec", "#3fd8ff") },
+  zoe: { name: "Classique", palette: P("#b44dff", "#5a1c8f", "#ffe9cc", "#ff4fd8") },
   renard: { name: "Classique", palette: P("#ff8a2b", "#c4520c", "#fff1df", "#3a2418"), aura: "leaves" },
   boulon: { name: "Classique", palette: P("#5aa0ff", "#2c5fb8", "#d6e8ff", "#ffd23f") },
   rainette: { name: "Classique", palette: P("#4fd46a", "#22893c", "#e8ffd0", "#1f6e33") },
