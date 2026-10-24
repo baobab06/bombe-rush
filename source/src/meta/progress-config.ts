@@ -6,7 +6,7 @@
  * Changer un nombre ici suffit : écrans et règles suivent tout seuls.
  * (Prix boutique, barème des pièces et missions du jour : economy.ts)
  */
-import type { Rarity } from "../core/characters";
+import { SKINS, type Rarity } from "../core/characters";
 import type { StakeId } from "./economy";
 
 // ------------------------------------------------------------ récompenses
@@ -74,7 +74,8 @@ export function masteryRewards(characterId: string): Record<number, Reward[]> {
     10: [{ kind: "item", id: `title-m10-${characterId}` }],
     15: [{ kind: "chest", tier: "rare" }],
     20: [{ kind: "item", id: `title-m20-${characterId}` }, { kind: "coins", amount: 500 }],
-    30: [{ kind: "item", id: `${characterId}-maitre` }],
+    // skin Maître (personnages dessinés) ; personnages 3D : coffre légendaire en attendant leurs vrais skins
+    30: SKINS.some((s) => s.id === `${characterId}-maitre`) ? [{ kind: "item", id: `${characterId}-maitre` }] : [{ kind: "chest", tier: "legend" }],
     40: [{ kind: "chest", tier: "epic" }],
     50: [{ kind: "item", id: `title-m50-${characterId}` }, { kind: "chest", tier: "legend" }],
   };

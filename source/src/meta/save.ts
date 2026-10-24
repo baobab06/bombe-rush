@@ -3,6 +3,7 @@ import { EMOTE_SLOTS, getBoom, getEmote, getTitle, getTrail } from "../core/cosm
 import { CHEST_ORDER, LEVEL_MAX, levelXp, MASTERY_MAX, masteryXp } from "./progress-config";
 import { getItem } from "./catalog";
 import { DEFAULT_CHARACTERS, defaultProfile, type Profile } from "./profile";
+import { LEGACY_REFUND } from "./legacy-refund";
 
 /**
  * Sauvegarde locale. Tout passe par cette interface : on pourra brancher
@@ -75,6 +76,14 @@ export function migrate(data: Partial<Profile> & { ownedSkins?: string[]; versio
   };
   // v1 : les skins achetés étaient dans ownedSkins
   const owned = new Set<string>([...(data.owned ?? []), ...(data.ownedSkins ?? [])]);
+  // 1.7.0 : anciens personnages retirés → leurs skins (et Pingo) remboursés en pièces, une seule fois
+  if (data.legacyRefund === undefined) {
+    let refund = 0;
+    for (const id of owned) refund += LEGACY_REFUND[id] ?? 0;
+    for (const id of data.ownedCharacters ?? []) refund += LEGACY_REFUND["char:" + id] ?? 0;
+    p.coins += refund;
+    p.legacyRefund = refund;
+  }
   p.owned = [...owned].filter((id) => !!getItem(id));
   delete (p as { ownedSkins?: unknown }).ownedSkins;
   const chars = new Set([...DEFAULT_CHARACTERS, ...(data.ownedCharacters ?? [])]);

@@ -28,7 +28,7 @@ function check(cond: boolean, msg: string) {
 const day = (d: number, h = 12) => new Date(2026, 9, d, h); // octobre 2026 (5 = lundi)
 const O = (place: number, o: Partial<{ won: boolean; draw: boolean; kills: number; characterId: string; modeId: string; players: number }> = {}) => ({
   won: o.won ?? place === 1, draw: o.draw ?? false, place, players: o.players ?? 4, kills: o.kills ?? 1, bombsPlaced: 10, blocksDestroyed: 20,
-  bonusesPicked: 3, survivalTime: 70, modeId: o.modeId ?? "classic", characterId: o.characterId ?? "renard",
+  bonusesPicked: 3, survivalTime: 70, modeId: o.modeId ?? "classic", characterId: o.characterId ?? "blaze",
 });
 let mid = 0;
 const C = (stake: "easy" | "normal" | "hard" | "expert" = "normal", online = false) => ({ matchId: `t${++mid}`, stake, modeId: "classic", online });
@@ -70,16 +70,17 @@ console.log("2. Passage de niveau au bon seuil");
 console.log("3. Maîtrise : seul le personnage joué progresse");
 {
   const p = defaultProfile();
-  applyMatch(p, O(1, { characterId: "kage", kills: 2 }), C(), day(5));
-  check(masteryOf(p, "kage").games === 1 && masteryOf(p, "kage").xp + (masteryOf(p, "kage").level > 1 ? 1 : 0) > 0 && masteryOf(p, "kage").wins === 1 && masteryOf(p, "kage").kills === 2, "Kage : 1 partie, 1 victoire, 2 éliminations");
-  check(masteryOf(p, "renard").games === 0 && !p.mastery.renard, "Flamme n'a pas bougé");
-  const g = addMastery(p, "kage", 1e7, 0, false);
-  check(masteryOf(p, "kage").level === 50 && p.owned.includes("kage-maitre") && p.owned.includes("title-m50-kage"), "paliers 5→50 : skin Maître et titres débloqués");
-  check(g.granted.filter((x) => x.itemId === "kage-maitre").length === 1, "chaque palier donné une seule fois");
-  check(!p.owned.includes("renard-maitre"), "rien pour les autres personnages");
+  applyMatch(p, O(1, { characterId: "jax", kills: 2 }), C(), day(5));
+  check(masteryOf(p, "jax").games === 1 && masteryOf(p, "jax").xp + (masteryOf(p, "jax").level > 1 ? 1 : 0) > 0 && masteryOf(p, "jax").wins === 1 && masteryOf(p, "jax").kills === 2, "Jax : 1 partie, 1 victoire, 2 éliminations");
+  check(masteryOf(p, "blaze").games === 0 && !p.mastery.blaze, "Blaze n'a pas bougé");
+  const legend0 = p.chests.legend;
+  const g = addMastery(p, "jax", 1e7, 0, false);
+  check(masteryOf(p, "jax").level === 50 && ["title-m10-jax", "title-m20-jax", "title-m50-jax"].every((t) => p.owned.includes(t)) && p.chests.legend >= legend0 + 2, "paliers 5→50 : titres et coffres débloqués (coffre légendaire au palier 30)");
+  check(g.granted.filter((x) => x.itemId === "title-m50-jax").length === 1, "chaque palier donné une seule fois");
+  check(!p.owned.includes("title-m50-blaze"), "rien pour les autres personnages");
   check(MASTERY_STEPS.join() === "5,10,15,20,30,40,50" && masteryXp(1) < masteryXp(30), "paliers 5/10/15/20/30/40/50");
-  const br = buy(p, "renard-maitre", day(5));
-  check(!br.ok && br.reason === "exclusive", "skin de maîtrise : impossible à acheter");
+  const br = buy(p, "title-m50-blaze", day(5));
+  check(!br.ok && br.reason === "exclusive", "titre de maîtrise : impossible à acheter");
 }
 
 console.log("4-5. Missions du jour et de la semaine");
@@ -182,7 +183,6 @@ console.log("9. Coffres : contenu donné et sauvegardé");
   check(openChest(p, "epic") === null, "plus de coffre : rien à ouvrir");
   // doublons → pièces
   const q = defaultProfile();
-  q.ownedCharacters.push("pingo");
   for (const it of CATALOG) if (!it.free && it.kind !== "character" && (!it.exclusive || it.exclusive === "chest")) q.owned.push(it.id);
   q.chests.legend = 1;
   const before = q.coins;

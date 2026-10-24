@@ -22,25 +22,20 @@ function normalizeCode(input) {
 }
 
 // src/core/characters.ts
-var SPRITE_KINDS = ["blaze", "nova", "zoe"];
+var SPRITE_KINDS = ["blaze", "nova", "zoe", "jax"];
 var isSpriteKind = (k) => SPRITE_KINDS.includes(k);
 var CHARACTERS = [
   { id: "blaze", name: "Blaze", kind: "blaze", tagline: "Bagarreur au bandeau", bio: "Le poing serré, le bandeau rouge, et toujours une bombe d'avance." },
   { id: "nova", name: "Nova", kind: "nova", tagline: "Hackeuse néon", bio: "Lunettes sur le front, baskets qui brillent : elle pirate l'arène à coups de bombes." },
   { id: "zoe", name: "Zoe", kind: "zoe", tagline: "Boxeuse étoile", bio: "Deux chignons, deux gants, zéro pitié : elle cogne aussi fort que ses bombes." },
-  { id: "renard", name: "Flamme", kind: "fox", tagline: "Renard malin", bio: "Toujours un coup d'avance… et une bombe dans la poche." },
-  { id: "boulon", name: "Boulon", kind: "robot", tagline: "Robot de chantier", bio: "Programmé pour tout démolir. Bloc par bloc." },
-  { id: "rainette", name: "Rainette", kind: "frog", tagline: "Grenouille sauteuse", bio: "Elle saute de joie à chaque explosion." },
-  { id: "kage", name: "Kage", kind: "ninja", tagline: "Ninja discret", bio: "On ne l'entend jamais arriver. Sa bombe, si." },
-  { id: "champi", name: "Champi", kind: "mushroom", tagline: "Champignon têtu", bio: "Petit, têtu, et franchement explosif." },
-  { id: "bruno", name: "Bruno", kind: "bear", tagline: "Ourson costaud", bio: "Un gros câlin, puis un gros BOUM." },
-  { id: "pingo", name: "Pingo", kind: "penguin", tagline: "Pingouin glisseur", bio: "Il glisse partout, même là où il n'y a pas de glace.", locked: true, rarity: "epic" }
+  { id: "jax", name: "Jax", kind: "jax", tagline: "Fantôme de la rue", bio: "Capuche jaune, casquette à tête de mort : on ne voit jamais son visage, seulement ses bombes." }
 ];
 var P = (main, dark, light, accent) => ({ main, dark, light, accent });
 var CLASSIC = {
   blaze: { name: "Classique", palette: P("#e8343a", "#7a1418", "#ffd9b8", "#2a1d1d") },
   nova: { name: "Classique", palette: P("#ff3fb4", "#8a1460", "#ffe0ec", "#3fd8ff") },
   zoe: { name: "Classique", palette: P("#b44dff", "#5a1c8f", "#ffe9cc", "#ff4fd8") },
+  jax: { name: "Classique", palette: P("#ffc61a", "#8a6200", "#fff3c4", "#1d1d1d") },
   renard: { name: "Classique", palette: P("#ff8a2b", "#c4520c", "#fff1df", "#3a2418"), aura: "leaves" },
   boulon: { name: "Classique", palette: P("#5aa0ff", "#2c5fb8", "#d6e8ff", "#ffd23f") },
   rainette: { name: "Classique", palette: P("#4fd46a", "#22893c", "#e8ffd0", "#1f6e33") },
@@ -3782,7 +3777,7 @@ function onMessage(conn, raw, state) {
     const token = typeof msg.token === "string" && msg.token.length >= 16 ? msg.token.slice(0, 64) : randomBytes(16).toString("hex");
     let c = clients.get(token);
     if (!c) {
-      c = { token, id: randomBytes(5).toString("hex"), name: "", characterId: "renard", room: null, connected: true };
+      c = { token, id: randomBytes(5).toString("hex"), name: "", characterId: "blaze", room: null, connected: true };
       clients.set(token, c);
     }
     const old = conns.get(token);
@@ -3792,7 +3787,7 @@ function onMessage(conn, raw, state) {
     state.token = token;
     c.connected = true;
     c.name = cleanName(msg.name);
-    c.characterId = String(msg.characterId || "renard");
+    c.characterId = String(msg.characterId || "blaze");
     c.skinId = cosm(msg.skinId);
     c.accessoryId = cosm(msg.accessoryId);
     c.trailId = cosm(msg.trailId);

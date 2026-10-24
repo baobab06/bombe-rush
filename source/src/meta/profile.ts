@@ -111,12 +111,16 @@ export interface Profile {
   pending: { matchId: string; stake: "easy" | "normal" | "hard" | "expert"; modeId: string; online?: boolean; players?: number; startedAt: number; ending?: boolean } | null;
   /** dernières transactions de pièces (historique) */
   ledger: import("./rewards").CoinTransaction[];
+  /** pièces rendues pour les anciens personnages retirés (1.7.0) ; undefined = pas encore traité */
+  legacyRefund?: number;
+  /** message du remboursement déjà affiché */
+  legacyRefundSeen?: boolean;
   winStreak: number;
   lastSetup: { botCount: number; difficulty: "easy" | "normal" | "hard" | "expert"; mapId: string; modeId: string };
   settings: Settings;
 }
 
-export const DEFAULT_CHARACTERS = ["blaze", "nova", "zoe", "renard", "boulon", "rainette", "kage", "champi", "bruno"];
+export const DEFAULT_CHARACTERS = ["blaze", "nova", "zoe", "jax"];
 
 export function defaultProfile(): Profile {
   return {

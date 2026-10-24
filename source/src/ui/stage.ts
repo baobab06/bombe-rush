@@ -31,7 +31,7 @@ export class Stage {
   private raf = 0;
   private t = Math.random() * 10;
   private last = 0;
-  private look: StageLook = { characterId: "renard" };
+  private look: StageLook = { characterId: "blaze" };
   private rarity: Rarity | null = null;
   private mode: Mode = "idle";
   private emote: { def: EmoteDef; at: number; loop: boolean } | null = null;

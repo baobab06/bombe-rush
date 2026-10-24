@@ -83,7 +83,7 @@ function onMessage(conn: WsConn, raw: string, state: { token: string | null; win
     const token = typeof msg.token === "string" && msg.token.length >= 16 ? msg.token.slice(0, 64) : randomBytes(16).toString("hex");
     let c = clients.get(token);
     if (!c) {
-      c = { token, id: randomBytes(5).toString("hex"), name: "", characterId: "renard", room: null, connected: true };
+      c = { token, id: randomBytes(5).toString("hex"), name: "", characterId: "blaze", room: null, connected: true };
       clients.set(token, c);
     }
     // une seule connexion active par joueur
@@ -93,7 +93,7 @@ function onMessage(conn: WsConn, raw: string, state: { token: string | null; win
     state.token = token;
     c.connected = true;
     c.name = cleanName(msg.name);
-    c.characterId = String(msg.characterId || "renard");
+    c.characterId = String(msg.characterId || "blaze");
     c.skinId = cosm(msg.skinId);
     c.accessoryId = cosm(msg.accessoryId);
     c.trailId = cosm(msg.trailId);

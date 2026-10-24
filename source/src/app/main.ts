@@ -596,6 +596,12 @@ class App implements AppCtx {
   /** Arrivée sur l'accueil : cadeau de bienvenue, puis récompense du jour. */
   private afterHome() {
     const p = this._profile;
+    // 1.7.0 : anciens personnages retirés, achats remboursés (message une seule fois)
+    if (p.legacyRefund && !p.legacyRefundSeen) {
+      p.legacyRefundSeen = true;
+      this.persist();
+      window.setTimeout(() => this.toast(`🎉 Nouveaux personnages ! Tes anciens skins t'ont été remboursés : +${fmt(p.legacyRefund!)} 🪙`, "good"), 600);
+    }
     if (!p.starterGift) {
       window.setTimeout(() => {
         if (this.screen !== "home" || p.starterGift) return;
