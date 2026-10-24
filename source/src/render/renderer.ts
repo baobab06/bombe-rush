@@ -101,9 +101,11 @@ export class Renderer {
 
   /** résolution maximale (baissée automatiquement si le téléphone peine) */
   maxDpr = 2;
+  /** basse résolution (démo derrière les menus) */
+  lowRes = false;
 
   resize(w: number, h: number) {
-    this.dpr = Math.min(window.devicePixelRatio || 1, this.maxDpr);
+    this.dpr = Math.min(window.devicePixelRatio || 1, this.lowRes ? 1 : this.maxDpr);
     this.viewW = w;
     this.viewH = h;
     this.canvas.width = Math.round(w * this.dpr);

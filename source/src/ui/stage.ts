@@ -115,6 +115,11 @@ export class Stage {
   private frame = (now: number) => {
     this.raf = 0;
     if (!this.visible()) return; // relancé par start() au prochain affichage
+    // 30 images/s suffisent pour le personnage des menus (moins de travail pour le téléphone)
+    if (now - this.last < 1000 / 31) {
+      this.raf = requestAnimationFrame(this.frame);
+      return;
+    }
     const dt = Math.min(0.05, Math.max(0, (now - this.last) / 1000));
     this.last = now;
     this.t += dt;

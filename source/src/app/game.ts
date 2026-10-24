@@ -173,6 +173,8 @@ export class GameScreen {
     this.countdownShown = -1;
     this.paused = false;
     if (this.demo) this.session.match.countdown = 0;
+    // la démo derrière les menus est voilée : basse résolution, bien plus léger
+    this.renderer.lowRes = this.demo;
     this.resize();
     audio.setIntensity(0);
     this.onHud?.();
@@ -248,6 +250,7 @@ export class GameScreen {
     this.perfT = 0;
     this.perfN = 0;
     const R = this.renderer;
+    if (R.lowRes) return;
     const real = Math.min(window.devicePixelRatio || 1, R.maxDpr);
     if (fps < 45 && real > 1.25) {
       R.maxDpr = Math.max(1.25, real - 0.25);
