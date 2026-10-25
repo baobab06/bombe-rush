@@ -6,6 +6,8 @@ export const ICE: MapDef = {
   name: "Banquise",
   subtitle: "Ça glisse !",
   theme: "ice",
+  // retirée pour l'instant de tous les modes (demande du 25/10) : remettre en enlevant cette ligne
+  modes: [],
   layout: [
     "#############",
     "#S....s....S#",

@@ -245,6 +245,15 @@ button:focus-visible, input:focus-visible + i { outline: 3px solid var(--coin); 
 .label-row .label { margin: 0; }
 .setup-right .launch { margin-top: auto; align-self: flex-end; min-width: 50%; font-size: min(6.6cqh, 3.2cqw); }
 .choice-row { display: grid; grid-template-columns: 1fr 1fr; gap: 2cqh; }
+/* options de partie : les 3 modes sur une ligne, la description du mode choisi en dessous
+   (sinon la difficulté sort de l'écran sur les téléphones) */
+#modeRow { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.6cqh; }
+#modeRow .choice { padding: 1.6cqh 1.4cqh; }
+#modeRow .choice b { font-size: min(.9em, 2.4cqw); }
+#modeRow .choice b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#modeRow .choice span { display: none; }
+.mode-desc { margin: 1cqh .4cqh 0; color: var(--muted); font-size: max(11px, .7em); line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.setup-left { overflow-y: auto; overscroll-behavior: contain; }
 .choice { text-align: left; padding: 1.8cqh 2.6cqh; border-radius: 3cqh; background: rgba(10,6,40,.4); border: max(2px,.55cqh) solid rgba(255,255,255,.12); display: flex; flex-direction: column; gap: .2cqh; min-width: 0; position: relative; transition: transform .1s; }
 .choice b { font-family: var(--display); font-weight: 400; font-size: .95em; }
 .choice span { font-size: max(11px, .68em); color: var(--muted); line-height: 1.25; }

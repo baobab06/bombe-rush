@@ -1130,6 +1130,7 @@ var ICE = {
   name: "Banquise",
   subtitle: "Ça glisse !",
   theme: "ice",
+  modes: [],
   layout: [
     "#############",
     "#S....s....S#",

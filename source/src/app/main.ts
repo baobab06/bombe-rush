@@ -673,6 +673,7 @@ class App implements AppCtx {
       });
       modeRow.appendChild(b);
     }
+    $("modeDesc").textContent = MODES.find((m) => m.id === st.modeId)?.tagline ?? "";
     const mapRow = $("mapRow");
     if (!mapRow.childElementCount) {
       for (const m of MAPS) {
