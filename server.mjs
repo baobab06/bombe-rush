@@ -742,8 +742,8 @@ var HILL_RULES = {
   respawnDelay: 3,
   respawnShield: 2.5,
   respawnHillGap: 3,
-  moveEvery: 20,
-  moveWarn: 4
+  moveEvery: 10,
+  moveWarn: 3
 };
 
 class HillState {
@@ -786,6 +786,42 @@ class HillState {
       const cells = HillState.cellsAround(m, cx, cy);
       this.sites.push({ center: [cx, cy], cells, set: new Set(cells) });
     }
+    const usable = (x, y) => x > 0 && y > 0 && x < g.w - 1 && y < g.h - 1 && g.tile(x, y) !== TILE.WALL && !g.isHazard(x, y);
+    const single = [];
+    for (const st of this.sites) {
+      const [x0, y0] = st.center;
+      let pick = usable(x0, y0) ? [x0, y0] : null;
+      const onCenter = x0 === cx && y0 === cy;
+      if (!pick && !onCenter) {
+        const sx = Math.sign(cx - x0);
+        const sy = Math.sign(cy - y0);
+        const cand = [];
+        for (let dy = -3;dy <= 3; dy++)
+          for (let dx = -3;dx <= 3; dx++) {
+            const d = Math.abs(dx) + Math.abs(dy);
+            if (d === 0 || d > 3)
+              continue;
+            if (dx !== 0 && Math.sign(dx) !== sx || dy !== 0 && Math.sign(dy) !== sy)
+              continue;
+            if (usable(x0 + dx, y0 + dy))
+              cand.push([d * 100 + Math.abs(dy) * 10 + Math.abs(dx), x0 + dx, y0 + dy]);
+          }
+        cand.sort((a, b) => a[0] - b[0]);
+        if (cand.length)
+          pick = [cand[0][1], cand[0][2]];
+      }
+      if (!pick)
+        continue;
+      const ci = g.idx(pick[0], pick[1]);
+      if (!single.some((o) => o.cells[0] === ci))
+        single.push({ center: pick, cells: [ci], set: new Set([ci]) });
+    }
+    if (!single.length) {
+      const st = this.sites[0];
+      const ci = st.cells[0];
+      single.push({ center: [ci % g.w, Math.floor(ci / g.w)], cells: [ci], set: new Set([ci]) });
+    }
+    this.sites = single;
     this.clearBlocks(this.sites[0]);
     this.scores = m.players.map(() => 0);
     this.respawnIn = m.players.map(() => 0);
@@ -852,7 +888,16 @@ class HillState {
   }
   clearBlocks(site) {
     const g = this.m.grid;
-    for (const i of site.cells)
+    const around = [];
+    for (const i of site.cells) {
+      around.push(i);
+      const x = i % g.w;
+      const y = Math.floor(i / g.w);
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]])
+        if (x + dx > 0 && y + dy > 0 && x + dx < g.w - 1 && y + dy < g.h - 1)
+          around.push(g.idx(x + dx, y + dy));
+    }
+    for (const i of around)
       if (g.tiles[i] === TILE.BLOCK) {
         g.tiles[i] = TILE.FLOOR;
         g.hiddenBonus[i] = null;

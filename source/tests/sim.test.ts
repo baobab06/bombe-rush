@@ -386,7 +386,7 @@ console.log("Domination : zone qui se déplace");
     const g = m.grid;
     const h = m.hill!;
     // emplacements praticables et disposés en miroir (équité)
-    const okSites = h.sites.every((st) => st.cells.length >= 2 && st.cells.every((i) => g.tiles[i] !== TILE.WALL && !g.isHazard(i % g.w, Math.floor(i / g.w))));
+    const okSites = h.sites.every((st) => st.cells.length === 1 && st.cells.every((i) => g.tiles[i] !== TILE.WALL && !g.isHazard(i % g.w, Math.floor(i / g.w))));
     const centers = new Set(h.sites.map((st) => st.center.join(",")));
     const mirrored = h.sites.every((st) => centers.has(`${g.w - 1 - st.center[0]},${st.center[1]}`) && centers.has(`${st.center[0]},${g.h - 1 - st.center[1]}`));
     check(h.sites.length >= 3 && okSites && mirrored, `${map.name} : ${h.sites.length} emplacements de zone, praticables, en miroir`);
@@ -425,8 +425,10 @@ console.log("Mode Roi de la colline");
     const h = m.hill!;
     const cells = h.cells.map((i) => [i % g.w, Math.floor(i / g.w)] as [number, number]);
     const okCells = cells.every(([x, y]) => g.tile(x, y) === TILE.FLOOR && !g.isHazard(x, y));
-    const sym = cells.every(([x, y]) => h.isHill(g.w - 1 - x, y) && h.isHill(x, g.h - 1 - y));
-    check(cells.length >= 2 && okCells && sym, `${map.name} : colline de ${cells.length} cases, praticables, sans bloc, symétrique`);
+    // zone d'une case : symétrique si elle est au milieu ; sinon (milieu inaccessible) les emplacements sont en miroir (testé plus haut)
+    const mid = cells.every(([x, y]) => x === g.w - 1 - x && y === g.h - 1 - y);
+    const sym = mid || !h.sites.some((st) => st.center[0] === (g.w - 1) / 2 && st.center[1] === (g.h - 1) / 2);
+    check(cells.length === 1 && okCells && sym, `${map.name} : colline de ${cells.length} case, praticables, sans bloc, symétrique`);
   }
   const fresh = () => {
     const m = new Match({ seed: 4, map: FOREST, modeId: "koth", players: slots(3) });
@@ -443,8 +445,7 @@ console.log("Mode Roi de la colline");
     run(m, 5);
     const pts = m.hill!.points(0);
     check(pts >= 4 && pts <= 5 && m.hill!.points(1) === 0, `seul sur la colline : 1 point par seconde (${pts} en 5 s)`);
-    const [x2, y2] = hc(m, 1);
-    place(m, 1, x2, y2);
+    place(m, 1, x, y);
     run(m, 3);
     check(m.hill!.points(0) === pts && m.hill!.points(1) === 0 && m.hill!.contested, "à deux sur la colline : disputée, personne ne marque");
   }
