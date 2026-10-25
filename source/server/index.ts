@@ -61,7 +61,7 @@ const cleanName = (n: unknown) =>
 /** Identifiant cosmétique reçu d'un client : court et sans caractères exotiques. */
 const cosm = (v: unknown): string | undefined => (typeof v === "string" && /^[a-z0-9-]{1,40}$/.test(v) ? v : undefined);
 /** Personnage reçu d'un client : seulement un personnage qui existe. */
-const charId = (v: unknown, fallback = "blaze"): string => (typeof v === "string" && CHARACTERS.some((c) => c.id === v) ? v : fallback);
+const charId = (v: unknown, fallback = "renard"): string => (typeof v === "string" && CHARACTERS.some((c) => c.id === v) ? v : fallback);
 const MAX_MSG_PER_SEC = 150; // 60 entrées/s + marge
 const MAX_ROOMS = 2000;
 
@@ -86,7 +86,7 @@ function onMessage(conn: WsConn, raw: string, state: { token: string | null; win
     const token = typeof msg.token === "string" && msg.token.length >= 16 ? msg.token.slice(0, 64) : randomBytes(16).toString("hex");
     let c = clients.get(token);
     if (!c) {
-      c = { token, id: randomBytes(5).toString("hex"), name: "", characterId: "blaze", room: null, connected: true };
+      c = { token, id: randomBytes(5).toString("hex"), name: "", characterId: "renard", room: null, connected: true };
       clients.set(token, c);
     }
     // une seule connexion active par joueur

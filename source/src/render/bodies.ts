@@ -13,15 +13,12 @@
  * `drawCharacter` par des drawImage ; le reste du jeu ne change pas.
  */
 import {
-  SPRITE_KINDS,
   WEAR_SLOT,
   getCharacter,
-  isSpriteKind,
   getSkin,
   type Accessory,
   type AuraId,
   type BodyKind,
-  type SpriteKind,
   type EyeStyle,
   type Palette,
   type Pattern,
@@ -39,8 +36,6 @@ export interface Look {
   aura: AuraId;
   eyes: EyeStyle;
   special?: "shimmer" | "rainbow";
-  /** personnage 3D : planche d'image du skin (sinon celle du personnage) */
-  sprite?: string;
   /** compat V1 */
   accessory?: Accessory;
 }
@@ -104,7 +99,6 @@ export function lookOf(characterId: string, skinId?: string, accessoryId?: strin
     aura: sk.aura,
     eyes: sk.eyes ?? "normal",
     special: sk.special,
-    sprite: sk.sprite,
   };
 }
 
@@ -1150,7 +1144,7 @@ function accessory(ctx: Ctx, kind: Accessory, a: Anchor, s: number, look: Look, 
 }
 
 // ---------------------------------------------------------------- entrée
-const BODY: Record<Exclude<BodyKind, SpriteKind>, (ctx: Ctx, cx: number, by: number, s: number, c: Palette, pose: CharPose, ink: string, look: Look) => Anchor> = {
+const BODY: Record<BodyKind, (ctx: Ctx, cx: number, by: number, s: number, c: Palette, pose: CharPose, ink: string, look: Look) => Anchor> = {
   fox,
   robot,
   frog,
@@ -1206,11 +1200,6 @@ export function drawCharacter(ctx: Ctx, cx: number, cy: number, s: number, look:
     ctx.fill();
   }
 
-  if (isSpriteKind(look.kind)) {
-    drawSpriteBody(ctx, look, pose, cx + shake, footY - bob, s, sx, sy, lean);
-    return;
-  }
-
   // transformation commune au corps et aux accessoires
   const apply = (g: Ctx) => {
     g.translate(cx + shake, footY);
@@ -1235,7 +1224,7 @@ export function drawCharacter(ctx: Ctx, cx: number, cy: number, s: number, look:
     // les mains passent derrière en vue de dos
     let a: Anchor | null = null;
     if (back) {
-      const probe = BODY[look.kind as Exclude<BodyKind, SpriteKind>];
+      const probe = BODY[look.kind];
       // ancres connues sans dessiner : on dessine le corps d'abord puis les mains par-dessus
       a = probe(g, cx, by, s, c, pose, ink, look);
       g.strokeStyle = ink;
@@ -1243,7 +1232,7 @@ export function drawCharacter(ctx: Ctx, cx: number, cy: number, s: number, look:
       hands(g, a, s, c, look, pose);
       return a;
     }
-    a = BODY[look.kind as Exclude<BodyKind, SpriteKind>](g, cx, by, s, c, pose, ink, look);
+    a = BODY[look.kind](g, cx, by, s, c, pose, ink, look);
     g.strokeStyle = ink;
     g.lineWidth = Math.max(1.2, s * 0.045);
     hands(g, a, s, c, look, pose);
@@ -1301,124 +1290,7 @@ export function drawCharacter(ctx: Ctx, cx: number, cy: number, s: number, look:
   }
 }
 
-// ------------------------------------------------------- personnages 3D (images)
-/**
- * Planches générées depuis le modèle 3D (scripts/sprites-3d) : une ligne par
- * direction (face, profil gauche, dos), colonne 0 = immobile, 1-8 = marche,
- * 9 = victoire, 10 = défaite, 11 = pose de bombe.
- * Le profil droit est le profil gauche retourné.
- */
-/**
- * idle / walk / win = nombre d'images de chaque animation (dans cet ordre),
- * puis 1 image de défaite et 1 image de pose de bombe.
- */
-interface SpriteMeta { w: number; h: number; bh: number; foot: number; cx: number; idle: number; walk: number; win: number }
-const SPRITE_META: Partial<Record<BodyKind, SpriteMeta>> = {
-  blaze: { w: 189, h: 241, bh: 237, foot: 0.9295, cx: 0.5026, idle: 6, walk: 8, win: 4 },
-  nova: { w: 159, h: 254, bh: 250, foot: 0.9606, cx: 0.5031, idle: 1, walk: 8, win: 1 },
-  zoe: { w: 176, h: 251, bh: 247, foot: 0.9721, cx: 0.5, idle: 1, walk: 8, win: 1 },
-  jax: { w: 181, h: 235, bh: 235, foot: 0.9489, cx: 0.4807, idle: 1, walk: 8, win: 1 },
-};
-
-/**
- * Cache des images déjà mises à la bonne taille : redimensionner une grande
- * planche à chaque image coûte cher sur téléphone ; on le fait une seule fois
- * par taille, puis on copie l'image prête (quasiment 1 pour 1).
- */
-const frameCache = new Map<string, HTMLCanvasElement>();
-function cachedFrame(im: HTMLImageElement, sheet: string, meta: SpriteMeta, col: number, row: number, pxH: number, flash: boolean): HTMLCanvasElement | null {
-  if (typeof document === "undefined") return null;
-  const qh = Math.max(8, Math.min(1024, Math.ceil(pxH / 4) * 4));
-  const key = `${sheet}|${col}|${row}|${qh}|${flash ? 1 : 0}`;
-  let c = frameCache.get(key);
-  if (c) return c;
-  if (frameCache.size > 600) frameCache.clear();
-  c = document.createElement("canvas");
-  c.height = qh;
-  c.width = Math.max(1, Math.round((qh * meta.w) / meta.h));
-  const g = c.getContext("2d")!;
-  g.imageSmoothingEnabled = true;
-  g.imageSmoothingQuality = "high";
-  // réduction en deux temps si l'image est beaucoup plus petite (plus net)
-  if (meta.h > qh * 2.2) {
-    const mid = document.createElement("canvas");
-    mid.height = qh * 2;
-    mid.width = c.width * 2;
-    const mg = mid.getContext("2d")!;
-    mg.imageSmoothingQuality = "high";
-    mg.drawImage(im, col * meta.w, row * meta.h, meta.w, meta.h, 0, 0, mid.width, mid.height);
-    g.drawImage(mid, 0, 0, c.width, c.height);
-  } else g.drawImage(im, col * meta.w, row * meta.h, meta.w, meta.h, 0, 0, c.width, c.height);
-  if (flash) {
-    // éclair blanc quand le personnage est touché (sans ctx.filter, lent sur mobile)
-    g.globalCompositeOperation = "source-atop";
-    g.fillStyle = "rgba(255,255,255,0.7)";
-    g.fillRect(0, 0, c.width, c.height);
-  }
-  frameCache.set(key, c);
-  return c;
-}
-const spriteImgs = new Map<string, HTMLImageElement>();
-function spriteImg(kind: string): HTMLImageElement | null {
-  if (typeof Image === "undefined") return null;
-  let im = spriteImgs.get(kind);
-  if (!im) {
-    im = new Image();
-    im.decoding = "async";
-    im.src = `chars/${kind}.webp`;
-    spriteImgs.set(kind, im);
-  }
-  return im.complete && im.naturalWidth > 0 ? im : null;
-}
-// préchargement
-if (typeof window !== "undefined") for (const k of SPRITE_KINDS) spriteImg(k);
-
-/** Hauteur affichée d'un personnage 3D (en unités « s »). */
-const SPRITE_HEIGHT = 1.3;
-
-function drawSpriteBody(ctx: Ctx, look: Look, pose: CharPose, x: number, footY: number, s: number, sx: number, sy: number, lean: number) {
-  const meta = SPRITE_META[look.kind];
-  const im = (look.sprite && spriteImg(look.sprite)) || spriteImg(look.kind);
-  ctx.save();
-  ctx.translate(x, footY);
-  ctx.rotate(lean);
-  ctx.scale(sx, sy);
-  if (!meta || !im) {
-    // image pas encore chargée : silhouette simple aux couleurs du perso
-    ctx.fillStyle = look.palette.main;
-    ctx.beginPath();
-    ctx.ellipse(0, -s * 0.5, s * 0.32, s * 0.5, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-    return;
-  }
-  const horiz = Math.abs(pose.faceX) > Math.abs(pose.faceY);
-  const row = horiz ? 1 : pose.faceY < 0 ? 2 : 0;
-  const flip = horiz && pose.faceX > 0;
-  const walk0 = meta.idle;
-  const win0 = walk0 + meta.walk;
-  const lose = win0 + meta.win;
-  const bomb = lose + 1;
-  let col = pose.moving
-    ? walk0 + (Math.floor(((((pose.walk / 2) % 1) + 1) % 1) * meta.walk) % meta.walk)
-    : Math.floor(pose.t * 6) % meta.idle;
-  if (pose.action !== undefined && pose.action > 0 && pose.action < 1) col = bomb;
-  else if (pose.celebrate) col = win0 + (Math.floor(pose.t * 7) % meta.win);
-  else if (pose.expr === "dizzy" && !pose.moving) col = lose;
-  const H = s * SPRITE_HEIGHT * (meta.h / meta.bh);
-  const W = (H * meta.w) / meta.h;
-  if (flip) ctx.scale(-1, 1);
-  const flash = pose.hurt !== undefined && pose.hurt < 0.35 && Math.floor(pose.hurt * 24) % 2 === 0;
-  const tr = ctx.getTransform();
-  const pxH = H * Math.hypot(tr.c, tr.d);
-  const fr = cachedFrame(im, look.sprite && spriteImg(look.sprite) ? look.sprite : look.kind, meta, col, row, pxH, flash);
-  if (fr) ctx.drawImage(fr, -meta.cx * W, -meta.foot * H, W, H);
-  else ctx.drawImage(im, col * meta.w, row * meta.h, meta.w, meta.h, -meta.cx * W, -meta.foot * H, W, H);
-  ctx.restore();
-}
-
 /** Point d'ancrage au-dessus de la tête (bulles d'emote, repères). */
 export function headTopOffset(kind: BodyKind): number {
-  if (isSpriteKind(kind)) return SPRITE_HEIGHT * 0.95 - 0.3;
   return kind === "mushroom" || kind === "ninja" ? 0.62 : kind === "frog" ? 0.5 : 0.6;
 }

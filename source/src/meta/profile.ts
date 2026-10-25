@@ -111,19 +111,12 @@ export interface Profile {
   pending: { matchId: string; stake: "easy" | "normal" | "hard" | "expert"; modeId: string; online?: boolean; players?: number; startedAt: number; ending?: boolean } | null;
   /** dernières transactions de pièces (historique) */
   ledger: import("./rewards").CoinTransaction[];
-  /** pièces rendues pour les anciens personnages retirés (1.7.0) ; undefined = pas encore traité */
-  legacyRefund?: number;
-  /** message du remboursement déjà affiché */
-  legacyRefundSeen?: boolean;
-  /** pièces rendues pour les accessoires retirés (1.7.1) ; undefined = pas encore traité */
-  accRefund?: number;
-  accRefundSeen?: boolean;
   winStreak: number;
   lastSetup: { botCount: number; difficulty: "easy" | "normal" | "hard" | "expert"; mapId: string; modeId: string };
   settings: Settings;
 }
 
-export const DEFAULT_CHARACTERS = ["blaze", "nova", "zoe", "jax"];
+export const DEFAULT_CHARACTERS = ["renard", "boulon", "rainette", "kage", "champi", "bruno"];
 
 export function defaultProfile(): Profile {
   return {
@@ -145,7 +138,7 @@ export function defaultProfile(): Profile {
     blocksDestroyed: 0,
     bonusesPicked: 0,
     bestSurvival: 0,
-    characterId: "blaze",
+    characterId: "renard",
     equippedSkins: {},
     equipped: { accessory: null, trail: DEFAULT_TRAIL, emotes: [...DEFAULT_EMOTES], boom: DEFAULT_BOOM, title: DEFAULT_TITLE },
     owned: [],

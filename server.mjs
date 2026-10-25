@@ -7,20 +7,17 @@ import { dirname, extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // src/core/characters.ts
-var SPRITE_KINDS = ["blaze", "nova", "zoe", "jax"];
-var isSpriteKind = (k) => SPRITE_KINDS.includes(k);
 var CHARACTERS = [
-  { id: "blaze", name: "Blaze", kind: "blaze", tagline: "Bagarreur au bandeau", bio: "Le poing serré, le bandeau rouge, et toujours une bombe d'avance." },
-  { id: "nova", name: "Nova", kind: "nova", tagline: "Hackeuse néon", bio: "Lunettes sur le front, baskets qui brillent : elle pirate l'arène à coups de bombes." },
-  { id: "zoe", name: "Zoe", kind: "zoe", tagline: "Boxeuse étoile", bio: "Deux chignons, deux gants, zéro pitié : elle cogne aussi fort que ses bombes." },
-  { id: "jax", name: "Jax", kind: "jax", tagline: "Fantôme de la rue", bio: "Capuche jaune, casquette à tête de mort : on ne voit jamais son visage, seulement ses bombes." }
+  { id: "renard", name: "Flamme", kind: "fox", tagline: "Renard malin", bio: "Toujours un coup d'avance… et une bombe dans la poche." },
+  { id: "boulon", name: "Boulon", kind: "robot", tagline: "Robot de chantier", bio: "Programmé pour tout démolir. Bloc par bloc." },
+  { id: "rainette", name: "Rainette", kind: "frog", tagline: "Grenouille sauteuse", bio: "Elle saute de joie à chaque explosion." },
+  { id: "kage", name: "Kage", kind: "ninja", tagline: "Ninja discret", bio: "On ne l'entend jamais arriver. Sa bombe, si." },
+  { id: "champi", name: "Champi", kind: "mushroom", tagline: "Champignon têtu", bio: "Petit, têtu, et franchement explosif." },
+  { id: "bruno", name: "Bruno", kind: "bear", tagline: "Ourson costaud", bio: "Un gros câlin, puis un gros BOUM." },
+  { id: "pingo", name: "Pingo", kind: "penguin", tagline: "Pingouin glisseur", bio: "Il glisse partout, même là où il n'y a pas de glace.", locked: true, rarity: "epic" }
 ];
 var P = (main, dark, light, accent) => ({ main, dark, light, accent });
 var CLASSIC = {
-  blaze: { name: "Classique", palette: P("#e8343a", "#7a1418", "#ffd9b8", "#2a1d1d") },
-  nova: { name: "Classique", palette: P("#ff3fb4", "#8a1460", "#ffe0ec", "#3fd8ff") },
-  zoe: { name: "Classique", palette: P("#b44dff", "#5a1c8f", "#ffe9cc", "#ff4fd8") },
-  jax: { name: "Classique", palette: P("#ffc61a", "#8a6200", "#fff3c4", "#1d1d1d") },
   renard: { name: "Classique", palette: P("#ff8a2b", "#c4520c", "#fff1df", "#3a2418"), aura: "leaves" },
   boulon: { name: "Classique", palette: P("#5aa0ff", "#2c5fb8", "#d6e8ff", "#ffd23f") },
   rainette: { name: "Classique", palette: P("#4fd46a", "#22893c", "#e8ffd0", "#1f6e33") },
@@ -153,24 +150,6 @@ var THEMES = [
     special: "rainbow"
   }
 ];
-var SPRITE_SKINS = {
-  blaze: [
-    { id: "glace", name: "Glace", rarity: "rare", main: "#2f8fe0", desc: "Blaze version banquise : même fougue, tenue bleu glacier." },
-    { id: "toxique", name: "Toxique", rarity: "epic", main: "#3ccf3c", desc: "Une tenue vert radioactif, à ne pas toucher." }
-  ],
-  nova: [
-    { id: "menthe", name: "Menthe", rarity: "rare", main: "#2ee6c8", desc: "Nova en version menthe fraîche." },
-    { id: "soleil", name: "Soleil", rarity: "epic", main: "#ffd23f", desc: "Toute dorée, elle brille comme le soleil." }
-  ],
-  zoe: [
-    { id: "braise", name: "Braise", rarity: "rare", main: "#e8343a", desc: "Zoe se met au rouge braise." },
-    { id: "ocean", name: "Océan", rarity: "epic", main: "#1fb5e0", desc: "Une tenue bleu lagon, fraîche comme l'océan." }
-  ],
-  jax: [
-    { id: "ombre", name: "Ombre", rarity: "rare", main: "#6b6b75", desc: "Jax tout en gris : discret comme une ombre." },
-    { id: "neon", name: "Néon", rarity: "epic", main: "#e040ff", desc: "Un sweat violet néon qui ne passe pas inaperçu." }
-  ]
-};
 function buildSkins() {
   const out = [];
   for (const c of CHARACTERS) {
@@ -188,24 +167,6 @@ function buildSkins() {
       aura: base.aura ?? "none",
       desc: "La tenue d'origine."
     });
-    if (isSpriteKind(c.kind)) {
-      for (const v of SPRITE_SKINS[c.id] ?? []) {
-        out.push({
-          id: `${c.id}-${v.id}`,
-          characterId: c.id,
-          name: v.name,
-          theme: v.id,
-          rarity: v.rarity,
-          palette: { ...base.palette, main: v.main },
-          wear: [],
-          pattern: "none",
-          aura: "none",
-          desc: v.desc,
-          sprite: `${c.kind}-${v.id}`
-        });
-      }
-      continue;
-    }
     for (const l of LEGACY.filter((s) => s.characterId === c.id)) {
       out.push({
         id: l.id,
@@ -3840,7 +3801,7 @@ var matchmaker = new Matchmaker(lobby);
 setInterval(() => matchmaker.tick(), 1000);
 var cleanName = (n) => String(n ?? "").replace(/[<>&"]/g, "").trim().slice(0, 16) || "Joueur";
 var cosm = (v) => typeof v === "string" && /^[a-z0-9-]{1,40}$/.test(v) ? v : undefined;
-var charId = (v, fallback = "blaze") => typeof v === "string" && CHARACTERS.some((c) => c.id === v) ? v : fallback;
+var charId = (v, fallback = "renard") => typeof v === "string" && CHARACTERS.some((c) => c.id === v) ? v : fallback;
 var MAX_MSG_PER_SEC = 150;
 var MAX_ROOMS = 2000;
 function onMessage(conn, raw, state) {
@@ -3863,7 +3824,7 @@ function onMessage(conn, raw, state) {
     const token = typeof msg.token === "string" && msg.token.length >= 16 ? msg.token.slice(0, 64) : randomBytes(16).toString("hex");
     let c = clients.get(token);
     if (!c) {
-      c = { token, id: randomBytes(5).toString("hex"), name: "", characterId: "blaze", room: null, connected: true };
+      c = { token, id: randomBytes(5).toString("hex"), name: "", characterId: "renard", room: null, connected: true };
       clients.set(token, c);
     }
     const old = conns.get(token);

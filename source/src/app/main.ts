@@ -596,16 +596,12 @@ class App implements AppCtx {
   /** Arrivée sur l'accueil : cadeau de bienvenue, puis récompense du jour. */
   private afterHome() {
     const p = this._profile;
-    // 1.7.0 : anciens personnages retirés, achats remboursés (message une seule fois)
-    if (p.legacyRefund && !p.legacyRefundSeen) {
-      p.legacyRefundSeen = true;
+    // 1.8.4 : retour des personnages d'origine. Ceux qui avaient été remboursés gardent leurs pièces.
+    const q = p as typeof p & { legacyRefund?: number; accRefund?: number; classicBackSeen?: boolean };
+    if (((q.legacyRefund ?? 0) > 0 || (q.accRefund ?? 0) > 0) && !q.classicBackSeen) {
+      q.classicBackSeen = true;
       this.persist();
-      window.setTimeout(() => this.toast(`🎉 Nouveaux personnages ! Tes anciens skins t'ont été remboursés : +${fmt(p.legacyRefund!)} 🪙`, "good"), 600);
-    }
-    if (p.accRefund && !p.accRefundSeen) {
-      p.accRefundSeen = true;
-      this.persist();
-      window.setTimeout(() => this.toast(`🎩 Les accessoires sont retirés du jeu : +${fmt(p.accRefund!)} 🪙 remboursées`, "good"), p.legacyRefund && p.legacyRefundSeen ? 2600 : 600);
+      window.setTimeout(() => this.toast("🦊 Les personnages d'origine sont de retour ! Tes pièces remboursées te permettent de racheter tes skins.", "good"), 600);
     }
     if (!p.starterGift) {
       window.setTimeout(() => {

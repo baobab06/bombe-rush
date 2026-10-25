@@ -35,7 +35,9 @@ export const EMOTE_PRICES: Record<Rarity, number> = {
   legend: 2500,
 };
 /** Personnages à débloquer. */
-export const CHARACTER_PRICES: Record<string, number> = {};
+export const CHARACTER_PRICES: Record<string, number> = {
+  pingo: 4000,
+};
 
 // ---------------------------------------------------------------- bombers
 /**
@@ -54,7 +56,9 @@ export const BOMBER_EMOTE_PRICES: Record<Rarity, number> = {
   epic: 120,
   legend: 250,
 };
-export const BOMBER_CHARACTER_PRICES: Record<string, number> = {};
+export const BOMBER_CHARACTER_PRICES: Record<string, number> = {
+  pingo: 400,
+};
 /** Cadeau pour découvrir les bombers (donné une seule fois). */
 export const BOMBER_WELCOME_GIFT = 30;
 

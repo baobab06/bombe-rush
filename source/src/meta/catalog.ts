@@ -4,7 +4,7 @@
  * Nouveau type d'objet = un `kind` de plus + une source de données.
  */
 import { CHARACTERS, SKINS, type Rarity } from "../core/characters";
-import { BOOMS, EMOTES, TITLES, TRAILS } from "../core/cosmetics";
+import { ACCESSORIES, BOOMS, EMOTES, TITLES, TRAILS } from "../core/cosmetics";
 import { BOMBER_CHARACTER_PRICES, BOMBER_EMOTE_PRICES, BOMBER_PRICES, CHARACTER_PRICES, EMOTE_PRICES, PRICES } from "./economy";
 
 export type ItemKind = "skin" | "accessory" | "trail" | "emote" | "boom" | "title" | "character";
@@ -33,6 +33,7 @@ export interface CatalogItem {
 export const CATEGORIES: { id: ItemKind; label: string; short: string }[] = [
   { id: "skin", label: "Skins", short: "Skins" },
   { id: "character", label: "Personnages", short: "Persos" },
+  { id: "accessory", label: "Accessoires", short: "Accessoires" },
   { id: "trail", label: "Effets", short: "Effets" },
   { id: "emote", label: "Emotes", short: "Emotes" },
   { id: "boom", label: "Bombes", short: "Bombes" },
@@ -46,7 +47,7 @@ function build(): Omit<CatalogItem, "bomberPrice">[] {
       id: s.id, kind: "skin", name: s.name, rarity: s.rarity, price: s.free || s.exclusive ? 0 : s.price ?? PRICES[s.rarity],
       desc: s.desc ?? "", free: !!s.free, characterId: s.characterId, theme: s.theme, exclusive: s.exclusive,
     });
-  // accessoires retirés en 1.7.1 (invisibles sur les personnages 3D) : remboursés, voir meta/save.ts
+  for (const a of ACCESSORIES) out.push({ id: a.id, kind: "accessory", name: a.name, rarity: a.rarity, price: PRICES[a.rarity], desc: a.desc, free: false });
   for (const t of TRAILS) out.push({ id: t.id, kind: "trail", name: t.name, rarity: t.rarity, price: t.free ? 0 : PRICES[t.rarity], desc: t.desc, free: !!t.free });
   for (const e of EMOTES) out.push({ id: e.id, kind: "emote", name: e.name, rarity: e.rarity, price: e.free ? 0 : EMOTE_PRICES[e.rarity], desc: e.taunt ? `Moquerie ${e.emoji} « ${e.name} »` : `Emote ${e.emoji}`, free: !!e.free });
   for (const b of BOOMS) out.push({ id: b.id, kind: "boom", name: b.name, rarity: b.rarity, price: b.free || b.exclusive ? 0 : PRICES[b.rarity], desc: b.desc, free: !!b.free, exclusive: b.exclusive });
