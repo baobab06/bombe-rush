@@ -1095,6 +1095,33 @@ var CASTLE = {
   spawnClear: 1,
   startRange: 1,
   available: true,
+  modes: [],
+  fixedSpawns: true
+};
+
+// src/maps/factory.ts
+var FACTORY = {
+  id: "factory",
+  name: "Usine",
+  subtitle: "Zone de conflit",
+  theme: "factory",
+  layout: [
+    "#############",
+    "#_..#._.#.._#",
+    "#S#.._#_..#S#",
+    "#_._#._.#_._#",
+    "#..#._._.#..#",
+    "#_._.#z#._._#",
+    "#..#._._.#..#",
+    "#_._#._.#_._#",
+    "#S#.._#_..#S#",
+    "#_..#._.#.._#",
+    "#############"
+  ],
+  blockDensity: 0.55,
+  spawnClear: 1,
+  startRange: 1,
+  available: true,
   modes: ["koth"],
   fixedSpawns: true
 };
@@ -1198,7 +1225,7 @@ var TEMPLE = {
   spawnClear: 1,
   startRange: 1,
   available: true,
-  modes: ["koth"]
+  modes: []
 };
 
 // src/maps/volcano.ts
@@ -1227,7 +1254,7 @@ var VOLCANO = {
 };
 
 // src/maps/index.ts
-var MAPS = [FOREST, VOLCANO, ICE, BEACH, LABYRINTH, TEMPLE, CASTLE];
+var MAPS = [FOREST, VOLCANO, ICE, BEACH, LABYRINTH, TEMPLE, CASTLE, FACTORY];
 var DEFAULT_MODES = ["classic", "chaos"];
 function mapAllows(map, modeId) {
   return (map.modes ?? DEFAULT_MODES).includes(modeId);

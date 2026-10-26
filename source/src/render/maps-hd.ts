@@ -822,3 +822,6 @@ export const LABYRINTH_HD: Art = {
   },
   eruption: ["#ffcf4a", "#ff5a1f"],
 };
+
+// outils partagés avec les autres cartes dessinées en détail (ex. maps-factory.ts)
+export { cached, glow, softShadow, fillRR, strokeRR, circle, ellipse, lin, rad, line, shade, canon, path, labCrateSprite as crateSprite };

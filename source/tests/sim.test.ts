@@ -150,7 +150,8 @@ console.log("Positions de départ aléatoires");
         // deux joueurs ne partagent jamais la même zone libre au départ
         const comps = floorComponents(m);
         // (cartes Domination à 5-6 joueurs : les zones, toujours libres, peuvent relier les départs du milieu)
-        if (!(map.modes?.includes("koth") && n > 4)) for (const c of comps) if (cells.filter(([x, y]) => c.has(g.idx(x, y))).length > 1) sharedZone++;
+        const domOnly = !!map.modes && !map.modes.some((x) => x === "classic" || x === "chaos");
+        if (!(domOnly && n > 4)) for (const c of comps) if (cells.filter(([x, y]) => c.has(g.idx(x, y))).length > 1) sharedZone++;
         // équité : arène et positions symétriques (miroirs haut/bas et gauche/droite)
         const set = new Set(cells.map((c) => c.join(",")));
         if (n === 4) {
@@ -389,7 +390,8 @@ console.log("Domination : zone qui se déplace");
     const okSites = h.sites.every((st) => st.cells.length === 1 && st.cells.every((i) => g.tiles[i] !== TILE.WALL && !g.isHazard(i % g.w, Math.floor(i / g.w))));
     const centers = new Set(h.sites.map((st) => st.center.join(",")));
     const mirrored = h.sites.every((st) => centers.has(`${g.w - 1 - st.center[0]},${st.center[1]}`) && centers.has(`${st.center[0]},${g.h - 1 - st.center[1]}`));
-    check(h.sites.length >= 3 && okSites && mirrored, `${map.name} : ${h.sites.length} emplacements de zone, praticables, en miroir`);
+    const centerOnly = h.sites.length === 1 && h.sites[0].center[0] === (g.w - 1) / 2 && h.sites[0].center[1] === (g.h - 1) / 2;
+    check((h.sites.length >= 3 || centerOnly) && okSites && mirrored, `${map.name} : ${h.sites.length} emplacements de zone, praticables, en miroir`);
   }
   {
     const m = new Match({ seed: 6, map: FOREST, modeId: "koth", players: slots(2) });

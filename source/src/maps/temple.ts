@@ -29,5 +29,6 @@ export const TEMPLE: MapDef = {
   spawnClear: 1,
   startRange: 1,
   available: true,
-  modes: ["koth"],
+  // remplacée par l'Usine (26/10) : retirée de tous les modes, on la garde en réserve
+  modes: [],
 };

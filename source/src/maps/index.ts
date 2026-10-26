@@ -1,5 +1,6 @@
 import { BEACH } from "./beach";
 import { CASTLE } from "./castle";
+import { FACTORY } from "./factory";
 import { FOREST } from "./forest";
 import { ICE } from "./ice";
 import { LABYRINTH } from "./labyrinth";
@@ -8,7 +9,7 @@ import { VOLCANO } from "./volcano";
 import type { MapDef } from "./types";
 
 /** Maps jouables. Ajouter une map = un fichier ici + un thème dans render/art.ts. */
-export const MAPS: MapDef[] = [FOREST, VOLCANO, ICE, BEACH, LABYRINTH, TEMPLE, CASTLE];
+export const MAPS: MapDef[] = [FOREST, VOLCANO, ICE, BEACH, LABYRINTH, TEMPLE, CASTLE, FACTORY];
 
 /** Modes d'une carte (par défaut : Classique et Chaos). */
 const DEFAULT_MODES = ["classic", "chaos"];

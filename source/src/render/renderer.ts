@@ -271,6 +271,11 @@ export class Renderer {
           if (Math.random() < 0.5) P.spawn("ember", x, y, { z: 0.4, vz: 0.4 + Math.random() * 0.4, vx: 0.05, life: 1.4, size: 0.03, color: Math.random() < 0.5 ? "#ffb347" : "#ffd27a" });
           else if (Math.random() < 0.5) P.spawn("glow", x, y, { z: 0.3 + Math.random() * 0.8, vz: 0.05, vx: (Math.random() - 0.5) * 0.3, life: 2.4, size: 0.04, color: "#ffe9a8" });
           break;
+        case "factory":
+          // poussière lumineuse et étincelles de soudure
+          if (Math.random() < 0.55) P.spawn("glow", x, y, { z: 0.3 + Math.random() * 0.9, vz: 0.05, vx: (Math.random() - 0.5) * 0.25, life: 2.2, size: 0.035, color: Math.random() < 0.5 ? "#ffd27a" : "#cfe2ff" });
+          else if (Math.random() < 0.35) P.spawn("ember", x, y, { z: 0.5, vz: 0.6 + Math.random() * 0.5, vx: (Math.random() - 0.5) * 0.6, life: 0.8, size: 0.025, color: "#ffb347" });
+          break;
         case "beach":
           if (Math.random() < 0.5) P.spawn("twinkle", x, y, { z: 0.05, life: 0.9, size: 0.07, color: "#fff8d6" });
           else if (Math.random() < 0.3) P.spawn("petal", x, y, { z: 1.4, vz: -0.25, vx: 0.4, life: 3, size: 0.05, color: "#ffe1a8", vr: 3 });
@@ -327,6 +332,24 @@ export class Renderer {
       g.addColorStop(0, `rgba(255,170,80,${0.035 + 0.01 * Math.sin(t * 3)})`);
       g.addColorStop(1, "rgba(0,0,0,0.22)");
       ctx.fillStyle = g;
+      ctx.fillRect(0, 0, W, H);
+    } else if (theme === "factory") {
+      // éclairage d'usine : rouge à gauche, bleu à droite, vignette
+      const a = 0.07 + 0.015 * Math.sin(t * 2.2);
+      const gl = ctx.createLinearGradient(0, 0, W * 0.35, 0);
+      gl.addColorStop(0, `rgba(255,50,50,${a})`);
+      gl.addColorStop(1, "rgba(255,50,50,0)");
+      ctx.fillStyle = gl;
+      ctx.fillRect(0, 0, W * 0.35, H);
+      const gr = ctx.createLinearGradient(W, 0, W * 0.65, 0);
+      gr.addColorStop(0, `rgba(50,130,255,${a})`);
+      gr.addColorStop(1, "rgba(50,130,255,0)");
+      ctx.fillStyle = gr;
+      ctx.fillRect(W * 0.65, 0, W * 0.35, H);
+      const v = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.max(W, H) * 0.75);
+      v.addColorStop(0, "rgba(0,0,0,0)");
+      v.addColorStop(1, "rgba(0,0,0,0.25)");
+      ctx.fillStyle = v;
       ctx.fillRect(0, 0, W, H);
     } else if (theme === "ice") {
       const g = ctx.createLinearGradient(0, 0, 0, H * 0.5);
