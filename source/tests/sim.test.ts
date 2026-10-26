@@ -151,7 +151,8 @@ console.log("Positions de départ aléatoires");
         const comps = floorComponents(m);
         // (cartes Domination à 5-6 joueurs : les zones, toujours libres, peuvent relier les départs du milieu)
         const domOnly = !!map.modes && !map.modes.some((x) => x === "classic" || x === "chaos");
-        if (!(domOnly && n > 4)) for (const c of comps) if (cells.filter(([x, y]) => c.has(g.idx(x, y))).length > 1) sharedZone++;
+        // (cartes Domination ouvertes comme l'Usine : arène dégagée, pas de zones séparées)
+        if (!domOnly) for (const c of comps) if (cells.filter(([x, y]) => c.has(g.idx(x, y))).length > 1) sharedZone++;
         // équité : arène et positions symétriques (miroirs haut/bas et gauche/droite)
         const set = new Set(cells.map((c) => c.join(",")));
         if (n === 4) {
@@ -171,7 +172,9 @@ console.log("Positions de départ aléatoires");
     check(notMirror === 0, `${map.name} : positions et blocs symétriques (aucun joueur avantagé)`);
     if (map.fixedSpawns) {
       // départs du plan (S) : toujours les mêmes cases, mais le joueur 1 tombe sur chacune à parts égales
-      const plan = map.layout.flatMap((r, y) => [...r].map((c, x) => (c === "S" ? `${x},${y}` : "")).filter(Boolean));
+      const cellsOf = (ch: string) => map.layout.flatMap((r, y) => [...r].map((c, x) => (c === ch ? `${x},${y}` : "")).filter(Boolean));
+      // à 4 joueurs : les départs S, complétés par les départs « s » si le plan en a moins de 4 (Usine)
+      const plan = [...cellsOf("S"), ...cellsOf("s")].slice(0, Math.max(4, cellsOf("S").length));
       const share = plan.map((k) => (p0count.get(k) ?? 0) / 150);
       check(configs.size === 1 && [...configs][0] === plan.slice().sort().join(" "), `${map.name} : départs fixes du plan (${plan.length} cases)`);
       check(share.every((s) => s > 0.15 && s < 0.35), `${map.name} : le joueur 1 n'a pas de départ favori (${share.map((s) => Math.round(s * 100) + "%").join(" ")})`);

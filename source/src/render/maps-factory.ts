@@ -5,7 +5,7 @@
  * Même principe que le Labyrinthe (maps-hd.ts) :
  * - le SOL (dalles d'acier, tôles, grilles, bandes de sécurité, plots de
  *   départ, étoile de capture, flaques de lumière) est cuit une fois par partie ;
- * - chaque OBSTACLE (mur d'acier, ventilation, tonneaux, machine, caisse) est
+ * - chaque OBSTACLE (mur d'acier, ventilation, mur à grille, tonneau, caisse) est
  *   dessiné une fois en détail dans un petit canvas en cache puis recopié ;
  * - seuls les éléments vivants (hélices, voyants, lampes) bougent à chaque image.
  *
@@ -13,7 +13,7 @@
  * bloque toujours, une caisse est un bloc destructible normal, le décor du sol
  * ne bloque jamais.
  */
-import { FACTORY } from "../maps/factory";
+import { FACTORY, FACTORY_LOOK } from "../maps/factory";
 import type { Art } from "./art";
 import { LIFT, hash } from "./sprites";
 import { cached, canon, circle, crateSprite, ellipse, fillRR, glow, lin, line, path, rad, shade, softShadow, strokeRR } from "./maps-hd";
@@ -39,17 +39,12 @@ const FLOOR = { a: "#3b404a", b: "#363b45", seam: "#22262e", light: "rgba(255,25
 const INK = "#12151b";
 
 // ============================================================== murs
-type WallKind = "steel" | "fan" | "barrels" | "machine";
+type WallKind = "steel" | "fan" | "barrel" | "grate";
 
-/** Look d'un mur intérieur selon sa place (symétrique, comme le plan). */
+/** Look d'un mur intérieur : lu dans FACTORY_LOOK (copie du plan de référence). */
 function wallKind(tx: number, ty: number): WallKind {
-  const [cx, cy] = canon(L, tx, ty);
-  if (cy === CY && Math.abs(tx - CX) === 1) return "steel"; // blocs qui encadrent l'étoile
-  if (cx === CX) return "machine"; // machines au-dessus / au-dessous du centre
-  if (cx === 2 && cy === 2) return "fan"; // ventilations près des départs
-  if (cx === 3 && cy === 4) return "barrels"; // tonneaux rouges / bleus
-  if (cx === 4 && cy === 1) return "fan";
-  return "steel";
+  const c = FACTORY_LOOK[ty]?.[tx];
+  return c === "F" ? "fan" : c === "R" ? "barrel" : c === "V" ? "grate" : "steel";
 }
 
 /** Bloc d'acier en relief (face avant + dessus en tôle rivetée). */
@@ -138,96 +133,64 @@ function fanBlades(ctx: Ctx, x: number, y: number, r: number, a: number) {
   ctx.restore();
 }
 
-/** Deux tonneaux cerclés (rouges côté rouge, bleus côté bleu) sur une palette. */
-function barrelsSprite(g: Ctx, s: number, team: number) {
-  const base = team < 0 ? "#d8313a" : team > 0 ? "#2f7fe0" : "#d8313a";
-  const lift = s * LIFT;
-  // palette au sol
-  softShadow(g, s * 0.06, s * 0.1, s * 0.88, s * 0.82, s * 0.06, 0.38);
-  fillRR(g, s * 0.06, s * 0.08, s * 0.88, s * 0.84, s * 0.04, "#6b4a2a");
-  for (let k = 0; k < 4; k++) line(g, [s * 0.08, s * (0.18 + k * 0.22), s * 0.92, s * (0.18 + k * 0.22)], "rgba(30,16,6,0.55)", Math.max(1, s * 0.02));
-  const one = (x: number, y: number, r: number) => {
-    // corps (cylindre debout vu en plongée)
-    fillRR(g, x - r, y - lift, r * 2, lift + r * 0.4, r * 0.3, lin(g, x - r, 0, x + r, 0, [[0, shade(base, -0.35)], [0.45, shade(base, 0.12)], [1, shade(base, -0.45)]]));
-    // cerclages
-    for (const k of [0.25, 0.75]) line(g, [x - r, y - lift + (lift + r * 0.4) * k, x + r, y - lift + (lift + r * 0.4) * k], "rgba(20,24,34,0.65)", Math.max(1, s * 0.03));
-    // couvercle
-    ellipse(g, x, y - lift, r, r * 0.92, lin(g, x - r, y - lift - r, x + r, y - lift + r, [[0, shade(base, 0.35)], [1, shade(base, -0.1)]]));
-    g.beginPath();
-    g.ellipse(x, y - lift, r * 0.78, r * 0.7, 0, 0, Math.PI * 2);
-    g.strokeStyle = "rgba(20,10,10,0.35)";
-    g.lineWidth = Math.max(1, s * 0.02);
-    g.stroke();
-    circle(g, x + r * 0.35, y - lift - r * 0.25, r * 0.12, "#2a2e36");
-    ellipse(g, x - r * 0.3, y - lift - r * 0.35, r * 0.35, r * 0.14, "rgba(255,255,255,0.35)", -0.5);
-    g.beginPath();
-    g.ellipse(x, y - lift, r, r * 0.92, 0, 0, Math.PI * 2);
-    g.strokeStyle = INK;
-    g.lineWidth = Math.max(1, s * 0.025);
-    g.stroke();
-  };
-  one(s * 0.3, s * 0.68, s * 0.2);
-  one(s * 0.7, s * 0.42, s * 0.2);
+/** Gros tonneau cerclé debout (rouge côté rouge, bleu côté bleu). */
+function barrelSprite(g: Ctx, s: number, team: number) {
+  const base = team > 0 ? "#2f7fe0" : "#d8313a";
+  const lift = s * LIFT * 1.6;
+  const x = s / 2;
+  const y = s * 0.62;
+  const r = s * 0.36;
+  ellipse(g, x + s * 0.06, y + s * 0.12, r * 1.05, r * 0.8, "rgba(0,0,0,0.4)");
+  // corps
+  fillRR(g, x - r, y - lift, r * 2, lift + r * 0.5, r * 0.35, lin(g, x - r, 0, x + r, 0, [[0, shade(base, -0.45)], [0.42, shade(base, 0.15)], [1, shade(base, -0.55)]]));
+  for (const k of [0.22, 0.72]) {
+    const yy = y - lift + (lift + r * 0.5) * k;
+    fillRR(g, x - r, yy - s * 0.025, r * 2, s * 0.05, s * 0.02, "rgba(25,30,40,0.7)");
+    line(g, [x - r * 0.8, yy - s * 0.025, x + r * 0.2, yy - s * 0.025], "rgba(255,255,255,0.18)", Math.max(0.8, s * 0.01));
+  }
+  // couvercle
+  ellipse(g, x, y - lift, r, r * 0.85, lin(g, x - r, y - lift - r, x + r, y - lift + r, [[0, shade(base, 0.38)], [1, shade(base, -0.12)]]));
+  g.beginPath();
+  g.ellipse(x, y - lift, r * 0.76, r * 0.64, 0, 0, Math.PI * 2);
+  g.strokeStyle = "rgba(20,10,10,0.35)";
+  g.lineWidth = Math.max(1, s * 0.022);
+  g.stroke();
+  circle(g, x + r * 0.32, y - lift - r * 0.22, r * 0.12, "#2a2e36");
+  ellipse(g, x - r * 0.3, y - lift - r * 0.32, r * 0.36, r * 0.14, "rgba(255,255,255,0.4)", -0.5);
+  g.beginPath();
+  g.ellipse(x, y - lift, r, r * 0.85, 0, 0, Math.PI * 2);
+  g.strokeStyle = INK;
+  g.lineWidth = Math.max(1, s * 0.025);
+  g.stroke();
+  strokeRR(g, x - r, y - lift, r * 2, lift + r * 0.5, r * 0.35, INK, Math.max(1, s * 0.025));
 }
 
-/** Machine industrielle jaune (presse) avec bandes de sécurité. */
-function machineSprite(g: Ctx, s: number) {
-  const lift = s * LIFT * 1.25;
-  const pad = s * 0.05;
-  const w = s - pad * 2;
-  const y0 = -lift + pad;
-  const hTop = s - pad * 2 - lift * 0.1;
-  softShadow(g, pad, y0 + lift * 0.4, w, s - pad - lift * 0.3, s * 0.06);
-  fillRR(g, pad, y0, w, s - pad - y0, s * 0.06, lin(g, 0, y0 + hTop, 0, s - pad, [[0, "#b8860f"], [1, "#6b4a06"]]));
-  // bandes noir/jaune sur la face avant
-  g.save();
-  path(g, pad, y0 + hTop, w, s - pad - y0 - hTop, s * 0.04);
-  g.clip();
-  for (let k = -2; k < 8; k++) {
-    g.beginPath();
-    const x = pad + k * s * 0.16;
-    g.moveTo(x, s);
-    g.lineTo(x + s * 0.08, s);
-    g.lineTo(x + s * 0.2, y0 + hTop);
-    g.lineTo(x + s * 0.12, y0 + hTop);
-    g.closePath();
-    g.fillStyle = "rgba(20,20,20,0.75)";
-    g.fill();
-  }
-  g.restore();
-  // dessus
-  fillRR(g, pad, y0, w, hTop, s * 0.06, lin(g, pad, y0, pad, y0 + hTop, [[0, "#ffd14a"], [1, "#e0a81c"]]));
-  // trappe centrale grise + piston
-  const ix = pad + w * 0.2;
-  const iy = y0 + hTop * 0.18;
-  fillRR(g, ix, iy, w * 0.6, hTop * 0.64, s * 0.04, lin(g, ix, iy, ix, iy + hTop * 0.64, [[0, "#6c737e"], [1, "#3c424c"]]));
-  fillRR(g, ix + w * 0.12, iy + hTop * 0.12, w * 0.36, hTop * 0.4, s * 0.03, "#2a2f37");
-  line(g, [ix + w * 0.14, iy + hTop * 0.14, ix + w * 0.46, iy + hTop * 0.14], "rgba(255,255,255,0.3)", Math.max(0.8, s * 0.012));
-  // coins rivetés
-  for (const [x, y] of [[pad + s * 0.07, y0 + s * 0.07], [pad + w - s * 0.07, y0 + s * 0.07], [pad + s * 0.07, y0 + hTop - s * 0.07], [pad + w - s * 0.07, y0 + hTop - s * 0.07]]) {
-    circle(g, x, y, s * 0.022, "#7a5a10");
-    circle(g, x - s * 0.006, y - s * 0.006, s * 0.009, "#fff2c0");
-  }
-  fillRR(g, pad + s * 0.05, y0 + s * 0.012, w - s * 0.1, s * 0.028, s * 0.014, "rgba(255,255,255,0.45)");
-  strokeRR(g, pad, y0, w, s - pad - y0, s * 0.06, INK, Math.max(1, s * 0.03));
+/** Mur à grille : caisson d'acier dont le dessus est une grille d'aération. */
+function grateSprite(g: Ctx, s: number, seed: number) {
+  const { pad, w, y0, hTop } = steelBody(g, s, "#8a929e", seed);
+  const ix = pad + w * 0.14;
+  const iy = y0 + hTop * 0.14;
+  const iw = w * 0.72;
+  const ih = hTop * 0.72;
+  fillRR(g, ix, iy, iw, ih, s * 0.03, "#15181e");
+  for (let k = 1; k < 6; k++) line(g, [ix + (iw * k) / 6, iy + s * 0.02, ix + (iw * k) / 6, iy + ih - s * 0.02], "#6e7682", Math.max(1, s * 0.022));
+  line(g, [ix + s * 0.02, iy + ih / 2, ix + iw - s * 0.02, iy + ih / 2], "#8a929e", Math.max(1, s * 0.03));
+  line(g, [ix, iy, ix + iw, iy + ih], "rgba(140,150,162,0.6)", Math.max(1, s * 0.02));
+  line(g, [ix + iw, iy, ix, iy + ih], "rgba(140,150,162,0.6)", Math.max(1, s * 0.02));
+  strokeRR(g, ix, iy, iw, ih, s * 0.03, "#b6bdc7", Math.max(1, s * 0.025));
 }
 
 // ============================================================== sol
 const isSpawn = (tx: number, ty: number) => at(tx, ty) === "S";
 /** zone autour du point central entourée de bandes de sécurité */
-const inCenterRing = (tx: number, ty: number) => Math.abs(tx - CX) <= 1 && Math.abs(ty - CY) <= 2;
 
 /** Lampes du décor : [x, y, rayon (cases), couleur] (flaques de lumière cuites au sol). */
 const LIGHTS: [number, number, number, string][] = [
-  [CX, -0.1, 2.6, ORANGE],
-  [CX, H - 0.9, 2.6, ORANGE],
-  [-0.1, CY + 0.5, 2.6, RED],
-  [W - 0.9, CY + 0.5, 2.6, BLUE],
-  [1, 2, 1.4, RED],
-  [1, H - 3, 1.4, RED],
-  [W - 2, 2, 1.4, BLUE],
-  [W - 2, H - 3, 1.4, BLUE],
-  [CX + 0.5, CY + 0.5, 1.8, "255,200,60"],
+  [CX, -0.2, 3, ORANGE],
+  [CX, H - 0.8, 3, ORANGE],
+  [0, CY, 2.8, RED],
+  [W - 1, CY, 2.8, BLUE],
+  [CX, CY, 2, "255,200,60"],
 ];
 
 function floorTile(g: Ctx, px: number, py: number, s: number, tx: number, ty: number) {
@@ -236,7 +199,7 @@ function floorTile(g: Ctx, px: number, py: number, s: number, tx: number, ty: nu
   // dalle d'acier sombre
   g.fillStyle = (tx + ty) % 2 ? FLOOR.a : FLOOR.b;
   g.fillRect(px, py, s + 0.5, s + 0.5);
-  const kind = h < 0.16 ? "grate" : h < 0.4 ? "plate" : "tile";
+  const kind = at(tx, ty) === "s" ? "grate" : h < 0.12 ? "plate" : "tile";
   if (kind === "plate") {
     // tôle striée (losanges)
     fillRR(g, px + s * 0.05, py + s * 0.05, s * 0.9, s * 0.9, s * 0.04, "#555c68");
@@ -320,27 +283,40 @@ function pool(g: Ctx, x: number, y: number, r: number, rgb: string, a: number) {
   g.restore();
 }
 
+/** Tonneau peint au sol, à moitié transparent (repère près des départs, ne bloque pas). */
+function ghostDrum(g: Ctx, x: number, y: number, s: number, rgb: string) {
+  g.save();
+  g.globalAlpha = 0.55;
+  fillRR(g, x - s * 0.3, y - s * 0.32, s * 0.6, s * 0.66, s * 0.2, `rgba(${rgb},0.35)`);
+  g.beginPath();
+  g.ellipse(x, y - s * 0.3, s * 0.3, s * 0.2, 0, 0, Math.PI * 2);
+  g.strokeStyle = `rgb(${rgb})`;
+  g.lineWidth = Math.max(1, s * 0.035);
+  g.stroke();
+  strokeRR(g, x - s * 0.3, y - s * 0.32, s * 0.6, s * 0.66, s * 0.2, `rgb(${rgb})`, Math.max(1, s * 0.035));
+  for (const k of [0.05, 0.22]) line(g, [x - s * 0.3, y + s * k, x + s * 0.3, y + s * k], `rgba(${rgb},0.9)`, Math.max(1, s * 0.025));
+  g.restore();
+}
+
 function factoryFloor(g: Ctx, px: number, py: number, s: number, tx: number, ty: number) {
   floorTile(g, px, py, s, tx, ty);
   // plots de départ : carré lumineux rouge (gauche) / bleu (droite)
   if (isSpawn(tx, ty)) {
     const rgb = side(tx) < 0 ? RED : BLUE;
-    fillRR(g, px + s * 0.08, py + s * 0.08, s * 0.84, s * 0.84, s * 0.06, `rgba(${rgb},0.35)`);
-    strokeRR(g, px + s * 0.1, py + s * 0.1, s * 0.8, s * 0.8, s * 0.05, `rgb(${rgb})`, Math.max(1.5, s * 0.05));
-    strokeRR(g, px + s * 0.2, py + s * 0.2, s * 0.6, s * 0.6, s * 0.04, "rgba(255,255,255,0.55)", Math.max(1, s * 0.02));
+    fillRR(g, px + s * 0.04, py + s * 0.04, s * 0.92, s * 0.92, s * 0.04, `rgba(${rgb},0.45)`);
+    strokeRR(g, px + s * 0.06, py + s * 0.06, s * 0.88, s * 0.88, s * 0.04, `rgb(${rgb})`, Math.max(1.5, s * 0.06));
+    strokeRR(g, px + s * 0.06, py + s * 0.06, s * 0.88, s * 0.88, s * 0.04, "rgba(255,255,255,0.5)", Math.max(1, s * 0.015));
   }
+  // repères peints près des départs (au-dessus et au-dessous des plots)
+  if ((tx === 1 || tx === W - 2) && Math.abs(ty - CY) === 1) ghostDrum(g, px + s / 2, py + s / 2, s, side(tx) < 0 ? RED : BLUE);
   // dernière case de la carte : on pose le décor qui couvre plusieurs cases
   if (tx === W - 2 && ty === H - 2) overlay(g, s);
 }
 
 /** Décor du sol à cheval sur plusieurs cases (bandes, étoile, lumières). */
 function overlay(g: Ctx, s: number) {
-  // bandes de sécurité autour de la zone centrale (3 × 5 cases)
-  hazardFrame(g, (CX - 1) * s + s * 0.06, (CY - 2) * s + s * 0.06, s * 3 - s * 0.12, s * 5 - s * 0.12, s);
-  // bandes devant les machines du haut et du bas
-  for (const y of [2, H - 3]) {
-    fillRR(g, (CX - 1) * s, y * s + (y < CY ? -s * 0.12 : s * 0.88), s * 3, s * 0.24, s * 0.04, "#f2b81c");
-  }
+  // bandes de sécurité autour de la zone centrale (3 × 3 cases), coins en équerre
+  hazardFrame(g, (CX - 1) * s + s * 0.08, (CY - 1) * s + s * 0.08, s * 3 - s * 0.16, s * 3 - s * 0.16, s);
   // étoile de capture au centre
   const x = (CX + 0.5) * s;
   const y = (CY + 0.5) * s;
@@ -464,18 +440,12 @@ export const FACTORY_HD: Art = {
       fanBlades(ctx, px + s / 2, top + hTop / 2, r * 0.95, now() * 6 + tx);
       return;
     }
-    if (kind === "barrels") {
-      cached(ctx, `fac-barrels-${side(tx)}`, px, py, s, LIFT + 0.25, 0.18, (g, ss) => barrelsSprite(g, ss, side(tx)));
+    if (kind === "barrel") {
+      cached(ctx, `fac-barrel-${side(tx)}`, px, py, s, LIFT * 1.6 + 0.2, 0.2, (g, ss) => barrelSprite(g, ss, side(tx)));
       return;
     }
-    if (kind === "machine") {
-      cached(ctx, "fac-machine", px, py, s, LIFT * 1.25 + 0.05, 0.18, machineSprite);
-      // voyant qui clignote
-      const on = Math.sin(now() * 5 + tx) > 0;
-      const lx = px + s * 0.82;
-      const ly = py - s * LIFT * 1.25 + s * 0.14;
-      circle(ctx, lx, ly, s * 0.045, on ? "#ff4a3a" : "#5a1a14");
-      if (on) glow(ctx, lx, ly, s * 0.3, RED, 0.5);
+    if (kind === "grate") {
+      cached(ctx, `fac-grate-${cx}-${cy}`, px, py, s, LIFT + 0.05, 0.18, (g, ss) => grateSprite(g, ss, cx * 3 + cy));
       return;
     }
     cached(ctx, `fac-steel-${cx}-${cy}`, px, py, s, LIFT + 0.05, 0.18, (g, ss) => steelBody(g, ss, STEEL.top, cx * 5 + cy * 3));
