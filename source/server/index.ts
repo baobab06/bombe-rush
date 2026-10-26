@@ -175,6 +175,7 @@ const MIME: Record<string, string> = {
   ".png": "image/png",
   ".json": "application/json",
   ".apk": "application/vnd.android.package-archive",
+  ".txt": "text/plain; charset=utf-8",
 };
 
 const server = createServer(async (req, res) => {

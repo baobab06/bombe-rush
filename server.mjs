@@ -3916,7 +3916,8 @@ var MIME = {
   ".css": "text/css",
   ".png": "image/png",
   ".json": "application/json",
-  ".apk": "application/vnd.android.package-archive"
+  ".apk": "application/vnd.android.package-archive",
+  ".txt": "text/plain; charset=utf-8"
 };
 var server = createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", "http://x");
