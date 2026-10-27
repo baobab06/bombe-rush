@@ -3,7 +3,7 @@ import { drawCharacter, headTopOffset, lookOf, type Expr } from "./bodies";
 import { abilityBurst, emitAura, emitTrail, speedLines } from "./charfx";
 import { getBoom, getEmote } from "../core/cosmetics";
 import { EMOTE_DURATION, drawEmoteBubble } from "./emote";
-import { RULES } from "../core/rules";
+import { RULES, TEAM_COLORS } from "../core/rules";
 import { TERRAIN, TILE, type SimEvent } from "../core/types";
 import { Particles } from "./particles";
 import {
@@ -862,7 +862,7 @@ export class Renderer {
     const t = this.time;
     const hurt = t - f.hurtAt < 0.45 ? (t - f.hurtAt) / 0.45 : undefined;
     const action = t - f.actionAt < 0.35 ? (t - f.actionAt) / 0.35 : undefined;
-    const won = (m.phase === "over" || m.phase === "ending") && m.winnerId === id;
+    const won = (m.phase === "over" || m.phase === "ending") && m.winnerId >= 0 && (m.winnerId === id || m.sameTeam(m.winnerId, id));
     let expr: Expr = "normal";
     if (hurt !== undefined) expr = "scared";
     else if (won || (t - f.happyAt < 0.8 && t >= f.happyAt)) expr = "happy";
@@ -871,8 +871,10 @@ export class Renderer {
     else if (f.emote && getEmote(f.emote.id)?.taunt && t - f.emote.at < 2) expr = "happy";
     // anneau de couleur au sol : chaque joueur se repère d'un coup d'œil
     ctx.lineWidth = Math.max(1.5, s * (id === this.localPlayer ? 0.065 : 0.045));
-    ctx.strokeStyle = id === this.localPlayer ? "rgba(255,255,255,0.9)" : c.palette.main;
-    ctx.globalAlpha = id === this.localPlayer ? 1 : 0.7;
+    // équipes : anneau rouge / bleu sous chacun (le sien plus épais et plein)
+    const team = m.teamOf(id);
+    ctx.strokeStyle = team >= 0 ? TEAM_COLORS[team] : id === this.localPlayer ? "rgba(255,255,255,0.9)" : c.palette.main;
+    ctx.globalAlpha = id === this.localPlayer || team >= 0 ? 1 : 0.7;
     ctx.beginPath();
     ctx.ellipse(cx, cy + s * 0.32, s * 0.34, s * 0.12, 0, 0, Math.PI * 2);
     ctx.stroke();

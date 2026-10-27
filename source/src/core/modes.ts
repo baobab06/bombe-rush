@@ -44,11 +44,13 @@ export const MODES: ModeDef[] = [
   {
     id: "koth",
     name: "Domination",
-    tagline: "Reste seul dans la zone pour marquer. Premier à 25 points !",
+    tagline: "2 contre 2 : tenez la zone en équipe. Première équipe à 25 points !",
     available: true,
     emoji: "👑",
     suddenDeath: false,
     onStart(m) {
+      // équipes rouges / bleues dès qu'il y a au moins 2 joueurs
+      if (m.players.length >= 2) m.setTeams();
       m.hill = new HillState(m);
     },
     onTick(m) {

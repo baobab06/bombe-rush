@@ -38,3 +38,6 @@ export const RULES = {
 } as const;
 
 export const DT = 1 / RULES.tickRate;
+
+/** Couleurs des équipes (Domination 2 contre 2) : rouges à gauche, bleus à droite. */
+export const TEAM_COLORS = ["#ff4a4a", "#3d8bff"] as const;

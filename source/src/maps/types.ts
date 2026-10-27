@@ -33,4 +33,9 @@ export interface MapDef {
   modes?: string[];
   /** départs toujours aux positions S / s du plan (pas de tirage au sort) */
   fixedSpawns?: boolean;
+  /**
+   * Domination en équipes : départs de l'équipe rouge (côté gauche) selon le
+   * nombre de joueurs dans l'équipe ; l'équipe bleue prend les cases miroir.
+   */
+  teamSpawns?: Record<number, [number, number][]>;
 }

@@ -4,6 +4,7 @@ import { CHAOS_EVENTS } from "../core/chaos";
 import { ACCESSORIES, EMOTES, BOOMS, TRAILS } from "../core/cosmetics";
 import { lookOf } from "../render/bodies";
 import { HILL_RULES } from "../core/hill";
+import { TEAM_COLORS } from "../core/rules";
 import { DT, RULES } from "../core/rules";
 import { NO_INPUT, type Difficulty, type PlayerSlot, type SimEvent } from "../core/types";
 import { Controls } from "../input/controls";
@@ -129,7 +130,8 @@ export class GameScreen {
       .sort(() => Math.random() - 0.5);
     const players: PlayerSlot[] = [
       { name: setup.playerName, characterId: setup.characterId, skinId: setup.skinId, accessoryId: setup.accessoryId, trailId: setup.trailId, boomId: setup.boomId, isBot: false },
-      ...others.slice(0, setup.botCount).map((id) => ({
+      // Domination = 2 contre 2 : toujours 3 bots (un coéquipier, deux adversaires)
+      ...others.slice(0, setup.modeId === "koth" ? 3 : setup.botCount).map((id) => ({
         name: getCharacter(id).name, characterId: id, ...randomLook(id, false), isBot: true, difficulty: setup.difficulty,
       })),
     ];
@@ -421,7 +423,8 @@ export class GameScreen {
     // place réelle d'après la simulation (morts simultanées = ex aequo)
     const standings = this.standings();
     const place = standings.find((r) => r.me)?.place ?? m.players.length;
-    const won = m.phase === "over" && m.winnerId === me.id;
+    // équipes : la victoire d'un coéquipier est aussi la nôtre
+    const won = m.phase === "over" && m.winnerId >= 0 && (m.winnerId === me.id || m.sameTeam(m.winnerId, me.id));
     // 1re place partagée (temps écoulé, ou derniers morts ensemble) : égalité
     const draw = place === 1 && !won;
     return {
@@ -622,7 +625,17 @@ export class GameScreen {
             contested: m.hill.contested,
             moveIn: m.hill.next >= 0 ? Math.max(1, Math.ceil(m.hill.moveIn)) : 0,
             myRespawn: me.alive ? 0 : Math.max(1, Math.ceil(m.hill.respawnIn[me.id])),
-            rows: m.players.map((p) => ({ color: lookOf(p.characterId, p.skinId).palette.main, points: m.hill!.points(p.id), me: p.id === me.id, holder: m.hill!.holder === p.id })),
+            team: m.teams ? m.teamOf(me.id) : -1,
+            rows: m.teams
+              ? // 2 contre 2 : une ligne par équipe
+                [0, 1].map((t) => ({
+                  color: TEAM_COLORS[t],
+                  label: t === 0 ? "Rouges" : "Bleus",
+                  points: m.hill!.teamPoints(t),
+                  me: m.teamOf(me.id) === t,
+                  holder: m.hill!.holder >= 0 && m.teamOf(m.hill!.holder) === t,
+                }))
+              : m.players.map((p) => ({ color: lookOf(p.characterId, p.skinId).palette.main, points: m.hill!.points(p.id), me: p.id === me.id, holder: m.hill!.holder === p.id })),
           }
         : null,
       powers: [

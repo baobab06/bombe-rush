@@ -784,8 +784,14 @@ class HillState {
     }
     this.sites = single;
     this.clearBlocks(this.sites[0]);
-    this.scores = m.players.map(() => 0);
+    this.scores = m.teams ? [0, 0] : m.players.map(() => 0);
     this.respawnIn = m.players.map(() => 0);
+  }
+  slot(id) {
+    return this.m.teams ? this.m.teams[id] : id;
+  }
+  teamPoints(team) {
+    return Math.floor((this.scores[team] ?? 0) + 0.000001);
   }
   static drawnSites(m) {
     const layout = m.config.map.layout;
@@ -883,7 +889,7 @@ class HillState {
     return this.cellSet.has(this.m.grid.idx(x, y));
   }
   points(id) {
-    return Math.floor(this.scores[id] + 0.000001);
+    return Math.floor(this.scores[this.slot(id)] + 0.000001);
   }
   onDeath(p) {
     this.respawnIn[p.id] = HILL_RULES.respawnDelay;
@@ -896,17 +902,20 @@ class HillState {
       return;
     }
     const on = m.players.filter((p) => p.alive && this.cellSet.has(m.grid.idx(Math.floor(p.x), Math.floor(p.y))));
-    this.contested = on.length > 1;
+    const sides = new Set(on.map((p) => this.slot(p.id)));
+    this.contested = sides.size > 1;
     const prev = this.holder;
-    this.holder = on.length === 1 ? on[0].id : -1;
+    const prevSlot = prev >= 0 ? this.slot(prev) : -1;
+    this.holder = sides.size === 1 ? on.find((p) => p.id === prev)?.id ?? on[0].id : -1;
     if (this.holder >= 0) {
+      const k = this.slot(this.holder);
       const before = this.points(this.holder);
-      this.scores[this.holder] = Math.min(HILL_RULES.target, this.scores[this.holder] + DT);
+      this.scores[k] = Math.min(HILL_RULES.target, this.scores[k] + DT);
       const after = this.points(this.holder);
       if (after !== before && after % 10 === 0)
         m.events.push({ t: "hillPoints", player: this.holder, points: after });
     }
-    if (this.holder !== prev && this.holder >= 0)
+    if (this.holder >= 0 && this.slot(this.holder) !== prevSlot)
       m.events.push({ t: "hillTaken", player: this.holder });
     if (this.sites.length > 1) {
       this.moveIn -= DT;
@@ -941,14 +950,18 @@ class HillState {
     return this.scores.some((s) => s >= HILL_RULES.target - 0.000001);
   }
   leader() {
-    const best = Math.max(...this.scores.map((_, i) => this.points(i)));
-    const top = this.scores.map((_, i) => i).filter((i) => this.points(i) === best);
-    return top.length === 1 ? top[0] : -1;
+    const pts = (k) => Math.floor(this.scores[k] + 0.000001);
+    const best = Math.max(...this.scores.map((_, k) => pts(k)));
+    const top = this.scores.map((_, k) => k).filter((k) => pts(k) === best);
+    if (top.length !== 1)
+      return -1;
+    return this.m.teams ? this.m.players.find((p) => this.slot(p.id) === top[0])?.id ?? -1 : top[0];
   }
   respawn(p) {
     const m = this.m;
     const g = m.grid;
-    const others = m.players.filter((o) => o.alive && o.id !== p.id);
+    const others = m.players.filter((o) => m.isFoe(p, o));
+    const team = m.teamOf(p.id);
     let best = null;
     let bestScore = -Infinity;
     for (let y = 1;y < g.h - 1; y++)
@@ -967,7 +980,8 @@ class HillState {
         if (!exits)
           continue;
         const near = others.length ? Math.min(...others.map((o) => Math.abs(o.x - 0.5 - x) + Math.abs(o.y - 0.5 - y))) : 10;
-        const score = Math.min(near, 8) * 10 + exits + m.rng.next();
+        const home = team < 0 ? 0 : (team === 0 ? x < (g.w - 1) / 2 : x > (g.w - 1) / 2) ? 200 : 0;
+        const score = home + Math.min(near, 8) * 10 + exits + m.rng.next();
         if (score > bestScore) {
           bestScore = score;
           best = [x, y];
@@ -1031,11 +1045,13 @@ var MODES = [
   {
     id: "koth",
     name: "Domination",
-    tagline: "Reste seul dans la zone pour marquer. Premier à 25 points !",
+    tagline: "2 contre 2 : tenez la zone en équipe. Première équipe à 25 points !",
     available: true,
     emoji: "\uD83D\uDC51",
     suddenDeath: false,
     onStart(m) {
+      if (m.players.length >= 2)
+        m.setTeams();
       m.hill = new HillState(m);
     },
     onTick(m) {
@@ -1125,7 +1141,8 @@ var FACTORY = {
   startRange: 1,
   available: true,
   modes: ["koth"],
-  fixedSpawns: true
+  fixedSpawns: true,
+  teamSpawns: { 1: [[1, 6]], 2: [[1, 5], [1, 7]], 3: [[1, 6], [1, 4], [1, 8]] }
 };
 
 // src/maps/forest.ts
@@ -1740,19 +1757,19 @@ class BotBrain {
       if (g.tiles[c] === TILE.BLOCK)
         blocks++;
       for (const o of m.players) {
-        if (o.alive && o.id !== p.id && g.idx(Math.floor(o.x), Math.floor(o.y)) === c && o.shieldTime <= 0)
+        if (m.isFoe(p, o) && g.idx(Math.floor(o.x), Math.floor(o.y)) === c && o.shieldTime <= 0)
           enemy = true;
       }
     }
     return { blocks, enemy };
   }
   enemyNear(m, p, r) {
-    return m.players.some((o) => o.alive && o.id !== p.id && Math.abs(o.x - p.x) + Math.abs(o.y - p.y) <= r + 0.5);
+    return m.players.some((o) => m.isFoe(p, o) && Math.abs(o.x - p.x) + Math.abs(o.y - p.y) <= r + 0.5);
   }
   enemyInLine(m, p, x, y, r) {
     const g = m.grid;
     for (const o of m.players) {
-      if (!o.alive || o.id === p.id)
+      if (!m.isFoe(p, o))
         continue;
       const ox = Math.floor(o.x);
       const oy = Math.floor(o.y);
@@ -1897,7 +1914,7 @@ class BotBrain {
   }
   pathToNearestEnemy(m, p, danger) {
     const g = m.grid;
-    const enemyCells = new Set(m.players.filter((o) => o.alive && o.id !== p.id).map((o) => g.idx(Math.floor(o.x), Math.floor(o.y))));
+    const enemyCells = new Set(m.players.filter((o) => m.isFoe(p, o)).map((o) => g.idx(Math.floor(o.x), Math.floor(o.y))));
     const path = this.bfs(m, p, danger, this.prof.margin, 40, (idx) => enemyCells.has(idx));
     if (!path || path.length <= 1)
       return null;
@@ -2437,6 +2454,7 @@ class Match {
   fog = false;
   chaos = null;
   hill = null;
+  teams = null;
   vents = [];
   constructor(config) {
     this.config = config;
@@ -2485,6 +2503,38 @@ class Match {
         if (this.grid.terrainAt(x, y) === TERRAIN.VENT)
           this.vents.push([x, y, this.vents.length * RULES.ventStagger]);
     this.mode.onStart?.(this);
+  }
+  setTeams() {
+    this.teams = this.players.map((p) => p.id % 2);
+    const plan = this.config.map.teamSpawns;
+    if (!plan)
+      return;
+    const w = this.grid.w;
+    for (const team of [0, 1]) {
+      const members = this.players.filter((p) => this.teams[p.id] === team);
+      const cells = plan[members.length] ?? plan[Object.keys(plan).length] ?? [];
+      members.forEach((p, k) => {
+        const c = cells[k];
+        if (!c)
+          return;
+        const x = team === 0 ? c[0] : w - 1 - c[0];
+        if (this.grid.blocksMove(x, c[1]))
+          return;
+        p.x = x + 0.5;
+        p.y = c[1] + 0.5;
+        p.faceX = team === 0 ? 1 : -1;
+        p.faceY = 0;
+      });
+    }
+  }
+  teamOf(id) {
+    return this.teams?.[id] ?? -1;
+  }
+  sameTeam(a, b) {
+    return a !== b && this.teams !== null && this.teams[a] === this.teams[b];
+  }
+  isFoe(p, o) {
+    return o.alive && o.id !== p.id && !this.sameTeam(p.id, o.id);
   }
   get isOver() {
     return this.phase === "over";
@@ -2810,6 +2860,8 @@ class Match {
           this.events.push({ t: "shieldBlocked", player: p.id });
         continue;
       }
+      if (this.sameTeam(p.id, g.fireOwner[i]))
+        continue;
       this.kill(p, g.fireOwner[i]);
     }
   }
@@ -3454,7 +3506,8 @@ class Lobby {
   }
   blocker(r) {
     const humans = r.members.length;
-    const total = r.fillBots ? Math.max(humans, MAX_ROOM_PLAYERS) : humans;
+    const fill = r.fillBots || r.modeId === "koth";
+    const total = fill ? Math.max(humans, MAX_ROOM_PLAYERS) : humans;
     if (total < 2)
       return "Invite au moins un ami (ou ajoute des bots).";
     const notReady = r.members.filter((m) => m.token !== r.hostToken && (!m.ready || !m.connected));
@@ -3486,7 +3539,7 @@ class Lobby {
       }
       taken.add(s.characterId);
     }
-    r.game = new GameRunner(seats, { mapId: r.mapId, modeId: r.modeId, fillBots: r.fillBots, maxPlayers: MAX_ROOM_PLAYERS }, this.hooks.send, () => this.endGame(r));
+    r.game = new GameRunner(seats, { mapId: r.mapId, modeId: r.modeId, fillBots: r.fillBots || r.modeId === "koth", maxPlayers: MAX_ROOM_PLAYERS }, this.hooks.send, () => this.endGame(r));
     for (const mb of r.members)
       if (mb.token !== r.hostToken)
         mb.ready = false;

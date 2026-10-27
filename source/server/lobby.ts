@@ -233,7 +233,9 @@ export class Lobby {
   /** Raison pour laquelle l'hôte ne peut pas encore lancer (null = OK). */
   blocker(r: Room): string | null {
     const humans = r.members.length;
-    const total = r.fillBots ? Math.max(humans, MAX_ROOM_PLAYERS) : humans;
+    // Domination = 2 contre 2 : les places libres sont toujours complétées par des bots
+    const fill = r.fillBots || r.modeId === "koth";
+    const total = fill ? Math.max(humans, MAX_ROOM_PLAYERS) : humans;
     if (total < 2) return "Invite au moins un ami (ou ajoute des bots).";
     const notReady = r.members.filter((m) => m.token !== r.hostToken && (!m.ready || !m.connected));
     if (notReady.length) return "Tous les joueurs doivent être prêts.";
@@ -264,7 +266,7 @@ export class Lobby {
     }
     r.game = new GameRunner(
       seats,
-      { mapId: r.mapId, modeId: r.modeId, fillBots: r.fillBots, maxPlayers: MAX_ROOM_PLAYERS },
+      { mapId: r.mapId, modeId: r.modeId, fillBots: r.fillBots || r.modeId === "koth", maxPlayers: MAX_ROOM_PLAYERS },
       this.hooks.send,
       () => this.endGame(r),
     );

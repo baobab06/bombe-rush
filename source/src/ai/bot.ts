@@ -305,7 +305,7 @@ export class BotBrain {
     for (const c of cells) {
       if (g.tiles[c] === TILE.BLOCK) blocks++;
       for (const o of m.players) {
-        if (o.alive && o.id !== p.id && g.idx(Math.floor(o.x), Math.floor(o.y)) === c && o.shieldTime <= 0) enemy = true;
+        if (m.isFoe(p, o) && g.idx(Math.floor(o.x), Math.floor(o.y)) === c && o.shieldTime <= 0) enemy = true;
       }
     }
     return { blocks, enemy };
@@ -313,14 +313,14 @@ export class BotBrain {
 
   private enemyNear(m: Match, p: PlayerState, r: number): boolean {
     return m.players.some(
-      (o) => o.alive && o.id !== p.id && Math.abs(o.x - p.x) + Math.abs(o.y - p.y) <= r + 0.5,
+      (o) => m.isFoe(p, o) && Math.abs(o.x - p.x) + Math.abs(o.y - p.y) <= r + 0.5,
     );
   }
 
   private enemyInLine(m: Match, p: PlayerState, x: number, y: number, r: number): boolean {
     const g = m.grid;
     for (const o of m.players) {
-      if (!o.alive || o.id === p.id) continue;
+      if (!m.isFoe(p, o)) continue;
       const ox = Math.floor(o.x);
       const oy = Math.floor(o.y);
       if (ox !== x && oy !== y) continue;
@@ -475,7 +475,7 @@ export class BotBrain {
   private pathToNearestEnemy(m: Match, p: PlayerState, danger: DangerMap): number[] | null {
     const g = m.grid;
     const enemyCells = new Set(
-      m.players.filter((o) => o.alive && o.id !== p.id).map((o) => g.idx(Math.floor(o.x), Math.floor(o.y))),
+      m.players.filter((o) => m.isFoe(p, o)).map((o) => g.idx(Math.floor(o.x), Math.floor(o.y))),
     );
     const path = this.bfs(m, p, danger, this.prof.margin, 40, (idx) => enemyCells.has(idx));
     if (!path || path.length <= 1) return null;

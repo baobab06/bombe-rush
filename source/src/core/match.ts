@@ -73,6 +73,11 @@ export class Match {
   chaos: import("./chaos").ChaosDirector | null = null;
   /** état du mode Roi de la colline (null sinon) */
   hill: import("./hill").HillState | null = null;
+  /**
+   * Équipes (Domination 2 contre 2) : équipe de chaque joueur, 0 = rouges
+   * (à gauche), 1 = bleus (à droite). null = chacun pour soi.
+   */
+  teams: number[] | null = null;
   /** cheminées volcaniques : [x, y, décalage de phase] */
   readonly vents: [number, number, number][] = [];
 
@@ -122,6 +127,42 @@ export class Match {
       for (let x = 0; x < this.grid.w; x++)
         if (this.grid.terrainAt(x, y) === TERRAIN.VENT) this.vents.push([x, y, this.vents.length * RULES.ventStagger]);
     this.mode.onStart?.(this);
+  }
+
+  /** Met les joueurs en deux équipes (1-2-1-2…) et les place sur leurs départs d'équipe. */
+  setTeams(): void {
+    this.teams = this.players.map((p) => p.id % 2);
+    const plan = this.config.map.teamSpawns;
+    if (!plan) return;
+    const w = this.grid.w;
+    for (const team of [0, 1]) {
+      const members = this.players.filter((p) => this.teams![p.id] === team);
+      const cells = plan[members.length] ?? plan[Object.keys(plan).length] ?? [];
+      members.forEach((p, k) => {
+        const c = cells[k];
+        if (!c) return;
+        // côté bleu : miroir du côté rouge
+        const x = team === 0 ? c[0] : w - 1 - c[0];
+        if (this.grid.blocksMove(x, c[1])) return;
+        p.x = x + 0.5;
+        p.y = c[1] + 0.5;
+        p.faceX = team === 0 ? 1 : -1;
+        p.faceY = 0;
+      });
+    }
+  }
+
+  /** Équipe d'un joueur (-1 = pas d'équipes). */
+  teamOf(id: number): number {
+    return this.teams?.[id] ?? -1;
+  }
+  /** Deux joueurs (différents) de la même équipe ? */
+  sameTeam(a: number, b: number): boolean {
+    return a !== b && this.teams !== null && this.teams[a] === this.teams[b];
+  }
+  /** Adversaire vivant pour `p` (ni lui-même, ni un coéquipier). */
+  isFoe(p: { id: number }, o: { id: number; alive: boolean }): boolean {
+    return o.alive && o.id !== p.id && !this.sameTeam(p.id, o.id);
   }
 
   get isOver(): boolean {
@@ -459,6 +500,8 @@ export class Match {
           this.events.push({ t: "shieldBlocked", player: p.id });
         continue;
       }
+      // équipes : pas de tir ami (ses propres bombes restent dangereuses)
+      if (this.sameTeam(p.id, g.fireOwner[i])) continue;
       this.kill(p, g.fireOwner[i]);
     }
   }

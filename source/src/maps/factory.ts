@@ -35,6 +35,8 @@ export const FACTORY: MapDef = {
   available: true,
   modes: ["koth"],
   fixedSpawns: true,
+  // 2 contre 2 : rouges à gauche sur le plot et ses deux repères, bleus en miroir à droite
+  teamSpawns: { 1: [[1, 6]], 2: [[1, 5], [1, 7]], 3: [[1, 6], [1, 4], [1, 8]] },
 };
 
 /**

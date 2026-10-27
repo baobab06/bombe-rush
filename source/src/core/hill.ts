@@ -120,8 +120,18 @@ export class HillState {
     }
     this.sites = single;
     this.clearBlocks(this.sites[0]);
-    this.scores = m.players.map(() => 0);
+    // équipes : un score par équipe (rouges, bleus) ; sinon un score par joueur
+    this.scores = m.teams ? [0, 0] : m.players.map(() => 0);
     this.respawnIn = m.players.map(() => 0);
+  }
+
+  /** Index du score d'un joueur (son équipe en 2 contre 2, sinon lui-même). */
+  slot(id: number): number {
+    return this.m.teams ? this.m.teams[id] : id;
+  }
+  /** Points d'une équipe (2 contre 2). */
+  teamPoints(team: number): number {
+    return Math.floor((this.scores[team] ?? 0) + 1e-6);
   }
 
   /** Groupes de dalles « z » du plan (4-connexes) : un groupe = un emplacement. */
@@ -222,7 +232,7 @@ export class HillState {
 
   /** Points arrondis pour l'affichage. */
   points(id: number): number {
-    return Math.floor(this.scores[id] + 1e-6);
+    return Math.floor(this.scores[this.slot(id)] + 1e-6);
   }
 
   onDeath(p: PlayerState): void {
@@ -238,16 +248,21 @@ export class HillState {
     }
     // qui est sur la colline ?
     const on = m.players.filter((p) => p.alive && this.cellSet.has(m.grid.idx(Math.floor(p.x), Math.floor(p.y))));
-    this.contested = on.length > 1;
+    // en équipes : la zone est tenue si tous ceux qui sont dessus sont de la même équipe
+    const sides = new Set(on.map((p) => this.slot(p.id)));
+    this.contested = sides.size > 1;
     const prev = this.holder;
-    this.holder = on.length === 1 ? on[0].id : -1;
+    const prevSlot = prev >= 0 ? this.slot(prev) : -1;
+    // holder = un joueur de l'équipe qui marque (la couronne s'affiche sur lui)
+    this.holder = sides.size === 1 ? (on.find((p) => p.id === prev)?.id ?? on[0].id) : -1;
     if (this.holder >= 0) {
+      const k = this.slot(this.holder);
       const before = this.points(this.holder);
-      this.scores[this.holder] = Math.min(HILL_RULES.target, this.scores[this.holder] + DT);
+      this.scores[k] = Math.min(HILL_RULES.target, this.scores[k] + DT);
       const after = this.points(this.holder);
       if (after !== before && after % 10 === 0) m.events.push({ t: "hillPoints", player: this.holder, points: after });
     }
-    if (this.holder !== prev && this.holder >= 0) m.events.push({ t: "hillTaken", player: this.holder });
+    if (this.holder >= 0 && this.slot(this.holder) !== prevSlot) m.events.push({ t: "hillTaken", player: this.holder });
     // déplacement de la zone
     if (this.sites.length > 1) {
       this.moveIn -= DT;
@@ -286,16 +301,21 @@ export class HillState {
 
   /** Meilleur score unique (-1 = égalité). */
   leader(): number {
-    const best = Math.max(...this.scores.map((_, i) => this.points(i)));
-    const top = this.scores.map((_, i) => i).filter((i) => this.points(i) === best);
-    return top.length === 1 ? top[0] : -1;
+    const pts = (k: number) => Math.floor(this.scores[k] + 1e-6);
+    const best = Math.max(...this.scores.map((_, k) => pts(k)));
+    const top = this.scores.map((_, k) => k).filter((k) => pts(k) === best);
+    if (top.length !== 1) return -1;
+    // équipes : on renvoie le premier joueur de l'équipe gagnante
+    return this.m.teams ? this.m.players.find((p) => this.slot(p.id) === top[0])?.id ?? -1 : top[0];
   }
 
   /** Réapparition sur une case sûre, la plus loin possible des autres joueurs. */
   private respawn(p: PlayerState): void {
     const m = this.m;
     const g = m.grid;
-    const others = m.players.filter((o) => o.alive && o.id !== p.id);
+    // loin des ADVERSAIRES (les coéquipiers ne comptent pas)
+    const others = m.players.filter((o) => m.isFoe(p, o));
+    const team = m.teamOf(p.id);
     let best: [number, number] | null = null;
     let bestScore = -Infinity;
     for (let y = 1; y < g.h - 1; y++)
@@ -310,7 +330,9 @@ export class HillState {
         if (!exits) continue;
         const near = others.length ? Math.min(...others.map((o) => Math.abs(o.x - 0.5 - x) + Math.abs(o.y - 0.5 - y))) : 10;
         // loin des autres avant tout, puis hasard (déterministe) pour départager
-        const score = Math.min(near, 8) * 10 + exits + m.rng.next();
+        // équipes : on réapparaît de son côté (rouges à gauche, bleus à droite)
+        const home = team < 0 ? 0 : (team === 0 ? x < (g.w - 1) / 2 : x > (g.w - 1) / 2) ? 200 : 0;
+        const score = home + Math.min(near, 8) * 10 + exits + m.rng.next();
         if (score > bestScore) {
           bestScore = score;
           best = [x, y];

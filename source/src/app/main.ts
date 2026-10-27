@@ -554,12 +554,13 @@ class App implements AppCtx {
     });
     const map = MAPS.find((m) => m.id === p.lastSetup.mapId && mapAllows(m, modeId))?.name ?? "Carte au hasard";
     const sid = (p.lastSetup.difficulty as StakeId) in STAKES ? (p.lastSetup.difficulty as StakeId) : "normal";
-    const tbl = stakeTable(sid, p.lastSetup.botCount + 1);
+    const tbl = stakeTable(sid, modeId === "koth" ? 4 : p.lastSetup.botCount + 1);
     const bots = p.lastSetup.botCount;
+    const who = modeId === "koth" ? "2 contre 2" : `${bots} bot${bots > 1 ? "s" : ""}`;
     const ev = activeEvents();
     const allEv = ev.find((e) => !e.modeId);
     const mapLbl = modeId === "classic" ? "🎲 carte surprise" : map;
-    $("playSub").innerHTML = `${allEv ? `<span class="ps-ev" title="${esc(allEv.name)}">${allEv.icon} ×${String(allEv.coinMultiplier).replace(".", ",")}</span> ` : ""}${STAKES[sid].label} · ${bots} bot${bots > 1 ? "s" : ""} · ${mapLbl} <span class="ps-win">🥇 ${signed(tbl[0].amount)}</span> <span class="ps-loss">💀 ${signed(tbl[tbl.length - 1].amount)}</span>`;
+    $("playSub").innerHTML = `${allEv ? `<span class="ps-ev" title="${esc(allEv.name)}">${allEv.icon} ×${String(allEv.coinMultiplier).replace(".", ",")}</span> ` : ""}${STAKES[sid].label} · ${who} · ${mapLbl} <span class="ps-win">🥇 ${signed(tbl[0].amount)}</span> <span class="ps-loss">💀 ${signed(tbl[tbl.length - 1].amount)}</span>`;
     const deal = featured();
     const dp = priceOf(deal.dealId);
     $("shopRibbon").hidden = !dp.deal;
@@ -718,12 +719,17 @@ class App implements AppCtx {
         b.setAttribute("aria-checked", String(b.dataset.v === v));
       });
     mark("segBots", String(st.botCount));
+    // Domination = 2 contre 2 (toujours 3 bots) : pas de choix du nombre d'adversaires
+    const koth = st.modeId === "koth";
+    $("segBots").hidden = koth;
+    $("teamInfo").hidden = !koth;
+    const nPlayers = koth ? 4 : st.botCount + 1;
     // difficulté = mise : ce qu'on peut gagner / perdre
     const diff = $("segDiff");
     diff.innerHTML = "";
     for (const id of STAKE_ORDER) {
       const k = STAKES[id];
-      const tb = stakeTable(id, st.botCount + 1);
+      const tb = stakeTable(id, nPlayers);
       const b = document.createElement("button");
       b.className = "stake-card" + (id === st.difficulty ? " sel" : "");
       b.dataset.v = id;
@@ -737,7 +743,7 @@ class App implements AppCtx {
       });
       diff.appendChild(b);
     }
-    this.renderStakeBanner($("stakeBanner"), st.difficulty as StakeId, st.botCount + 1);
+    this.renderStakeBanner($("stakeBanner"), st.difficulty as StakeId, nPlayers);
   }
 
   /** Bandeau « risque / récompense » : pièces selon la place finale. */
@@ -1482,7 +1488,9 @@ class App implements AppCtx {
       const sig = JSON.stringify(hl);
       if (hb.dataset.sig !== sig) {
         hb.dataset.sig = sig;
-        const rows = [...hl.rows].sort((a, b) => b.points - a.points);
+        // 2 contre 2 : rouges puis bleus (ordre fixe) ; sinon du meilleur au moins bon
+        const teams = hl.team !== undefined && hl.team >= 0;
+        const rows = teams ? hl.rows : [...hl.rows].sort((a, b) => b.points - a.points);
         const state = hl.myRespawn > 0 && hl.moveIn > 0
           ? `<span class="hb-state dead">💀 retour dans ${hl.myRespawn} s</span><span class="hb-state move">🔀 zone bouge : ${hl.moveIn} s</span>`
           : hl.moveIn > 0 ? `<span class="hb-state move">🔀 zone bouge : ${hl.moveIn} s</span>`
@@ -1490,8 +1498,8 @@ class App implements AppCtx {
           ? `<span class="hb-state dead">💀 retour dans ${hl.myRespawn} s</span>`
           : hl.contested ? '<span class="hb-state contested">⚔️ zone disputée</span>'
           : hl.holder < 0 ? '<span class="hb-state">zone libre</span>' : "";
-        hb.innerHTML = `<span class="hb-title">👑 PREMIER À ${hl.target}</span>${rows
-          .map((r) => `<span class="hb-row${r.me ? " me" : ""}${r.holder ? " holder" : ""}"><i class="hb-dot" style="background:${r.color}"></i><span class="hb-bar"><i style="width:${Math.min(100, (r.points / hl.target) * 100)}%"></i></span><b>${r.points}</b></span>`)
+        hb.innerHTML = `<span class="hb-title">👑 ${teams ? "ÉQUIPE" : "PREMIER"} À ${hl.target}</span>${rows
+          .map((r) => `<span class="hb-row${r.me ? " me" : ""}${r.holder ? " holder" : ""}${teams ? " team" : ""}"><i class="hb-dot" style="background:${r.color}"></i>${"label" in r && r.label ? `<em class="hb-team" style="color:${r.color}">${r.label}${r.me ? " (toi)" : ""}</em>` : ""}<span class="hb-bar"><i style="width:${Math.min(100, (r.points / hl.target) * 100)}%;${teams ? `background:${r.color}` : ""}"></i></span><b>${r.points}</b></span>`)
           .join("")}${state}`;
       }
     }

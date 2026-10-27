@@ -381,6 +381,90 @@ console.log("Nouvelle map : Labyrinthe");
   }
 }
 
+console.log("Domination 2 contre 2");
+{
+  const { HILL_RULES } = await import("../src/core/hill");
+  const { FACTORY } = await import("../src/maps/factory");
+  const slots4 = () => Array.from({ length: 4 }, (_, i) => ({ name: "P" + i, characterId: "pip", isBot: false, difficulty: "normal" as Difficulty }));
+  const mk = () => {
+    const m = new Match({ seed: 21, map: FACTORY, modeId: "koth", players: slots4() });
+    m.phase = "playing";
+    m.hill!.moveIn = 1e9;
+    return m;
+  };
+  {
+    const m = mk();
+    const cx = (m.grid.w - 1) / 2;
+    const side = m.players.map((p) => (p.x < cx ? 0 : 1));
+    check(JSON.stringify(m.teams) === "[0,1,0,1]" && side.join() === "0,1,0,1", `équipes : 0 et 2 rouges (à gauche), 1 et 3 bleus (à droite) ${JSON.stringify(m.players.map((p) => [Math.floor(p.x), Math.floor(p.y)]))}`);
+    check(m.players.every((p) => !m.grid.blocksMove(Math.floor(p.x), Math.floor(p.y))), "départs d'équipe sur des cases libres");
+    check(m.hill!.scores.length === 2, "un score par équipe");
+  }
+  {
+    // deux coéquipiers ensemble sur la zone : l'équipe marque
+    const m = mk();
+    const [x, y] = m.hill!.center;
+    place(m, 0, x, y); place(m, 2, x, y); place(m, 1, 1, 1); place(m, 3, m.grid.w - 2, 1);
+    run(m, 5);
+    check(!m.hill!.contested && m.hill!.teamPoints(0) >= 4 && m.hill!.teamPoints(1) === 0 && m.hill!.points(2) === m.hill!.points(0), `coéquipiers ensemble sur la zone : l'équipe marque (${m.hill!.teamPoints(0)} en 5 s)`);
+    // un adversaire arrive : zone disputée
+    const before = m.hill!.teamPoints(0);
+    place(m, 1, x, y);
+    run(m, 2);
+    check(m.hill!.contested && m.hill!.teamPoints(0) === before && m.hill!.teamPoints(1) === 0, "un adversaire sur la zone : disputée, personne ne marque");
+  }
+  {
+    // pas de tir ami : la bombe d'un coéquipier ne tue pas
+    const m = mk();
+    place(m, 0, 2, 4); place(m, 2, 3, 4); place(m, 1, 12, 9); place(m, 3, 12, 10);
+    m.players[2].maxBombs = 1;
+    run(m, 0.1, (mm) => mm.players.map((p) => ({ mx: 0, my: 0, bomb: p.id === 2, ability: false })));
+    run(m, 4);
+    check(m.players[0].alive, "tir ami désactivé : la bombe d'un coéquipier ne blesse pas");
+    // mais sa propre bombe reste dangereuse
+    const m2 = mk();
+    place(m2, 0, 2, 4); place(m2, 1, 12, 9); place(m2, 2, 12, 1); place(m2, 3, 12, 10);
+    run(m2, 0.1, (mm) => mm.players.map((p) => ({ mx: 0, my: 0, bomb: p.id === 0, ability: false })));
+    run(m2, 4);
+    check(!m2.players[0].alive || m2.hill!.respawnIn[0] > 0 || m2.players[0].deathTime >= 0, "sa propre bombe reste dangereuse");
+    // et la bombe d'un adversaire tue
+    const m3 = mk();
+    place(m3, 0, 2, 4); place(m3, 1, 3, 4); place(m3, 2, 12, 1); place(m3, 3, 12, 10);
+    run(m3, 0.1, (mm) => mm.players.map((p) => ({ mx: 0, my: 0, bomb: p.id === 1, ability: false })));
+    run(m3, 4);
+    check(m3.players[0].deathTime >= 0 && m3.players[1].stats.kills >= 1, "la bombe d'un adversaire tue");
+  }
+  {
+    // victoire d'équipe
+    const m = mk();
+    const [x, y] = m.hill!.center;
+    place(m, 2, x, y); place(m, 0, 1, 1); place(m, 1, 1, 9); place(m, 3, m.grid.w - 2, 1);
+    m.hill!.scores[1] = 10;
+    run(m, HILL_RULES.target + RULES.endDelay + 1);
+    const st = m.standings();
+    const pl = (id: number) => st.find((r) => r.id === id)!.place;
+    check(m.isOver && m.winnerId >= 0 && m.teamOf(m.winnerId) === 0 && pl(0) === 1 && pl(2) === 1 && pl(1) === 3 && pl(3) === 3, "victoire d'équipe : les deux rouges 1ers, les deux bleus 3es");
+  }
+  {
+    // réapparition de son côté
+    let home = 0, total = 0;
+    for (let seed = 1; seed <= 20; seed++) {
+      const m = new Match({ seed, map: FACTORY, modeId: "koth", players: slots4() });
+      m.phase = "playing";
+      for (const id of [0, 1]) {
+        m.kill(m.players[id], -1);
+      }
+      run(m, HILL_RULES.respawnDelay + 0.3);
+      for (const id of [0, 1]) {
+        total++;
+        const p = m.players[id];
+        if (p.alive && (m.teamOf(id) === 0 ? p.x < m.grid.w / 2 : p.x > m.grid.w / 2)) home++;
+      }
+    }
+    check(home === total, `réapparition du côté de son équipe (${home}/${total})`);
+  }
+}
+
 console.log("Domination : zone qui se déplace");
 {
   const { HILL_RULES } = await import("../src/core/hill");
@@ -478,7 +562,9 @@ console.log("Mode Roi de la colline");
     run(m, HILL_RULES.target + RULES.endDelay + 1);
     const st = m.standings();
     check(m.isOver && m.winnerId === 0 && m.hill!.points(0) === HILL_RULES.target, `premier à ${HILL_RULES.target} points : victoire et fin de partie`);
-    check(st[0].id === 0 && st[0].place === 1 && st[1].id === 1 && st[1].place === 2 && st[2].place === 3, "classement aux points (1er, 2e, 3e)");
+    // équipes (3 joueurs : 0 et 2 rouges, 1 bleu) : les deux rouges 1ers ex aequo, le bleu 3e
+    const pl = (id: number) => st.find((r) => r.id === id)!.place;
+    check(pl(0) === 1 && pl(2) === 1 && pl(1) === 3, "classement par équipe (équipe gagnante 1re ex aequo)");
   }
   {
     // au temps : meilleur score ; égalité = match nul
@@ -487,7 +573,7 @@ console.log("Mode Roi de la colline");
     m.hill!.scores[0] = 7; m.hill!.scores[1] = 7;
     m.time = RULES.matchDuration - 0.1;
     run(m, RULES.endDelay + 0.5);
-    check(m.isOver && m.winnerId === -1 && m.standings().filter((r) => r.place === 1).length === 2, "fin du temps à égalité de points : match nul, deux premiers ex aequo");
+    check(m.isOver && m.winnerId === -1 && m.standings().filter((r) => r.place === 1).length === 3, "fin du temps à égalité de points entre équipes : match nul, tous ex aequo");
   }
   {
     // pas de mort subite dans ce mode, les autres modes inchangés
