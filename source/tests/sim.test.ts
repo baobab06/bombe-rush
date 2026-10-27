@@ -592,6 +592,208 @@ console.log("Domination 2 contre 2 : bombes (Usine)");
   }
 }
 
+console.log("Bombe à lancer (Domination)");
+{
+  const { FACTORY } = await import("../src/maps/factory");
+  const { THROW } = await import("../src/core/bombs");
+  const { HILL_RULES } = await import("../src/core/hill");
+  const { encodeSnapshot, applySnapshot } = await import("../src/net/snapshot");
+  const slots4 = () => Array.from({ length: 4 }, (_, i) => ({ name: "P" + i, characterId: "pip", isBot: false, difficulty: "normal" as Difficulty }));
+  const mk = (seed = 41) => {
+    const m = new Match({ seed, map: FACTORY, modeId: "koth", players: slots4() });
+    m.phase = "playing";
+    m.hill!.moveIn = 1e9;
+    m.hill!.throwSpawnIn = 1e9; // pas d'apparition automatique pendant ces tests
+    place(m, 0, 1, 1); place(m, 1, 13, 1); place(m, 2, 1, 11); place(m, 3, 13, 11);
+    return m;
+  };
+  const face = (m: Match, id: number, fx: number, fy: number) => { m.players[id].faceX = fx; m.players[id].faceY = fy; };
+  const throwBy = (m: Match, id: number) => run(m, DT, (mm) => mm.players.map((p) => ({ mx: 0, my: 0, bomb: false, ability: false, throw: p.id === id })));
+  {
+    // le bonus n'existe qu'en Domination
+    const c = new Match({ seed: 3, map: FOREST, modeId: "classic", players: slots4() });
+    const k = new Match({ seed: 3, map: FACTORY, modeId: "koth", players: slots4() });
+    check(!("throw" in c.loot.cfg.weights) && (k.loot.cfg.weights.throw ?? 0) > 0, "bonus « bombe à lancer » : seulement dans le butin de la Domination");
+    check(c.players.every((p) => p.throwCharges === 0) && k.players.every((p) => p.throwCharges === 0), "personne ne commence avec la capacité");
+  }
+  {
+    // ramassage : une seule capacité à la fois
+    const m = mk();
+    m.spawnBonus("throw", 4, 6);
+    place(m, 0, 4, 6);
+    run(m, 0.5);
+    check(m.players[0].throwCharges === 1, "ramasser le bonus donne la capacité de lancer");
+    m.spawnBonus("throw", 5, 6);
+    place(m, 0, 5, 6);
+    run(m, 0.5);
+    check(m.players[0].throwCharges === 1, "une seule capacité à la fois (pas de cumul)");
+  }
+  {
+    // lancer : 3 cases devant, vol, atterrissage, compte à rebours, explosion normale
+    const m = mk();
+    const p = m.players[0];
+    p.throwCharges = 1;
+    place(m, 0, 2, 6); face(m, 0, 1, 0);
+    throwBy(m, 0);
+    const b = [...m.bombs.values()][0];
+    check(!!b && b.flight !== undefined && b.tx === 5 && b.ty === 6 && p.throwCharges === 0 && p.activeBombs === 1, `lancer : la bombe vole vers 3 cases devant (${b?.tx},${b?.ty}), capacité consommée`);
+    check(m.grid.bombAt[m.grid.idx(5, 6)] < 0, "en vol : pas encore sur la grille");
+    const dur = THROW.flightBase + THROW.flightPerCell * 3;
+    run(m, dur * 0.5);
+    check(b.fuse === b.fuseTotal, "en vol : le compte à rebours n'a pas commencé");
+    let landedAt = -1;
+    for (let k = 0; k < 60 && landedAt < 0; k++) { m.step(idle(m)); if (m.events.some((e) => e.t === "bombLanded")) landedAt = m.time; }
+    check(landedAt > 0 && !b.flight && m.grid.bombAt[m.grid.idx(5, 6)] === b.id, "atterrissage : la bombe est posée sur la case visée");
+    let boomAt = -1;
+    for (let k = 0; k < Math.round(3 / DT) && boomAt < 0; k++) { m.step(idle(m)); if (m.events.some((e) => e.t === "explode")) boomAt = m.time; }
+    const g = m.grid;
+    check(Math.abs(boomAt - landedAt - m.bombRules.fuse) < 0.05, `explose ${m.bombRules.fuse} s après l'atterrissage (${(boomAt - landedAt).toFixed(2)} s)`);
+    check(g.fire[g.idx(5, 6)] > 0 && g.fire[g.idx(7, 6)] > 0 && g.fire[g.idx(3, 6)] > 0 && g.fire[g.idx(8, 6)] <= 0, "même explosion qu'une bombe posée (croix, portée 2)");
+    check(p.alive && p.activeBombs === 0, "le lanceur, hors de portée, est sain et sauf ; sa bombe lui est rendue");
+  }
+  {
+    // obstacles : un mur juste devant = lancer impossible (capacité gardée)
+    const m = mk();
+    const p = m.players[0];
+    p.throwCharges = 1;
+    place(m, 0, 2, 5); face(m, 0, 1, 0); // (3,5) est un mur
+    throwBy(m, 0);
+    check(m.bombs.size === 0 && p.throwCharges === 1, "mur juste devant : pas de lancer, la capacité est gardée");
+    // bord de la carte : vers la gauche depuis (1,6) → mur d'enceinte
+    place(m, 0, 1, 6); face(m, 0, -1, 0);
+    throwBy(m, 0);
+    check(m.bombs.size === 0 && p.throwCharges === 1, "bord de la carte : pas de lancer hors de l'arène");
+    // mur à 2 cases : la bombe atterrit sur la dernière case autorisée (1 case)
+    place(m, 0, 1, 5); face(m, 0, 1, 0); // (2,5) libre, (3,5) mur
+    throwBy(m, 0);
+    const b = [...m.bombs.values()][0];
+    check(!!b && b.tx === 2 && b.ty === 5 && p.throwCharges === 0, `mur sur la trajectoire : lancer raccourci (atterrit en ${b?.tx},${b?.ty})`);
+  }
+  {
+    // caisse : survolée ; elle ne peut pas recevoir la bombe
+    const m = mk();
+    const g = m.grid;
+    const p = m.players[0];
+    p.throwCharges = 1;
+    // (2,3) est une caisse : lancer vers le haut depuis (2,5) → (2,4) libre, (2,3) caisse, (2,2) libre
+    check(g.tile(2, 3) === TILE.BLOCK && !g.blocksMove(2, 2), "plan : caisse en (2,3), libre en (2,2)");
+    place(m, 0, 2, 5); face(m, 0, 0, -1);
+    throwBy(m, 0);
+    const b = [...m.bombs.values()][0];
+    check(!!b && b.tx === 2 && b.ty === 2, `la bombe survole la caisse et atterrit derrière (${b?.tx},${b?.ty})`);
+  }
+  {
+    // atterrir sur un joueur : la bombe est sous lui, il peut s'en éloigner
+    const m = mk();
+    const p = m.players[0];
+    p.throwCharges = 1;
+    place(m, 0, 2, 6); face(m, 0, 1, 0);
+    place(m, 1, 5, 6);
+    throwBy(m, 0);
+    run(m, 0.6);
+    const b = [...m.bombs.values()][0];
+    check(!!b && !b.flight && b.passable.includes(1), "atterrit sous un adversaire : il peut sortir de la case");
+    run(m, 0.4, (mm) => mm.players.map((q) => ({ mx: q.id === 1 ? 1 : 0, my: 0, bomb: false, ability: false })));
+    check(Math.floor(m.players[1].x) === 6, "l'adversaire s'en éloigne normalement");
+  }
+  {
+    // deux bombes lancées vers la même case : la 2e ne peut pas y atterrir
+    const m = mk();
+    m.players[0].throwCharges = 1; m.players[1].throwCharges = 1;
+    place(m, 0, 2, 6); face(m, 0, 1, 0);
+    place(m, 1, 8, 6); face(m, 1, -1, 0);
+    throwBy(m, 0);
+    throwBy(m, 1);
+    const cells = [...m.bombs.values()].map((b) => `${b.tx},${b.ty}`);
+    check(new Set(cells).size === cells.length, `deux bombes en vol n'atterrissent jamais sur la même case (${cells.join(" / ")})`);
+  }
+  {
+    // sans capacité : rien ; posé normal toujours possible ; délai entre deux poses respecté
+    const m = mk();
+    const p = m.players[0];
+    place(m, 0, 2, 6); face(m, 0, 1, 0);
+    throwBy(m, 0);
+    check(m.bombs.size === 0, "sans la capacité, le bouton lancer ne fait rien");
+    p.throwCharges = 1;
+    p.maxBombs = 2;
+    check(m.tryPlaceBomb(p), "la pose normale marche toujours");
+    check(!m.tryThrowBomb(p) && p.throwCharges === 1, "le délai entre deux poses s'applique aussi au lancer");
+    run(m, m.bombRules.cooldown + DT);
+    check(m.tryThrowBomb(p) && p.throwCharges === 0, "après le délai, le lancer part");
+  }
+  {
+    // élimination : capacité perdue ; réapparition sans capacité
+    const m = mk();
+    const p = m.players[0];
+    p.throwCharges = 1;
+    m.kill(p, 1);
+    check(p.throwCharges === 0, "éliminé : la capacité disparaît");
+    run(m, HILL_RULES.respawnDelay + 0.3);
+    check(p.alive && p.throwCharges === 0, "réapparition sans capacité");
+  }
+  {
+    // pas de tir ami avec une bombe lancée ; l'adversaire est touché
+    const m = mk();
+    m.players[0].throwCharges = 1;
+    place(m, 0, 2, 6); face(m, 0, 1, 0);
+    place(m, 2, 6, 6); // coéquipier près de l'arrivée
+    place(m, 1, 7, 6); // adversaire près de l'arrivée
+    throwBy(m, 0);
+    run(m, 3.3);
+    check(m.players[2].deathTime < 0 && m.players[1].deathTime >= 0, "bombe lancée : coéquipier épargné, adversaire touché");
+  }
+  {
+    // apparition régulière du bonus : sur une case libre, jamais sur la zone, endroits variés
+    const spots = new Set<string>();
+    let bad = 0, appeared = 0;
+    for (let seed = 1; seed <= 12; seed++) {
+      const m = new Match({ seed, map: FACTORY, modeId: "koth", players: slots4() });
+      m.phase = "playing";
+      m.hill!.moveIn = 1e9;
+      run(m, HILL_RULES.throwFirst + 0.2);
+      const b = [...m.bonuses.values()].find((x) => x.type === "throw");
+      if (!b) continue;
+      appeared++;
+      spots.add(`${b.tx},${b.ty}`);
+      const [cx, cy] = m.hill!.center;
+      if (m.grid.blocksMove(b.tx, b.ty) || (b.tx === cx && b.ty === cy)) bad++;
+    }
+    check(appeared >= 10 && bad === 0 && spots.size >= 6, `le bonus apparaît régulièrement (${appeared}/12), sur des cases libres, à des endroits variés (${spots.size} endroits)`);
+    const c = new Match({ seed: 5, map: FOREST, modeId: "classic", players: slots4() });
+    c.phase = "playing";
+    run(c, 20);
+    check(![...c.bonuses.values()].some((x) => x.type === "throw"), "Classique : jamais de bonus « bombe à lancer »");
+  }
+  {
+    // en ligne : la bombe en vol est transmise telle quelle
+    const m = mk();
+    m.players[0].throwCharges = 1;
+    place(m, 0, 2, 6); face(m, 0, 1, 0);
+    throwBy(m, 0);
+    const snap = JSON.parse(JSON.stringify(encodeSnapshot(m, [0, 0, 0, 0], [])));
+    const c = new Match({ seed: 41, map: FACTORY, modeId: "koth", players: slots4() });
+    applySnapshot(c, snap);
+    const b = [...c.bombs.values()][0];
+    check(!!b?.flight && b.tx === 5 && c.grid.bombAt[c.grid.idx(5, 6)] < 0, "instantané en ligne : bombe en vol (pas encore sur la grille) bien recopiée");
+  }
+  {
+    // bots : parties complètes avec la capacité, sans blocage
+    let throws = 0, stuck = 0, ended = 0;
+    for (let seed = 1; seed <= 6; seed++) {
+      const m = new Match({ seed: seed * 101, map: FACTORY, modeId: "koth", players: Array.from({ length: 4 }, (_, i) => ({ name: "B" + i, characterId: "pip", isBot: true, difficulty: "hard" as Difficulty })) });
+      const brains = m.players.map((p) => new BotBrain(p.id, "hard", seed));
+      let g = 0;
+      while (m.phase !== "over" && g++ < 60 * 200) {
+        m.step(brains.map((b) => b.update(m, DT)));
+        throws += m.events.filter((e) => e.t === "bombThrown").length;
+        for (const p of m.players) if (p.alive && m.grid.blocksMove(Math.floor(p.x), Math.floor(p.y))) stuck++;
+      }
+      if (m.phase === "over") ended++;
+    }
+    check(ended === 6 && stuck === 0 && throws > 0, `bots : 6 parties terminées, ${throws} bombes lancées, personne coincé`);
+  }
+}
+
 console.log("Domination : zone qui se déplace");
 {
   const { HILL_RULES } = await import("../src/core/hill");

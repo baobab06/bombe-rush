@@ -1,9 +1,11 @@
 import type { Match } from "../core/match";
+import type { BombState } from "../core/types";
 import { drawCharacter, headTopOffset, lookOf, type Expr } from "./bodies";
 import { abilityBurst, emitAura, emitTrail, speedLines } from "./charfx";
 import { getBoom, getEmote } from "../core/cosmetics";
 import { EMOTE_DURATION, drawEmoteBubble } from "./emote";
 import { RULES, TEAM_COLORS } from "../core/rules";
+import { THROW } from "../core/bombs";
 import { TERRAIN, TILE, type SimEvent } from "../core/types";
 import { Particles } from "./particles";
 import {
@@ -29,6 +31,7 @@ const BONUS_TEXT: Record<string, string> = {
   flame: "+1 PORTÉE",
   speed: "VITESSE !",
   shield: "BOUCLIER",
+  throw: "BOMBE À LANCER !",
 };
 
 interface Dying {
@@ -160,6 +163,19 @@ export class Renderer {
           P.blockBreak(e.x + 0.5, e.y + 0.5, this.art.debris(e.x, e.y));
           break;
         }
+        case "bombThrown": {
+          const o = m.players[e.owner];
+          if (o) this.fx(o.id).actionAt = this.time;
+          P.spawn("ring", e.x + 0.5, e.y + 0.5, { life: 0.25, size: 0.35, color: "#ffd23f" });
+          break;
+        }
+        case "bombLanded": {
+          for (const b of m.bombs.values()) if (!this.bombBorn.has(b.id)) this.bombBorn.set(b.id, this.time);
+          P.spawn("ring", e.x + 0.5, e.y + 0.5, { life: 0.35, size: 0.5, color: "#ffffff" });
+          P.dust(e.x + 0.5, e.y + 0.5);
+          this.shake = Math.max(this.shake ?? 0, 0.08);
+          break;
+        }
         case "bonusPicked": {
           const col = BONUS_COLORS[e.type]?.[0] ?? "#fff";
           P.pickup(e.x + 0.5, e.y + 0.5, col);
@@ -288,6 +304,58 @@ export class Renderer {
           else if (Math.random() < 0.4) P.spawn("petal", x, y, { z: 1.6, vz: -0.35, vx: 0.25, life: 3.5, size: 0.065, color: Math.random() < 0.5 ? "#9bd35d" : "#e3b448", vr: 3 });
       }
     }
+  }
+
+  /** Bombe à lancer en vol : arc, ombre au sol, cible d'atterrissage. */
+  private drawFlyingBomb(m: Match, b: BombState) {
+    const f = b.flight!;
+    const ctx = this.ctx;
+    const s = this.s;
+    const t = this.time;
+    const k = Math.min(1, f.t / f.dur);
+    const sx = (f.fromX + 0.5) * s;
+    const sy = (f.fromY + 0.5) * s;
+    const ex = (b.tx + 0.5) * s;
+    const ey = (b.ty + 0.5) * s;
+    const x = sx + (ex - sx) * k;
+    const y = sy + (ey - sy) * k;
+    const lift = Math.sin(Math.PI * k) * THROW.arcHeight * s;
+    ctx.save();
+    // trajectoire en pointillés (reste du trajet)
+    ctx.setLineDash([s * 0.08, s * 0.1]);
+    ctx.strokeStyle = "rgba(255,255,255,0.55)";
+    ctx.lineWidth = Math.max(1.5, s * 0.04);
+    ctx.beginPath();
+    for (let i = 0; i <= 12; i++) {
+      const kk = k + ((1 - k) * i) / 12;
+      const px = sx + (ex - sx) * kk;
+      const py = sy + (ey - sy) * kk - Math.sin(Math.PI * kk) * THROW.arcHeight * s;
+      if (i) ctx.lineTo(px, py);
+      else ctx.moveTo(px, py);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // cible d'atterrissage
+    const pulse = 0.5 + 0.5 * Math.sin(t * 14);
+    ctx.strokeStyle = `rgba(255,220,90,${0.6 + pulse * 0.4})`;
+    ctx.lineWidth = Math.max(2, s * 0.06);
+    ctx.beginPath();
+    ctx.ellipse(ex, ey + s * 0.12, s * 0.34, s * 0.16, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    // ombre au sol : plus petite et plus claire quand la bombe est haute
+    const h = lift / (THROW.arcHeight * s || 1);
+    ctx.fillStyle = `rgba(0,0,0,${0.35 - h * 0.15})`;
+    ctx.beginPath();
+    ctx.ellipse(x, y + s * 0.3, s * 0.28 * (1 - h * 0.35), s * 0.09 * (1 - h * 0.35), 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    // la bombe (même dessin que posée), qui tourne un peu en vol
+    const owner = b.ownerId >= 0 ? m.players[b.ownerId] : undefined;
+    ctx.save();
+    ctx.translate(x, y - lift);
+    ctx.rotate(Math.sin(k * Math.PI) * 0.5);
+    drawBomb(ctx, 0, 0, s, 1, t, 1, 9, m.bombRules.warn, owner?.boomId ? getBoom(owner.boomId).bomb : undefined);
+    ctx.restore();
   }
 
   /** Une bombe va bientôt sauter tout près : petite tête inquiète. */
@@ -592,6 +660,9 @@ export class Renderer {
       }
       for (const d of this.dying) if (Math.floor(d.y) === y) this.drawDying(m, d);
     }
+
+    // bombes lancées : cible au sol, ombre qui suit et bombe en cloche par-dessus tout
+    for (const b of m.bombs.values()) if (b.flight) this.drawFlyingBomb(m, b);
 
     // mode Chaos : zones annoncées (rayures rouges qui pulsent)
     if (ch?.pending) {

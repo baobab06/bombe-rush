@@ -32,6 +32,9 @@ export const HILL_RULES = {
   moveEvery: 10,
   /** annonce (contour + compte à rebours) avant le déplacement */
   moveWarn: 3,
+  /** bonus « bombe à lancer » : première apparition, puis intervalle (s) */
+  throwFirst: 12,
+  throwEvery: 16,
 } as const;
 
 interface Site {
@@ -51,6 +54,8 @@ export class HillState {
   moveIn: number = HILL_RULES.moveEvery;
   /** points de chaque joueur (secondes passées seul sur la colline) */
   readonly scores: number[];
+  /** secondes avant la prochaine apparition d'un bonus « bombe à lancer » */
+  throwSpawnIn: number = HILL_RULES.throwFirst;
   /** temps restant avant la réapparition de chaque joueur (≤ 0 = rien en attente) */
   readonly respawnIn: number[];
   /** joueur qui marque en ce moment (-1 = personne) */
@@ -283,6 +288,7 @@ export class HillState {
         m.events.push({ t: "hillMoved", x: this.center[0], y: this.center[1] });
       }
     }
+    this.spawnThrowBonus();
     // réapparitions
     // ordre tournant : à réapparition simultanée, personne ne choisit toujours sa case en premier
     const n = m.players.length;
@@ -291,6 +297,37 @@ export class HillState {
       if (p.alive || this.respawnIn[p.id] <= 0) continue;
       this.respawnIn[p.id] -= DT;
       if (this.respawnIn[p.id] <= 0) this.respawn(p);
+    }
+  }
+
+  /**
+   * Bonus « bombe à lancer » : il apparaît régulièrement sur une case libre
+   * tirée au sort (rng de la partie : même endroit pour tous en ligne, mais
+   * jamais deux fois de suite le même), loin de la zone et des joueurs.
+   * Un seul à la fois sur la carte, dans la limite du quota de la partie.
+   */
+  private lastThrowCell = -1;
+  private spawnThrowBonus(): void {
+    const m = this.m;
+    this.throwSpawnIn -= DT;
+    if (this.throwSpawnIn > 0) return;
+    this.throwSpawnIn = HILL_RULES.throwEvery;
+    if ([...m.bonuses.values()].some((b) => b.type === "throw")) return;
+    const max = m.loot.cfg.maxPerMatch.throw;
+    if (max !== undefined && (m.loot.perType.throw ?? 0) >= max) return;
+    const g = m.grid;
+    const [cx, cy] = this.center;
+    const cells = m.randomFreeCells(400).filter(([x, y]) => {
+      if (g.idx(x, y) === this.lastThrowCell) return false;
+      if (Math.abs(x - cx) + Math.abs(y - cy) < 2) return false;
+      if (g.fire[g.idx(x, y)] > 0) return false;
+      return m.players.every((p) => !p.alive || Math.abs(Math.floor(p.x) - x) + Math.abs(Math.floor(p.y) - y) >= 2);
+    });
+    const c = cells[0];
+    if (!c) return;
+    if (m.spawnBonus("throw", c[0], c[1])) {
+      m.loot.record("throw", c[0], c[1]);
+      this.lastThrowCell = g.idx(c[0], c[1]);
     }
   }
 
@@ -354,6 +391,7 @@ export class HillState {
     p.speed = RULES.baseSpeed;
     p.speedLevel = 0;
     p.maxBombs = m.bombRules.startBombs;
+    p.throwCharges = 0;
     p.range = m.bombRules.startRange;
     p.bombCooldown = 0;
     p.activeBombs = Math.min(p.activeBombs, p.maxBombs);

@@ -1461,7 +1461,8 @@ class App implements AppCtx {
     // en CHAOS, le badge prend de la place : bonus en version compacte (jamais sous les boutons)
     $("hud").classList.toggle("chaos", h.chaos);
     const pw0 = $("hudPowers");
-    const col = document.querySelector(h.chaos ? "#hud .hud-l" : "#hud .hud-r")!;
+    // Domination : la colonne de droite accueille le tableau des points et le bouton « lancer »
+    const col = document.querySelector(h.chaos || h.hill ? "#hud .hud-l" : "#hud .hud-r")!;
     if (pw0.parentElement !== col) col.appendChild(pw0);
     const ci = h.chaosInfo;
     if (ci) {

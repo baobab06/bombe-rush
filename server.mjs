@@ -238,6 +238,12 @@ var BOMB_KINDS = {
   standard: { id: "standard", name: "Bombe", fuse: 1.4, warn: 0.55 },
   rain: { id: "rain", name: "Bombe du ciel", fuse: 1.6, warn: 0.55 }
 };
+var THROW = {
+  maxDist: 3,
+  flightBase: 0.12,
+  flightPerCell: 0.11,
+  arcHeight: 0.9
+};
 var BOMB_WARN = Math.max(...Object.values(BOMB_KINDS).map((k) => k.warn));
 
 // src/core/loot.ts
@@ -704,7 +710,9 @@ var HILL_RULES = {
   respawnShield: 2.5,
   respawnHillGap: 3,
   moveEvery: 10,
-  moveWarn: 3
+  moveWarn: 3,
+  throwFirst: 12,
+  throwEvery: 16
 };
 
 class HillState {
@@ -714,6 +722,7 @@ class HillState {
   next = -1;
   moveIn = HILL_RULES.moveEvery;
   scores;
+  throwSpawnIn = HILL_RULES.throwFirst;
   respawnIn;
   holder = -1;
   contested = false;
@@ -936,6 +945,7 @@ class HillState {
         m.events.push({ t: "hillMoved", x: this.center[0], y: this.center[1] });
       }
     }
+    this.spawnThrowBonus();
     const n = m.players.length;
     for (let k = 0;k < n; k++) {
       const p = m.players[(k + m.tick) % n];
@@ -944,6 +954,37 @@ class HillState {
       this.respawnIn[p.id] -= DT;
       if (this.respawnIn[p.id] <= 0)
         this.respawn(p);
+    }
+  }
+  lastThrowCell = -1;
+  spawnThrowBonus() {
+    const m = this.m;
+    this.throwSpawnIn -= DT;
+    if (this.throwSpawnIn > 0)
+      return;
+    this.throwSpawnIn = HILL_RULES.throwEvery;
+    if ([...m.bonuses.values()].some((b) => b.type === "throw"))
+      return;
+    const max = m.loot.cfg.maxPerMatch.throw;
+    if (max !== undefined && (m.loot.perType.throw ?? 0) >= max)
+      return;
+    const g = m.grid;
+    const [cx, cy] = this.center;
+    const cells = m.randomFreeCells(400).filter(([x, y]) => {
+      if (g.idx(x, y) === this.lastThrowCell)
+        return false;
+      if (Math.abs(x - cx) + Math.abs(y - cy) < 2)
+        return false;
+      if (g.fire[g.idx(x, y)] > 0)
+        return false;
+      return m.players.every((p) => !p.alive || Math.abs(Math.floor(p.x) - x) + Math.abs(Math.floor(p.y) - y) >= 2);
+    });
+    const c = cells[0];
+    if (!c)
+      return;
+    if (m.spawnBonus("throw", c[0], c[1])) {
+      m.loot.record("throw", c[0], c[1]);
+      this.lastThrowCell = g.idx(c[0], c[1]);
     }
   }
   get reached() {
@@ -1002,6 +1043,7 @@ class HillState {
     p.speed = RULES.baseSpeed;
     p.speedLevel = 0;
     p.maxBombs = m.bombRules.startBombs;
+    p.throwCharges = 0;
     p.range = m.bombRules.startRange;
     p.bombCooldown = 0;
     p.activeBombs = Math.min(p.activeBombs, p.maxBombs);
@@ -1051,6 +1093,7 @@ var MODES = [
     emoji: "\uD83D\uDC51",
     suddenDeath: false,
     bombRules: { fuse: 2.5, warn: 0.8, startRange: 2, startBombs: 1, fireDuration: 0.4, cooldown: 0.5 },
+    loot: { weights: { throw: 14 }, maxPerMatch: { throw: 4 } },
     onStart(m) {
       if (m.players.length >= 2)
         m.setTeams();
@@ -1538,6 +1581,16 @@ class BotBrain {
       cmd.ability = true;
       this.wantShield = false;
     }
+    if (this.wantThrow) {
+      const [dx, dy] = this.wantThrow;
+      this.wantThrow = null;
+      if (p.throwCharges > 0) {
+        cmd.mx = dx;
+        cmd.my = dy;
+        cmd.throw = true;
+        return cmd;
+      }
+    }
     if (this.wantBomb) {
       cmd.bomb = true;
       this.wantBomb = false;
@@ -1571,6 +1624,30 @@ class BotBrain {
     else if (Math.abs(cy - p.y) > 0.06)
       cmd.my = Math.sign(cy - p.y);
   }
+  wantThrow = null;
+  planThrow(m, p) {
+    if (p.throwCharges <= 0 || p.activeBombs >= p.maxBombs || p.bombCooldown > 0)
+      return false;
+    if (!this.rng.chance(0.25 + this.prof.aggression * 0.5))
+      return false;
+    const px = Math.floor(p.x);
+    const py = Math.floor(p.y);
+    for (const [dx, dy] of DIRS) {
+      const to = m.throwTarget(px, py, dx, dy);
+      if (!to)
+        continue;
+      const dist = Math.abs(to[0] - px) + Math.abs(to[1] - py);
+      if (dist <= p.range)
+        continue;
+      const cells = new Set(m.blastCells(to[0], to[1], p.range));
+      if (m.players.some((o) => m.isFoe(p, o) && o.shieldTime <= 0 && cells.has(m.grid.idx(Math.floor(o.x), Math.floor(o.y))))) {
+        this.wantThrow = [dx, dy];
+        this.lastDecision = "throw";
+        return true;
+      }
+    }
+    return false;
+  }
   think(m, p) {
     const g = m.grid;
     const myIdx = g.idx(Math.floor(p.x), Math.floor(p.y));
@@ -1596,6 +1673,8 @@ class BotBrain {
     }
     if (this.path.length && !this.pathSafe(m, p, danger, this.path) && !sloppy)
       this.path = [];
+    if (this.planThrow(m, p))
+      return;
     const bonusPath = this.findTarget(m, p, danger, this.prof.bonusRadius, (i) => g.bonusAt[i] >= 0);
     if (bonusPath && bonusPath.length > 0) {
       this.path = bonusPath;
@@ -1958,6 +2037,17 @@ var BONUSES = {
         return false;
       p.speedLevel++;
       p.speed = RULES.baseSpeed + p.speedLevel * RULES.speedPerLevel;
+      return true;
+    }
+  },
+  throw: {
+    id: "throw",
+    label: "Bombe à lancer",
+    description: "Ta prochaine bombe peut être lancée à 3 cases (bouton \uD83C\uDFAF).",
+    apply(p) {
+      if (p.throwCharges >= 1)
+        return false;
+      p.throwCharges = 1;
       return true;
     }
   },
@@ -2501,6 +2591,7 @@ class Match {
         activeBombs: 0,
         range: this.bombRules.startRange,
         bombCooldown: 0,
+        throwCharges: 0,
         shieldCharges: 0,
         shieldTime: 0,
         deathTime: -1,
@@ -2509,7 +2600,8 @@ class Match {
         stats: { bombsPlaced: 0, kills: 0, blocksDestroyed: 0, bonusesPicked: 0, survivalTime: 0 }
       };
     });
-    this.loot = new LootTable(this.grid.w, this.grid.h, arena.spawns.slice(0, config.players.length));
+    const ml = this.mode.loot;
+    this.loot = new LootTable(this.grid.w, this.grid.h, arena.spawns.slice(0, config.players.length), ml ? { ...LOOT, weights: { ...LOOT.weights, ...ml.weights }, maxPerMatch: { ...LOOT.maxPerMatch, ...ml.maxPerMatch } } : LOOT);
     this.buildSuddenDeathOrder();
     for (let y = 0;y < this.grid.h; y++)
       for (let x = 0;x < this.grid.w; x++)
@@ -2610,6 +2702,8 @@ class Match {
     this.moveWithInput(p, cmd);
     if (cmd.bomb)
       this.tryPlaceBomb(p);
+    if (cmd.throw)
+      this.tryThrowBomb(p);
     if (cmd.ability)
       this.tryShield(p);
   }
@@ -2644,15 +2738,22 @@ class Match {
     if (!onIce && !hasInput)
       p.slideX = p.slideY = 0;
   }
-  tryPlaceBomb(p) {
-    if (!p.alive || p.activeBombs >= p.maxBombs || p.bombCooldown > 0)
-      return false;
-    const [tx, ty] = this.playerTile(p);
+  canHoldBomb(tx, ty) {
     const g = this.grid;
+    if (tx < 1 || ty < 1 || tx > g.w - 2 || ty > g.h - 2)
+      return false;
     const i = g.idx(tx, ty);
     if (g.bombAt[i] >= 0 || g.tiles[i] !== TILE.FLOOR || g.isHazard(tx, ty))
       return false;
-    const passable = this.players.filter((o) => o.alive && Math.floor(o.x) === tx && Math.floor(o.y) === ty).map((o) => o.id);
+    for (const b of this.bombs.values())
+      if (b.flight && b.tx === tx && b.ty === ty)
+        return false;
+    return true;
+  }
+  canUseBomb(p) {
+    return p.alive && p.activeBombs < p.maxBombs && p.bombCooldown <= 0;
+  }
+  makeBomb(p, tx, ty, flight) {
     const bomb = {
       id: this.nextId++,
       ownerId: p.id,
@@ -2661,14 +2762,59 @@ class Match {
       fuse: this.bombRules.fuse * this.fuseMul,
       fuseTotal: this.bombRules.fuse * this.fuseMul,
       range: p.range + this.rangeBonus,
-      passable
+      passable: [],
+      flight
     };
     this.bombs.set(bomb.id, bomb);
-    g.bombAt[i] = bomb.id;
     p.activeBombs++;
     p.bombCooldown = this.bombRules.cooldown;
     p.stats.bombsPlaced++;
+    return bomb;
+  }
+  groundBomb(b) {
+    const g = this.grid;
+    b.passable = this.players.filter((o) => o.alive && Math.floor(o.x) === b.tx && Math.floor(o.y) === b.ty).map((o) => o.id);
+    g.bombAt[g.idx(b.tx, b.ty)] = b.id;
+  }
+  tryPlaceBomb(p) {
+    if (!this.canUseBomb(p))
+      return false;
+    const [tx, ty] = this.playerTile(p);
+    if (!this.canHoldBomb(tx, ty))
+      return false;
+    const bomb = this.makeBomb(p, tx, ty);
+    this.groundBomb(bomb);
     this.events.push({ t: "bombPlaced", x: tx, y: ty, owner: p.id });
+    return true;
+  }
+  throwTarget(x, y, dx, dy) {
+    if (!dx && !dy)
+      return null;
+    const g = this.grid;
+    let best = null;
+    for (let d = 1;d <= THROW.maxDist; d++) {
+      const cx = x + dx * d;
+      const cy = y + dy * d;
+      if (g.tile(cx, cy) === TILE.WALL)
+        break;
+      if (this.canHoldBomb(cx, cy))
+        best = [cx, cy];
+    }
+    return best;
+  }
+  tryThrowBomb(p) {
+    if (p.throwCharges <= 0 || !this.canUseBomb(p))
+      return false;
+    const [px, py] = this.playerTile(p);
+    const dx = Math.sign(p.faceX);
+    const dy = dx ? 0 : Math.sign(p.faceY);
+    const to = this.throwTarget(px, py, dx, dy);
+    if (!to)
+      return false;
+    const dist = Math.abs(to[0] - px) + Math.abs(to[1] - py);
+    this.makeBomb(p, to[0], to[1], { fromX: px, fromY: py, t: 0, dur: THROW.flightBase + THROW.flightPerCell * dist });
+    p.throwCharges = 0;
+    this.events.push({ t: "bombThrown", x: px, y: py, toX: to[0], toY: to[1], owner: p.id });
     return true;
   }
   tryShield(p) {
@@ -2694,6 +2840,12 @@ class Match {
   updateBombs() {
     const toExplode = [];
     for (const b of this.bombs.values()) {
+      if (b.flight) {
+        b.flight.t += DT;
+        if (b.flight.t >= b.flight.dur - 0.000000001)
+          this.land(b);
+        continue;
+      }
       b.fuse -= DT;
       if (b.fuse <= 0)
         toExplode.push(b);
@@ -2702,6 +2854,25 @@ class Match {
     for (const b of toExplode)
       if (this.bombs.has(b.id))
         this.detonate(b);
+  }
+  land(b) {
+    b.flight = undefined;
+    const g = this.grid;
+    const i = g.idx(b.tx, b.ty);
+    if (g.tiles[i] !== TILE.FLOOR || g.bombAt[i] >= 0) {
+      this.events.push({ t: "bombLanded", x: b.tx, y: b.ty, owner: b.ownerId });
+      if (g.bombAt[i] < 0)
+        this.detonate(b);
+      else {
+        this.bombs.delete(b.id);
+        const o = this.players[b.ownerId];
+        if (o)
+          o.activeBombs = Math.max(0, o.activeBombs - 1);
+      }
+      return;
+    }
+    this.groundBomb(b);
+    this.events.push({ t: "bombLanded", x: b.tx, y: b.ty, owner: b.ownerId });
   }
   blastCells(tx, ty, range) {
     const g = this.grid;
@@ -2888,6 +3059,7 @@ class Match {
     p.moving = false;
     p.deathTime = this.time;
     p.killedBy = killer;
+    p.throwCharges = 0;
     p.stats.survivalTime = this.time;
     if (killer >= 0 && killer !== p.id)
       this.players[killer].stats.kills++;
@@ -3172,7 +3344,7 @@ function encodeSnapshot(m, acks, events) {
     tiles: Array.from(g.tiles).join(""),
     terrain: Array.from(g.terrain).join(""),
     fire,
-    bombs: [...m.bombs.values()].map((b) => [b.id, b.ownerId, b.tx, b.ty, r2(b.fuse), b.range, b.passable, b.fuseTotal]),
+    bombs: [...m.bombs.values()].map((b) => [b.id, b.ownerId, b.tx, b.ty, r2(b.fuse), b.range, b.passable, b.fuseTotal, b.flight ? [b.flight.fromX, b.flight.fromY, r2(b.flight.t), r2(b.flight.dur)] : null]),
     bonuses: [...m.bonuses.values()].map((b) => [b.id, b.type, b.tx, b.ty, r2(b.invuln), r2(b.age)]),
     pending: m.pendingDrops.map(([x, y, l]) => [x, y, r2(l)]),
     hill: m.hill ? { scores: m.hill.scores.map(r2), respawn: m.hill.respawnIn.map(r2), holder: m.hill.holder, contested: m.hill.contested, site: m.hill.site, next: m.hill.next, moveIn: r2(m.hill.moveIn) } : null,
@@ -3260,13 +3432,15 @@ class GameRunner {
     if (i === undefined || seq <= this.acks[i])
       return;
     const q = this.queues[i];
-    q.push({ seq, cmd: { mx: clamp(cmd.mx), my: clamp(cmd.my), bomb: !!cmd.bomb, ability: !!cmd.ability } });
+    q.push({ seq, cmd: { mx: clamp(cmd.mx), my: clamp(cmd.my), bomb: !!cmd.bomb, ability: !!cmd.ability, throw: !!cmd.throw } });
     while (q.length > MAX_QUEUE) {
       const old = q.shift();
       if (old.cmd.bomb)
         q[0].cmd.bomb = true;
       if (old.cmd.ability)
         q[0].cmd.ability = true;
+      if (old.cmd.throw)
+        q[0].cmd.throw = true;
       this.acks[i] = old.seq;
     }
   }

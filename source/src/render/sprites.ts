@@ -459,6 +459,7 @@ export const BONUS_COLORS: Record<string, [string, string]> = {
   flame: ["#ff7a2e", "#c4400f"],
   speed: ["#3fd17a", "#1c8c4a"],
   shield: ["#3fc6ff", "#1a7fb8"],
+  throw: ["#ffb31a", "#c7700a"],
 };
 
 export function drawBonusIcon(ctx: Ctx, cx: number, cy: number, s: number, type: string) {
@@ -528,6 +529,33 @@ export function drawBonusIcon(ctx: Ctx, cx: number, cy: number, s: number, type:
         ctx.lineTo(cx - s * 0.26, cy - s * 0.08 + k * s * 0.12);
         ctx.stroke();
       }
+      break;
+    }
+    case "throw": {
+      // petite bombe + flèche en cloche : « je peux la lancer »
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = Math.max(1.2, s * 0.05);
+      ctx.setLineDash([s * 0.05, s * 0.05]);
+      ctx.beginPath();
+      ctx.moveTo(cx - s * 0.26, cy + s * 0.18);
+      ctx.quadraticCurveTo(cx - s * 0.02, cy - s * 0.42, cx + s * 0.24, cy - s * 0.02);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath();
+      ctx.moveTo(cx + s * 0.3, cy + s * 0.04);
+      ctx.lineTo(cx + s * 0.14, cy - s * 0.02);
+      ctx.lineTo(cx + s * 0.26, cy - s * 0.14);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = "#23243d";
+      ctx.beginPath();
+      ctx.arc(cx - s * 0.12, cy + s * 0.12, s * 0.14, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#ffd23f";
+      ctx.beginPath();
+      ctx.arc(cx - s * 0.03, cy + s * 0.0, s * 0.045, 0, Math.PI * 2);
+      ctx.fill();
       break;
     }
     case "shield": {

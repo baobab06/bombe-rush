@@ -73,6 +73,17 @@ export class BotBrain {
       cmd.ability = true;
       this.wantShield = false;
     }
+    // bombe à lancer : on se tourne vers la cible et on lance dans le même tick
+    if (this.wantThrow) {
+      const [dx, dy] = this.wantThrow;
+      this.wantThrow = null;
+      if (p.throwCharges > 0) {
+        cmd.mx = dx;
+        cmd.my = dy;
+        cmd.throw = true;
+        return cmd;
+      }
+    }
     if (this.wantBomb) {
       // on pose sans bouger ce tick : la bombe tombe sur la case prévue
       cmd.bomb = true;
@@ -107,6 +118,34 @@ export class BotBrain {
     else if (Math.abs(cy - p.y) > 0.06) cmd.my = Math.sign(cy - p.y);
   }
 
+  /** Lancer prévu au prochain tick : direction (dx, dy). */
+  private wantThrow: [number, number] | null = null;
+
+  /**
+   * Bombe à lancer : vise un adversaire touché par l'explosion à l'arrivée.
+   * On ne lance que si la bombe atterrit hors de sa propre portée (pas de
+   * suicide), et pas à chaque occasion (selon l'agressivité du bot).
+   */
+  private planThrow(m: Match, p: PlayerState): boolean {
+    if (p.throwCharges <= 0 || p.activeBombs >= p.maxBombs || p.bombCooldown > 0) return false;
+    if (!this.rng.chance(0.25 + this.prof.aggression * 0.5)) return false;
+    const px = Math.floor(p.x);
+    const py = Math.floor(p.y);
+    for (const [dx, dy] of DIRS) {
+      const to = m.throwTarget(px, py, dx, dy);
+      if (!to) continue;
+      const dist = Math.abs(to[0] - px) + Math.abs(to[1] - py);
+      if (dist <= p.range) continue;
+      const cells = new Set(m.blastCells(to[0], to[1], p.range));
+      if (m.players.some((o) => m.isFoe(p, o) && o.shieldTime <= 0 && cells.has(m.grid.idx(Math.floor(o.x), Math.floor(o.y))))) {
+        this.wantThrow = [dx, dy];
+        this.lastDecision = "throw";
+        return true;
+      }
+    }
+    return false;
+  }
+
   // ------------------------------------------------------------ décision
   private think(m: Match, p: PlayerState): void {
     const g = m.grid;
@@ -138,6 +177,9 @@ export class BotBrain {
 
     // 2. Ma case est sûre. Chemin en cours encore valable ?
     if (this.path.length && !this.pathSafe(m, p, danger, this.path) && !sloppy) this.path = [];
+
+    // 2 bis. Bombe à lancer : un adversaire à portée de lancer ?
+    if (this.planThrow(m, p)) return;
 
     // 3. Bonus proche
     const bonusPath = this.findTarget(m, p, danger, this.prof.bonusRadius, (i) => g.bonusAt[i] >= 0);

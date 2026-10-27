@@ -22,7 +22,8 @@ export interface Snapshot {
   terrain: string;
   /** [idx, temps restant, forme, propriétaire] */
   fire: [number, number, number, number][];
-  bombs: [number, number, number, number, number, number, number[], number][];
+  /** [..., vol : [deX, deY, t, durée] si la bombe est lancée et encore en l'air] */
+  bombs: [number, number, number, number, number, number, number[], number, ([number, number, number, number] | null)?][];
   bonuses: [number, string, number, number, number, number][];
   pending: [number, number, number][];
   chaos: { pending: [string, number, number[]] | null; active: [string, number, number[]][]; nextAt: number; fog: boolean; rangeBonus: number; fuseMul: number } | null;
@@ -50,7 +51,7 @@ export function encodeSnapshot(m: Match, acks: number[], events: SimEvent[]): Sn
     tiles: Array.from(g.tiles).join(""),
     terrain: Array.from(g.terrain).join(""),
     fire,
-    bombs: [...m.bombs.values()].map((b) => [b.id, b.ownerId, b.tx, b.ty, r2(b.fuse), b.range, b.passable, b.fuseTotal]),
+    bombs: [...m.bombs.values()].map((b) => [b.id, b.ownerId, b.tx, b.ty, r2(b.fuse), b.range, b.passable, b.fuseTotal, b.flight ? [b.flight.fromX, b.flight.fromY, r2(b.flight.t), r2(b.flight.dur)] : null]),
     bonuses: [...m.bonuses.values()].map((b) => [b.id, b.type, b.tx, b.ty, r2(b.invuln), r2(b.age)]),
     pending: m.pendingDrops.map(([x, y, l]) => [x, y, r2(l)]),
     hill: m.hill
@@ -102,9 +103,11 @@ export function applySnapshot(m: Match, s: Snapshot, keep = -1): void {
     g.fireOwner[i] = owner;
   }
   m.bombs.clear();
-  for (const [id, ownerId, tx, ty, fuse, range, passable, fuseTotal] of s.bombs) {
-    m.bombs.set(id, { id, ownerId, tx, ty, fuse, fuseTotal, range, passable });
-    g.bombAt[g.idx(tx, ty)] = id;
+  for (const [id, ownerId, tx, ty, fuse, range, passable, fuseTotal, fl] of s.bombs) {
+    const flight = fl ? { fromX: fl[0], fromY: fl[1], t: fl[2], dur: fl[3] } : undefined;
+    m.bombs.set(id, { id, ownerId, tx, ty, fuse, fuseTotal, range, passable, flight });
+    // bombe en l'air : pas encore sur la grille
+    if (!flight) g.bombAt[g.idx(tx, ty)] = id;
   }
   m.bonuses.clear();
   for (const [id, type, tx, ty, invuln, age] of s.bonuses) {

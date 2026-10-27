@@ -303,7 +303,7 @@ export class GameScreen {
     this.renderer.draw(m, frozen ? 0 : dt, this.prev, frozen ? 1 : Math.min(1, this.acc / DT));
     if (!this.demo && !this.finished) {
       const me = m.players[s.localPlayer];
-      this.controls.draw(this.renderer.ctx, me.shieldCharges, me.shieldTime, me.maxBombs - me.activeBombs, me.maxBombs);
+      this.controls.draw(this.renderer.ctx, me.shieldCharges, me.shieldTime, me.maxBombs - me.activeBombs, me.maxBombs, me.alive ? me.throwCharges : 0);
     }
   }
 
@@ -467,6 +467,13 @@ export class GameScreen {
         case "bombPlaced":
           audio.play("place", near(e.x + 0.5, e.y + 0.5));
           if (e.owner === me.id) haptics.bomb();
+          break;
+        case "bombThrown":
+          audio.play("whoosh", near(e.x + 0.5, e.y + 0.5));
+          if (e.owner === me.id) haptics.bomb();
+          break;
+        case "bombLanded":
+          audio.play("place", near(e.x + 0.5, e.y + 0.5));
           break;
         case "explode": {
           const v = near(e.x + 0.5, e.y + 0.5);

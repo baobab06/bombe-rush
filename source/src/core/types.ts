@@ -22,6 +22,8 @@ export interface InputCmd {
   my: number; // -1..1
   bomb: boolean; // appui (front montant)
   ability: boolean; // appui (front montant)
+  /** lancer la prochaine bombe (front montant) ; absent = non */
+  throw?: boolean;
 }
 export const NO_INPUT: InputCmd = { mx: 0, my: 0, bomb: false, ability: false };
 
@@ -77,6 +79,8 @@ export interface PlayerState {
   range: number;
   /** temps (s) avant de pouvoir reposer une bombe (délai entre deux poses) */
   bombCooldown: number;
+  /** capacité « bombe à lancer » (0 ou 1) : la prochaine bombe peut être lancée */
+  throwCharges: number;
   shieldCharges: number;
   shieldTime: number; // > 0 : bouclier actif
   deathTime: number; // temps de match à la mort
@@ -95,6 +99,12 @@ export interface BombState {
   range: number;
   /** joueurs encore debout sur la bombe au moment de la pose : ils peuvent en sortir */
   passable: number[];
+  /**
+   * Bombe lancée encore en l'air : partie de (fromX, fromY), elle atterrit sur
+   * (tx, ty) après `dur` secondes. En l'air : pas sur la grille, pas de compte
+   * à rebours, rien ne peut la faire sauter. Absent = posée au sol.
+   */
+  flight?: { fromX: number; fromY: number; t: number; dur: number };
 }
 
 export interface BonusState {
@@ -111,6 +121,8 @@ export const FIRE = { L: 1, R: 2, U: 4, D: 8, CENTER: 16 } as const;
 
 export type SimEvent =
   | { t: "bombPlaced"; x: number; y: number; owner: number }
+  | { t: "bombThrown"; x: number; y: number; toX: number; toY: number; owner: number }
+  | { t: "bombLanded"; x: number; y: number; owner: number }
   | { t: "explode"; x: number; y: number; owner: number; cells: number; chain: number }
   | { t: "blockDestroyed"; x: number; y: number }
   | { t: "bonusSpawn"; x: number; y: number; type: string }

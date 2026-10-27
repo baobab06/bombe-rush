@@ -19,6 +19,8 @@ export interface ModeDef {
   suddenDeath?: boolean;
   /** règles de bombes propres au mode (sinon celles du jeu) */
   bombRules?: Partial<BombRules>;
+  /** butin propre au mode : poids et quotas ajoutés à ceux du jeu (core/loot.ts) */
+  loot?: { weights: Record<string, number>; maxPerMatch: Record<string, number> };
   onStart?(m: Match): void;
   onTick?(m: Match, dt: number): void;
 }
@@ -53,6 +55,8 @@ export const MODES: ModeDef[] = [
     suddenDeath: false,
     // 2 contre 2 : bombes plus lisibles (mèche 2,5 s, portée 2, explosion brève)
     bombRules: { fuse: 2.5, warn: 0.8, startRange: 2, startBombs: 1, fireDuration: 0.4, cooldown: 0.5 },
+    // bombe à lancer : seulement en Domination (dans les caisses + apparitions régulières, voir hill.ts)
+    loot: { weights: { throw: 14 }, maxPerMatch: { throw: 4 } },
     onStart(m) {
       // équipes rouges / bleues dès qu'il y a au moins 2 joueurs
       if (m.players.length >= 2) m.setTeams();

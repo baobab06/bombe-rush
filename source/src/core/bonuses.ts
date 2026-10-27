@@ -46,6 +46,17 @@ export const BONUSES: Record<string, BonusDef> = {
       return true;
     },
   },
+  throw: {
+    id: "throw",
+    label: "Bombe à lancer",
+    description: "Ta prochaine bombe peut être lancée à 3 cases (bouton 🎯).",
+    apply(p) {
+      // une seule capacité à la fois
+      if (p.throwCharges >= 1) return false;
+      p.throwCharges = 1;
+      return true;
+    },
+  },
   shield: {
     id: "shield",
     label: "Bouclier",

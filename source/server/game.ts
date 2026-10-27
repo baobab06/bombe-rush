@@ -97,12 +97,13 @@ export class GameRunner {
     const i = this.seatOf.get(token);
     if (i === undefined || seq <= this.acks[i]) return;
     const q = this.queues[i];
-    q.push({ seq, cmd: { mx: clamp(cmd.mx), my: clamp(cmd.my), bomb: !!cmd.bomb, ability: !!cmd.ability } });
+    q.push({ seq, cmd: { mx: clamp(cmd.mx), my: clamp(cmd.my), bomb: !!cmd.bomb, ability: !!cmd.ability, throw: !!cmd.throw } });
     // trop d'avance : on garde les plus récentes, sans perdre un appui
     while (q.length > MAX_QUEUE) {
       const old = q.shift()!;
       if (old.cmd.bomb) q[0].cmd.bomb = true;
       if (old.cmd.ability) q[0].cmd.ability = true;
+      if (old.cmd.throw) q[0].cmd.throw = true;
       this.acks[i] = old.seq;
     }
   }

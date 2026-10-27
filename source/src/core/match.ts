@@ -1,7 +1,7 @@
-import type { BombRules } from "./bombs";
+import { THROW, type BombRules } from "./bombs";
 import { BONUSES } from "./bonuses";
 import { DIRS, Grid } from "./grid";
-import { LootTable } from "./loot";
+import { LOOT, LootTable } from "./loot";
 import { getMode, type ModeDef } from "./modes";
 import { movePlayer } from "./movement";
 import { Rng } from "./rng";
@@ -127,6 +127,7 @@ export class Match {
         activeBombs: 0,
         range: this.bombRules.startRange,
         bombCooldown: 0,
+        throwCharges: 0,
         shieldCharges: 0,
         shieldTime: 0,
         deathTime: -1,
@@ -135,7 +136,13 @@ export class Match {
         stats: { bombsPlaced: 0, kills: 0, blocksDestroyed: 0, bonusesPicked: 0, survivalTime: 0 },
       };
     });
-    this.loot = new LootTable(this.grid.w, this.grid.h, arena.spawns.slice(0, config.players.length));
+    const ml = this.mode.loot;
+    this.loot = new LootTable(
+      this.grid.w,
+      this.grid.h,
+      arena.spawns.slice(0, config.players.length),
+      ml ? { ...LOOT, weights: { ...LOOT.weights, ...ml.weights }, maxPerMatch: { ...LOOT.maxPerMatch, ...ml.maxPerMatch } } : LOOT,
+    );
     this.buildSuddenDeathOrder();
     for (let y = 0; y < this.grid.h; y++)
       for (let x = 0; x < this.grid.w; x++)
@@ -241,6 +248,7 @@ export class Match {
     if (p.bombCooldown > 0) p.bombCooldown = Math.max(0, p.bombCooldown - DT);
     this.moveWithInput(p, cmd);
     if (cmd.bomb) this.tryPlaceBomb(p);
+    if (cmd.throw) this.tryThrowBomb(p);
     if (cmd.ability) this.tryShield(p);
   }
 
@@ -278,15 +286,24 @@ export class Match {
     if (!onIce && !hasInput) p.slideX = p.slideY = 0;
   }
 
-  tryPlaceBomb(p: PlayerState): boolean {
-    if (!p.alive || p.activeBombs >= p.maxBombs || p.bombCooldown > 0) return false;
-    const [tx, ty] = this.playerTile(p);
+  /** Peut-on poser / faire atterrir une bombe sur cette case ? (mêmes règles pour les deux) */
+  canHoldBomb(tx: number, ty: number): boolean {
     const g = this.grid;
+    if (tx < 1 || ty < 1 || tx > g.w - 2 || ty > g.h - 2) return false;
     const i = g.idx(tx, ty);
     if (g.bombAt[i] >= 0 || g.tiles[i] !== TILE.FLOOR || g.isHazard(tx, ty)) return false;
-    const passable = this.players
-      .filter((o) => o.alive && Math.floor(o.x) === tx && Math.floor(o.y) === ty)
-      .map((o) => o.id);
+    // une autre bombe lancée doit déjà atterrir ici
+    for (const b of this.bombs.values()) if (b.flight && b.tx === tx && b.ty === ty) return false;
+    return true;
+  }
+
+  /** Le joueur peut-il sortir une bombe maintenant ? (vivant, stock, délai entre deux poses) */
+  private canUseBomb(p: PlayerState): boolean {
+    return p.alive && p.activeBombs < p.maxBombs && p.bombCooldown <= 0;
+  }
+
+  /** Crée une bombe du joueur (posée, ou lancée si `flight`). */
+  private makeBomb(p: PlayerState, tx: number, ty: number, flight?: BombState["flight"]): BombState {
     const bomb: BombState = {
       id: this.nextId++,
       ownerId: p.id,
@@ -295,14 +312,65 @@ export class Match {
       fuse: this.bombRules.fuse * this.fuseMul,
       fuseTotal: this.bombRules.fuse * this.fuseMul,
       range: p.range + this.rangeBonus,
-      passable,
+      passable: [],
+      flight,
     };
     this.bombs.set(bomb.id, bomb);
-    g.bombAt[i] = bomb.id;
     p.activeBombs++;
     p.bombCooldown = this.bombRules.cooldown;
     p.stats.bombsPlaced++;
+    return bomb;
+  }
+
+  /** Met une bombe sur la grille (pose ou atterrissage) ; les joueurs dessus peuvent en sortir. */
+  private groundBomb(b: BombState): void {
+    const g = this.grid;
+    b.passable = this.players.filter((o) => o.alive && Math.floor(o.x) === b.tx && Math.floor(o.y) === b.ty).map((o) => o.id);
+    g.bombAt[g.idx(b.tx, b.ty)] = b.id;
+  }
+
+  tryPlaceBomb(p: PlayerState): boolean {
+    if (!this.canUseBomb(p)) return false;
+    const [tx, ty] = this.playerTile(p);
+    if (!this.canHoldBomb(tx, ty)) return false;
+    const bomb = this.makeBomb(p, tx, ty);
+    this.groundBomb(bomb);
     this.events.push({ t: "bombPlaced", x: tx, y: ty, owner: p.id });
+    return true;
+  }
+
+  /**
+   * Case d'atterrissage d'une bombe lancée depuis (x, y) vers (dx, dy) :
+   * elle survole caisses, bombes, joueurs et bonus, mais pas les murs
+   * indestructibles ni le bord de la carte. Elle atterrit sur la case la plus
+   * lointaine (3 au plus) où une bombe pourrait être posée. null = impossible.
+   */
+  throwTarget(x: number, y: number, dx: number, dy: number): [number, number] | null {
+    if (!dx && !dy) return null;
+    const g = this.grid;
+    let best: [number, number] | null = null;
+    for (let d = 1; d <= THROW.maxDist; d++) {
+      const cx = x + dx * d;
+      const cy = y + dy * d;
+      if (g.tile(cx, cy) === TILE.WALL) break; // ne traverse pas un mur
+      if (this.canHoldBomb(cx, cy)) best = [cx, cy];
+    }
+    return best;
+  }
+
+  /** Lance la prochaine bombe devant soi (capacité « bombe à lancer »). */
+  tryThrowBomb(p: PlayerState): boolean {
+    if (p.throwCharges <= 0 || !this.canUseBomb(p)) return false;
+    const [px, py] = this.playerTile(p);
+    // direction : le déplacement en cours, sinon l'orientation
+    const dx = Math.sign(p.faceX);
+    const dy = dx ? 0 : Math.sign(p.faceY);
+    const to = this.throwTarget(px, py, dx, dy);
+    if (!to) return false; // rien d'atteignable : on garde la capacité
+    const dist = Math.abs(to[0] - px) + Math.abs(to[1] - py);
+    this.makeBomb(p, to[0], to[1], { fromX: px, fromY: py, t: 0, dur: THROW.flightBase + THROW.flightPerCell * dist });
+    p.throwCharges = 0;
+    this.events.push({ t: "bombThrown", x: px, y: py, toX: to[0], toY: to[1], owner: p.id });
     return true;
   }
 
@@ -331,12 +399,40 @@ export class Match {
   private updateBombs(): void {
     const toExplode: BombState[] = [];
     for (const b of this.bombs.values()) {
+      if (b.flight) {
+        // bombe lancée : le compte à rebours commence à l'atterrissage
+        b.flight.t += DT;
+        if (b.flight.t >= b.flight.dur - 1e-9) this.land(b);
+        continue;
+      }
       b.fuse -= DT;
       if (b.fuse <= 0) toExplode.push(b);
     }
     // ordre déterministe : par id
     toExplode.sort((a, b) => a.id - b.id);
     for (const b of toExplode) if (this.bombs.has(b.id)) this.detonate(b);
+  }
+
+  /** Atterrissage d'une bombe lancée. */
+  private land(b: BombState): void {
+    b.flight = undefined;
+    const g = this.grid;
+    const i = g.idx(b.tx, b.ty);
+    // la case d'arrivée est réservée pendant le vol (canHoldBomb) ; si elle est devenue
+    // un mur entre-temps (mort subite), la bombe saute à l'impact
+    if (g.tiles[i] !== TILE.FLOOR || g.bombAt[i] >= 0) {
+      this.events.push({ t: "bombLanded", x: b.tx, y: b.ty, owner: b.ownerId });
+      if (g.bombAt[i] < 0) this.detonate(b);
+      else {
+        // (impossible en pratique) case déjà occupée : la bombe est rendue au joueur
+        this.bombs.delete(b.id);
+        const o = this.players[b.ownerId];
+        if (o) o.activeBombs = Math.max(0, o.activeBombs - 1);
+      }
+      return;
+    }
+    this.groundBomb(b);
+    this.events.push({ t: "bombLanded", x: b.tx, y: b.ty, owner: b.ownerId });
   }
 
   /**
@@ -528,6 +624,7 @@ export class Match {
     p.moving = false;
     p.deathTime = this.time;
     p.killedBy = killer;
+    p.throwCharges = 0; // la capacité de lancer est perdue à l'élimination
     p.stats.survivalTime = this.time;
     if (killer >= 0 && killer !== p.id) this.players[killer].stats.kills++;
     this.events.push({ t: "playerDied", player: p.id, killer, x: p.x, y: p.y });

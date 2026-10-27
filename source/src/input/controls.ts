@@ -14,6 +14,8 @@ export interface ControlsLayout {
   joyZone: { x0: number; y0: number; x1: number; y1: number };
   bomb: Circle;
   shield: Circle;
+  /** bouton « lancer » (visible seulement avec la capacité) */
+  throw: Circle;
 }
 
 /**
@@ -27,7 +29,15 @@ export class Controls {
     joyZone: { x0: 0, y0: 0, x1: 300, y1: 600 },
     bomb: { x: 700, y: 300, r: 50 },
     shield: { x: 600, y: 340, r: 36 },
+    throw: { x: 720, y: 180, r: 36 },
   };
+  /** le joueur a la capacité de lancer : le bouton existe (sinon ni dessiné ni cliquable) */
+  throwReady = false;
+  private throwPointer: number | null = null;
+  private throwEdge = false;
+  private throwPressT = 0;
+  /** moment où la capacité est apparue (petite animation d'arrivée du bouton) */
+  private throwSince = 0;
   private joyPointer: number | null = null;
   private joyBase = { x: 0, y: 0 };
   private joyKnob = { x: 0, y: 0 };
@@ -79,15 +89,24 @@ export class Controls {
     const arenaRight = arena.x + arena.w - h * 0.035;
     let sx = bx - br * 1.05;
     let sy = by - br * 1.55;
+    // bouton « lancer » : juste au-dessus de la bombe (le bouclier est côté arène)
+    const tr = br * 0.7;
+    let tx = Math.min(w - safe.r - tr - 8, bx + br * 0.2);
+    let ty = by - br - tr - Math.max(24, h * 0.07);
     if (sx - sr < arenaRight) {
       sx = Math.max(bx, arenaRight + sr + 6);
       sy = by - br - sr - Math.max(12, h * 0.035);
+      // colonne étroite : le bouclier est au-dessus de la bombe, « lancer » au-dessus du bouclier
+      tx = sx;
+      ty = sy - sr - tr - Math.max(10, h * 0.03);
     }
+    ty = Math.max(safe.t + tr + 8, ty);
     this.layout = {
       joyHome: { x: jx, y: jy, r: jr },
       joyZone: { x0: 0, y0: h * 0.24, x1: Math.max(w * 0.42, arena.x + arena.w * 0.3), y1: h },
       bomb: { x: bx, y: by, r: br },
       shield: { x: sx, y: sy, r: sr },
+      throw: { x: tx, y: ty, r: tr },
     };
     if (this.joyPointer === null) this.resetJoy();
   }
@@ -115,6 +134,12 @@ export class Controls {
       this.bombPointer = e.pointerId;
       this.bombEdge = true;
       this.bombPressT = performance.now();
+      return;
+    }
+    if (this.throwReady && this.hit(L.throw, x, y, 1.2)) {
+      this.throwPointer = e.pointerId;
+      this.throwEdge = true;
+      this.throwPressT = performance.now();
       return;
     }
     if (this.hit(L.shield, x, y)) {
@@ -163,6 +188,7 @@ export class Controls {
     }
     if (e.pointerId === this.bombPointer) this.bombPointer = null;
     if (e.pointerId === this.shieldPointer) this.shieldPointer = null;
+    if (e.pointerId === this.throwPointer) this.throwPointer = null;
   };
 
   private keyDown = (e: KeyboardEvent) => {
@@ -179,6 +205,10 @@ export class Controls {
       this.bombEdge = true;
       this.bombPressT = performance.now();
     }
+    if ((k === "f" || k === "v") && this.throwReady) {
+      this.throwEdge = true;
+      this.throwPressT = performance.now();
+    }
     if (k === "shift" || k === "e" || k === "c") {
       this.shieldEdge = true;
       this.shieldPressT = performance.now();
@@ -192,8 +222,8 @@ export class Controls {
 
   releaseAll() {
     this.keys.clear();
-    this.joyPointer = this.bombPointer = this.shieldPointer = null;
-    this.bombEdge = this.shieldEdge = false;
+    this.joyPointer = this.bombPointer = this.shieldPointer = this.throwPointer = null;
+    this.bombEdge = this.shieldEdge = this.throwEdge = false;
     this.resetJoy();
   }
 
@@ -216,15 +246,22 @@ export class Controls {
       }
     }
     const cmd: InputCmd = { mx, my, bomb: this.bombEdge, ability: this.shieldEdge };
+    if (this.throwEdge) cmd.throw = true;
     this.bombEdge = false;
     this.shieldEdge = false;
+    this.throwEdge = false;
     return cmd;
   }
 
   // ---------------------------------------------------------------- dessin
-  draw(ctx: CanvasRenderingContext2D, shieldCharges: number, shieldActive: number, bombsLeft: number, maxBombs: number) {
+  draw(ctx: CanvasRenderingContext2D, shieldCharges: number, shieldActive: number, bombsLeft: number, maxBombs: number, throwCharges = 0) {
     const L = this.layout;
     const now = performance.now();
+    // la capacité vient d'apparaître / de disparaître
+    const canThrow = throwCharges > 0;
+    if (canThrow && !this.throwReady) this.throwSince = now;
+    this.throwReady = canThrow;
+    if (!canThrow) this.throwPointer = null;
     // joystick
     const active = this.joyPointer !== null;
     ctx.save();
@@ -294,6 +331,7 @@ export class Controls {
       ctx.closePath();
       ctx.fill();
     });
+    if (this.throwReady) this.drawThrow(ctx, now, bombsLeft > 0);
     if (shieldActive > 0) {
       // jauge de durée restante
       ctx.strokeStyle = "#ffffff";
@@ -304,6 +342,60 @@ export class Controls {
     } else if (shieldCharges > 0) {
       this.badge(ctx, L.shield.x + L.shield.r * 0.7, L.shield.y - L.shield.r * 0.7, String(shieldCharges), "#1a7fb8");
     }
+  }
+
+  /** Bouton « lancer » : apparaît en rebondissant, halo doré qui pulse (capacité prête). */
+  private drawThrow(ctx: CanvasRenderingContext2D, now: number, canUse: boolean) {
+    const c = this.layout.throw;
+    const age = (now - this.throwSince) / 1000;
+    const pop = age < 0.35 ? 0.4 + 0.6 * Math.sin((age / 0.35) * Math.PI * 0.5) + Math.sin((age / 0.35) * Math.PI) * 0.15 : 1;
+    const r = c.r * pop;
+    const pulse = 0.5 + 0.5 * Math.sin(now / 160);
+    ctx.save();
+    // halo
+    const g = ctx.createRadialGradient(c.x, c.y, r * 0.8, c.x, c.y, r * 1.6);
+    g.addColorStop(0, `rgba(255,200,40,${0.45 + pulse * 0.3})`);
+    g.addColorStop(1, "rgba(255,200,40,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, r * 1.6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    const pressed = this.throwPointer !== null || now - this.throwPressT < 120;
+    this.button(ctx, { x: c.x, y: c.y, r }, "#ffb31a", "#c7700a", pressed, canUse, (x, y, rr) => {
+      // bombe + arc en pointillés + flèche
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = rr * 0.1;
+      ctx.lineCap = "round";
+      ctx.setLineDash([rr * 0.12, rr * 0.12]);
+      ctx.beginPath();
+      ctx.moveTo(x - rr * 0.45, y + rr * 0.25);
+      ctx.quadraticCurveTo(x - rr * 0.05, y - rr * 0.75, x + rr * 0.42, y - rr * 0.05);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath();
+      ctx.moveTo(x + rr * 0.55, y + rr * 0.08);
+      ctx.lineTo(x + rr * 0.25, y - rr * 0.02);
+      ctx.lineTo(x + rr * 0.45, y - rr * 0.25);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = "#1b1c33";
+      ctx.beginPath();
+      ctx.arc(x - rr * 0.18, y + rr * 0.2, rr * 0.28, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    // étiquette « LANCER »
+    ctx.save();
+    ctx.font = `900 ${Math.round(Math.max(11, r * 0.36))}px "Baloo 2", system-ui, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = "#1b1c33";
+    ctx.strokeText("LANCER", c.x, c.y + r + Math.max(10, r * 0.38));
+    ctx.fillStyle = "#ffd23f";
+    ctx.fillText("LANCER", c.x, c.y + r + Math.max(10, r * 0.38));
+    ctx.restore();
   }
 
   private button(

@@ -25,6 +25,17 @@ export const BOMB_KINDS = {
 
 export type BombKindId = keyof typeof BOMB_KINDS;
 
+/** BOMBE À LANCER — réglages du lancer. */
+export const THROW = {
+  /** distance maximale (cases) */
+  maxDist: 3,
+  /** temps de vol (s) : base + par case parcourue */
+  flightBase: 0.12,
+  flightPerCell: 0.11,
+  /** hauteur de l'arc à l'écran (en cases) */
+  arcHeight: 0.9,
+} as const;
+
 /** Durée d'alerte la plus longue (sert aux indices visuels et sonores). */
 export const BOMB_WARN = Math.max(...Object.values(BOMB_KINDS).map((k) => k.warn));
 
