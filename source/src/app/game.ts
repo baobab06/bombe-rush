@@ -336,8 +336,8 @@ export class GameScreen {
     this.tickTimer -= dt;
     let soonest = Infinity;
     for (const b of m.bombs.values()) soonest = Math.min(soonest, b.fuse);
-    if (!this.finished && soonest < RULES.bombWarn + 0.35 && this.tickTimer <= 0) {
-      const k = Math.max(0, Math.min(1, soonest / (RULES.bombWarn + 0.35)));
+    if (!this.finished && soonest < m.bombRules.warn + 0.35 && this.tickTimer <= 0) {
+      const k = Math.max(0, Math.min(1, soonest / (m.bombRules.warn + 0.35)));
       audio.play("tick", 0.95 - k * 0.4);
       this.tickTimer = 0.055 + k * 0.15;
     }

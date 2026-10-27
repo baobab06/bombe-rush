@@ -353,8 +353,9 @@ export class HillState {
     p.faceY = 1;
     p.speed = RULES.baseSpeed;
     p.speedLevel = 0;
-    p.maxBombs = RULES.startBombs;
-    p.range = RULES.startRange;
+    p.maxBombs = m.bombRules.startBombs;
+    p.range = m.bombRules.startRange;
+    p.bombCooldown = 0;
     p.activeBombs = Math.min(p.activeBombs, p.maxBombs);
     p.shieldTime = HILL_RULES.respawnShield;
     p.killedBy = -1;

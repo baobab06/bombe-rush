@@ -1001,8 +1001,9 @@ class HillState {
     p.faceY = 1;
     p.speed = RULES.baseSpeed;
     p.speedLevel = 0;
-    p.maxBombs = RULES.startBombs;
-    p.range = RULES.startRange;
+    p.maxBombs = m.bombRules.startBombs;
+    p.range = m.bombRules.startRange;
+    p.bombCooldown = 0;
     p.activeBombs = Math.min(p.activeBombs, p.maxBombs);
     p.shieldTime = HILL_RULES.respawnShield;
     p.killedBy = -1;
@@ -1049,6 +1050,7 @@ var MODES = [
     available: true,
     emoji: "\uD83D\uDC51",
     suddenDeath: false,
+    bombRules: { fuse: 2.5, warn: 0.8, startRange: 2, startBombs: 1, fireDuration: 0.4, cooldown: 0.5 },
     onStart(m) {
       if (m.players.length >= 2)
         m.setTeams();
@@ -1138,7 +1140,7 @@ var FACTORY = {
   ],
   blockDensity: 1,
   spawnClear: 1,
-  startRange: 1,
+  startRange: 2,
   available: true,
   modes: ["koth"],
   fixedSpawns: true,
@@ -1449,7 +1451,7 @@ function computeDanger(m, extra) {
     for (const c of blasts[a]) {
       if (t[a] < start[c])
         start[c] = t[a];
-      const e = t[a] + RULES.fireDuration;
+      const e = t[a] + m.bombRules.fireDuration;
       if (e > end[c])
         end[c] = e;
     }
@@ -1469,13 +1471,13 @@ function computeDanger(m, extra) {
     const dur = m.chaos.pending.def.duration;
     for (const [i, left] of m.chaos.dangerZones()) {
       start[i] = Math.min(start[i], left);
-      end[i] = Math.max(end[i], left + dur + RULES.fireDuration);
+      end[i] = Math.max(end[i], left + dur + m.bombRules.fireDuration);
     }
   }
   for (const run of m.chaos?.active ?? []) {
     for (const i of run.zone) {
       start[i] = 0;
-      end[i] = Math.max(end[i], run.timer + RULES.fireDuration);
+      end[i] = Math.max(end[i], run.timer + m.bombRules.fireDuration);
     }
   }
   for (const v of m.vents) {
@@ -1487,7 +1489,7 @@ function computeDanger(m, extra) {
     for (const [x, y] of m.ventCells(v[0], v[1])) {
       const i = g.idx(x, y);
       start[i] = Math.min(start[i], left);
-      end[i] = Math.max(end[i], left + RULES.fireDuration);
+      end[i] = Math.max(end[i], left + m.bombRules.fireDuration);
     }
   }
   return { start, end };
@@ -1793,7 +1795,7 @@ class BotBrain {
     const tx = Math.floor(p.x);
     const ty = Math.floor(p.y);
     if (!sloppy) {
-      const danger = computeDanger(m, { tx, ty, fuse: RULES.bombFuse, range: p.range });
+      const danger = computeDanger(m, { tx, ty, fuse: m.bombRules.fuse * m.fuseMul, range: p.range });
       const escape = this.findSafe(m, p, danger, this.prof.margin + 0.15, true);
       if (!escape)
         return false;
@@ -2456,9 +2458,19 @@ class Match {
   hill = null;
   teams = null;
   vents = [];
+  bombRules;
   constructor(config) {
     this.config = config;
     this.mode = getMode(config.modeId);
+    this.bombRules = {
+      fuse: RULES.bombFuse,
+      warn: RULES.bombWarn,
+      startRange: RULES.startRange,
+      startBombs: RULES.startBombs,
+      fireDuration: RULES.fireDuration,
+      cooldown: 0,
+      ...this.mode.bombRules ?? {}
+    };
     this.rng = new Rng(config.seed);
     const arena = generateArena(config.map, config.players.length, config.seed);
     this.grid = new Grid(arena);
@@ -2485,9 +2497,10 @@ class Match {
         slideY: 0,
         speed: RULES.baseSpeed,
         speedLevel: 0,
-        maxBombs: RULES.startBombs,
+        maxBombs: this.bombRules.startBombs,
         activeBombs: 0,
-        range: RULES.startRange,
+        range: this.bombRules.startRange,
+        bombCooldown: 0,
         shieldCharges: 0,
         shieldTime: 0,
         deathTime: -1,
@@ -2592,6 +2605,8 @@ class Match {
   updatePlayer(p, cmd) {
     if (p.shieldTime > 0)
       p.shieldTime = Math.max(0, p.shieldTime - DT);
+    if (p.bombCooldown > 0)
+      p.bombCooldown = Math.max(0, p.bombCooldown - DT);
     this.moveWithInput(p, cmd);
     if (cmd.bomb)
       this.tryPlaceBomb(p);
@@ -2630,7 +2645,7 @@ class Match {
       p.slideX = p.slideY = 0;
   }
   tryPlaceBomb(p) {
-    if (!p.alive || p.activeBombs >= p.maxBombs)
+    if (!p.alive || p.activeBombs >= p.maxBombs || p.bombCooldown > 0)
       return false;
     const [tx, ty] = this.playerTile(p);
     const g = this.grid;
@@ -2643,14 +2658,15 @@ class Match {
       ownerId: p.id,
       tx,
       ty,
-      fuse: RULES.bombFuse * this.fuseMul,
-      fuseTotal: RULES.bombFuse * this.fuseMul,
+      fuse: this.bombRules.fuse * this.fuseMul,
+      fuseTotal: this.bombRules.fuse * this.fuseMul,
       range: p.range + this.rangeBonus,
       passable
     };
     this.bombs.set(bomb.id, bomb);
     g.bombAt[i] = bomb.id;
     p.activeBombs++;
+    p.bombCooldown = this.bombRules.cooldown;
     p.stats.bombsPlaced++;
     this.events.push({ t: "bombPlaced", x: tx, y: ty, owner: p.id });
     return true;
@@ -2773,7 +2789,7 @@ class Match {
     const i = g.idx(x, y);
     if (g.fire[i] <= 0)
       g.fireShape[i] = 0;
-    g.fire[i] = RULES.fireDuration;
+    g.fire[i] = this.bombRules.fireDuration;
     g.fireShape[i] |= shape;
     g.fireOwner[i] = owner;
   }
@@ -2796,7 +2812,7 @@ class Match {
         type: hidden,
         tx: x,
         ty: y,
-        invuln: RULES.fireDuration + 0.05,
+        invuln: this.bombRules.fireDuration + 0.05,
         age: 0
       };
       this.bonuses.set(bonus.id, bonus);
@@ -2856,7 +2872,7 @@ class Match {
       if (g.fire[i] <= 0)
         continue;
       if (p.shieldTime > 0) {
-        if (g.fire[i] > RULES.fireDuration - DT * 1.5)
+        if (g.fire[i] > this.bombRules.fireDuration - DT * 1.5)
           this.events.push({ t: "shieldBlocked", player: p.id });
         continue;
       }

@@ -32,3 +32,23 @@ export const BOMB_WARN = Math.max(...Object.values(BOMB_KINDS).map((k) => k.warn
 export function bombProgress(fuse: number, fuseTotal: number): number {
   return fuseTotal > 0 ? Math.min(1, Math.max(0, 1 - fuse / fuseTotal)) : 1;
 }
+
+/**
+ * RÈGLES DES BOMBES d'une partie (valeurs de départ). Par défaut celles du
+ * jeu (rules.ts / BOMB_KINDS) ; un mode peut en changer certaines
+ * (ex. Domination 2 contre 2 : mèche plus longue, portée 2).
+ */
+export interface BombRules {
+  /** délai avant explosion (s) */
+  fuse: number;
+  /** alerte avant l'explosion (s) : clignotement rouge, tic-tac */
+  warn: number;
+  /** portée de départ (cases dans chaque direction) */
+  startRange: number;
+  /** bombes simultanées au départ */
+  startBombs: number;
+  /** durée de l'explosion à l'écran et au sol (s) */
+  fireDuration: number;
+  /** délai minimum entre deux poses du même joueur (s) */
+  cooldown: number;
+}

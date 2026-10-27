@@ -31,7 +31,7 @@ export const FACTORY: MapDef = {
   ],
   blockDensity: 1,
   spawnClear: 1,
-  startRange: 1,
+  startRange: 2, // portée des bombes en Domination (cachette garantie au départ)
   available: true,
   modes: ["koth"],
   fixedSpawns: true,

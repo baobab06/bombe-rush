@@ -145,6 +145,8 @@ export class Renderer {
           if (o) {
             this.fx(o.id).actionAt = this.time;
             abilityBurst(P, o.trailId, e.x + 0.5, e.y + 0.5);
+            // petit anneau de poussière : la bombe vient d'être posée
+            P.spawn("ring", e.x + 0.5, e.y + 0.5, { life: 0.3, size: 0.42, color: "#ffffff" });
           }
           break;
         }
@@ -291,7 +293,7 @@ export class Renderer {
   /** Une bombe va bientôt sauter tout près : petite tête inquiète. */
   private inDanger(m: Match, x: number, y: number): boolean {
     for (const b of m.bombs.values()) {
-      if (b.fuse > RULES.bombWarn + 0.35) continue;
+      if (b.fuse > m.bombRules.warn + 0.35) continue;
       const dx = Math.abs(b.tx + 0.5 - x);
       const dy = Math.abs(b.ty + 0.5 - y);
       if ((dx < 0.6 && dy <= b.range + 0.5) || (dy < 0.6 && dx <= b.range + 0.5)) return true;
@@ -558,7 +560,7 @@ export class Renderer {
           if (b) {
             if (!this.bombBorn.has(b.id)) this.bombBorn.set(b.id, t);
             const owner = b.ownerId >= 0 ? m.players[b.ownerId] : undefined;
-            drawBomb(ctx, X + s / 2, Y + s / 2, s, b.fuse / b.fuseTotal, t, t - this.bombBorn.get(b.id)!, b.fuse, RULES.bombWarn, owner?.boomId ? getBoom(owner.boomId).bomb : undefined);
+            drawBomb(ctx, X + s / 2, Y + s / 2, s, b.fuse / b.fuseTotal, t, t - this.bombBorn.get(b.id)!, b.fuse, m.bombRules.warn, owner?.boomId ? getBoom(owner.boomId).bomb : undefined);
           }
         }
       }
@@ -632,7 +634,7 @@ export class Renderer {
         if (f <= 0) continue;
         const x = i % w;
         const y = Math.floor(i / w);
-        drawFire(ctx, x * s, y * s, s, g.fireShape[i], f / RULES.fireDuration, t, layer);
+        drawFire(ctx, x * s, y * s, s, g.fireShape[i], f / m.bombRules.fireDuration, t, layer);
       }
     }
 

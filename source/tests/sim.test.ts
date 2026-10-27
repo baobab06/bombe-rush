@@ -465,6 +465,133 @@ console.log("Domination 2 contre 2");
   }
 }
 
+console.log("Domination 2 contre 2 : bombes (Usine)");
+{
+  const { FACTORY } = await import("../src/maps/factory");
+  const { FOREST: FO } = await import("../src/maps/forest");
+  const slots4 = () => Array.from({ length: 4 }, (_, i) => ({ name: "P" + i, characterId: "pip", isBot: false, difficulty: "normal" as Difficulty }));
+  const mk = () => {
+    const m = new Match({ seed: 31, map: FACTORY, modeId: "koth", players: slots4() });
+    m.phase = "playing";
+    m.hill!.moveIn = 1e9;
+    // joueurs rangés loin de la zone de test
+    place(m, 0, 1, 1); place(m, 1, 13, 1); place(m, 2, 1, 11); place(m, 3, 13, 11);
+    return m;
+  };
+  const bombBy = (m: Match, id: number) => run(m, DT, (mm) => mm.players.map((p) => ({ mx: 0, my: 0, bomb: p.id === id, ability: false })));
+  {
+    const m = mk();
+    const r = m.bombRules;
+    check(r.fuse === 2.5 && r.startRange === 2 && r.startBombs === 1 && Math.abs(r.fireDuration - 0.4) < 1e-9 && r.cooldown > 0, `réglages Domination : mèche ${r.fuse} s, portée ${r.startRange}, ${r.startBombs} bombe, explosion ${r.fireDuration} s, délai ${r.cooldown} s`);
+    check(m.players.every((p) => p.range === 2 && p.maxBombs === 1), "chaque joueur commence avec portée 2 et 1 bombe");
+    const c = new Match({ seed: 31, map: FO, modeId: "classic", players: slots4() });
+    check(c.bombRules.fuse === RULES.bombFuse && c.bombRules.startRange === RULES.startRange && c.bombRules.fireDuration === RULES.fireDuration && c.bombRules.cooldown === 0, "Classique inchangé (mèche, portée, explosion, pas de délai)");
+  }
+  {
+    // délai avant explosion et portée : la bombe explose à 2,5 s, le feu va à 2 cases, pas 3
+    const m = mk();
+    place(m, 0, 4, 6); // ligne y=6 : couloir libre vers la droite (5, 6, 7=zone)
+    bombBy(m, 0);
+    place(m, 0, 1, 1);
+    const g = m.grid;
+    let at = -1;
+    for (let k = 0; k < Math.round(3 / DT) && at < 0; k++) {
+      m.step(idle(m));
+      if (m.events.some((e) => e.t === "explode")) at = m.time;
+    }
+    const t0 = m.time - at;
+    check(Math.abs(at - (m.time - t0) ) < 1 && at > 0, "la bombe explose");
+    const fire = (x: number, y: number) => g.fire[g.idx(x, y)] > 0;
+    check(fire(4, 6) && fire(5, 6) && fire(6, 6) && !fire(7, 6), "portée 2 : le feu touche 2 cases et pas la 3e");
+    // durée visuelle de l'explosion ~0,4 s
+    let dur = 0;
+    while (fire(5, 6) && dur < 2) { m.step(idle(m)); dur += DT; }
+    check(dur > 0.3 && dur < 0.45, `explosion visible ~0,4 s (${dur.toFixed(2)} s)`);
+  }
+  {
+    // mèche : rien avant 2,4 s, explosion avant 2,6 s
+    const m = mk();
+    place(m, 0, 4, 6);
+    bombBy(m, 0);
+    place(m, 0, 1, 1);
+    let when = -1;
+    const start = m.time;
+    for (let k = 0; k < Math.round(3 / DT) && when < 0; k++) {
+      m.step(idle(m));
+      if (m.events.some((e) => e.t === "explode")) when = m.time - start;
+    }
+    check(when > 2.4 && when < 2.6, `délai avant explosion ≈ 2,5 s (${when.toFixed(2)} s)`);
+  }
+  {
+    // mur indestructible : le feu s'arrête ; caisse : détruite
+    const m = mk();
+    const g = m.grid;
+    // (3,5) est un bloc gris du plan, (2,3) une caisse
+    check(g.tile(3, 5) === TILE.WALL && g.tile(2, 3) === TILE.BLOCK, "plan : mur en (3,5), caisse en (2,3)");
+    place(m, 0, 2, 5); // à gauche du mur (3,5) ; au-dessus : (2,4) puis la caisse (2,3)
+    bombBy(m, 0);
+    place(m, 0, 1, 11);
+    run(m, 2.55);
+    check(g.fire[g.idx(4, 5)] <= 0 && g.tile(3, 5) === TILE.WALL, "le feu ne traverse pas un mur indestructible");
+    check(g.tile(2, 3) === TILE.FLOOR, "la caisse touchée est détruite");
+    check(g.fire[g.idx(2, 2)] <= 0, "le feu s'arrête sur la caisse détruite (pas au-delà)");
+  }
+  {
+    // pas de bombe dans un mur / un obstacle ; une seule bombe ; délai entre deux poses
+    const m = mk();
+    const p = m.players[0];
+    place(m, 0, 2, 3); // sur une caisse (cas impossible en jeu) : refus
+    check(!m.tryPlaceBomb(p) && m.bombs.size === 0, "impossible de poser une bombe sur une caisse ou un mur");
+    place(m, 0, 4, 6);
+    check(m.tryPlaceBomb(p), "pose sur une case libre");
+    place(m, 0, 5, 6);
+    check(!m.tryPlaceBomb(p), "1 bombe à la fois au départ");
+    p.maxBombs = 2;
+    check(!m.tryPlaceBomb(p), `délai entre deux poses (${m.bombRules.cooldown} s)`);
+    run(m, m.bombRules.cooldown + DT);
+    check(m.tryPlaceBomb(p) && m.bombs.size === 2, "après le délai, la 2e bombe se pose");
+  }
+  {
+    // réaction en chaîne : une explosion déclenche la bombe voisine
+    const m = mk();
+    const p1 = m.players[1];
+    place(m, 1, 4, 6);
+    m.tryPlaceBomb(p1);
+    place(m, 0, 6, 6);
+    run(m, 1.0);
+    m.tryPlaceBomb(m.players[0]);
+    place(m, 0, 1, 11); place(m, 1, 13, 11);
+    let both = 0;
+    for (let k = 0; k < Math.round(2 / DT); k++) {
+      m.step(idle(m));
+      const ex = m.events.filter((e) => e.t === "explode").length;
+      if (ex) { both = ex; break; }
+    }
+    check(both === 2 && m.bombs.size === 0, "réaction en chaîne : la 1re explosion fait sauter la bombe à portée");
+  }
+  {
+    // un joueur touché ne meurt qu'une fois par explosion (pas de dégâts multiples)
+    const m = mk();
+    place(m, 1, 4, 6);
+    m.tryPlaceBomb(m.players[1]);
+    place(m, 1, 13, 11);
+    place(m, 0, 5, 6); // adversaire dans le souffle, immobile
+    let deaths = 0;
+    for (let k = 0; k < Math.round(3.2 / DT); k++) {
+      m.step(idle(m));
+      deaths += m.events.filter((e) => e.t === "playerDied" && e.player === 0).length;
+    }
+    check(deaths === 1 && m.players[1].stats.kills === 1, `touché une seule fois par la même explosion (${deaths} mort)`);
+  }
+  {
+    // décor de l'usine : les grilles au sol et les repères peints ne bloquent pas
+    const m = mk();
+    const g = m.grid;
+    const free = [[7, 2], [7, 10], [1, 5], [1, 7], [13, 5], [13, 7], [7, 6]];
+    check(free.every(([x, y]) => !g.blocksMove(x, y)), "grilles au sol, repères et étoile : praticables");
+  }
+}
+
 console.log("Domination : zone qui se déplace");
 {
   const { HILL_RULES } = await import("../src/core/hill");
@@ -549,7 +676,7 @@ console.log("Mode Roi de la colline");
     const p = m.players[0];
     const [cx, cy] = m.hill!.center;
     const far = Math.abs(Math.floor(p.x) - cx) + Math.abs(Math.floor(p.y) - cy) >= HILL_RULES.respawnHillGap;
-    check(p.alive && p.shieldTime > 1.5 && p.maxBombs === RULES.startBombs && p.range === RULES.startRange && far && m.grid.fire[m.grid.idx(Math.floor(p.x), Math.floor(p.y))] <= 0,
+    check(p.alive && p.shieldTime > 1.5 && p.maxBombs === m.bombRules.startBombs && p.range === m.bombRules.startRange && far && m.grid.fire[m.grid.idx(Math.floor(p.x), Math.floor(p.y))] <= 0,
       "réapparition : protégé par un bouclier, pouvoirs de départ, loin de la colline, sur une case sûre");
     check(m.players[1].stats.kills === 1, "l'élimination compte bien pour le tueur");
   }
@@ -587,7 +714,7 @@ console.log("Mode Roi de la colline");
     check(!sd && c.hill === null && new Match({ seed: 2, map: FOREST, modeId: "chaos", players: slots(2) }).hill === null, "pas de mort subite en Roi de la colline ; Classique et Chaos sans colline");
   }
   // parties complètes de bots : se terminent, la colline rapporte des points
-  for (const map of MAPS) {
+  for (const map of MAPS.filter((mm) => mm.modes?.includes("koth"))) { // cartes où Domination se joue vraiment
     let ended = 0, scored = 0, stuck = 0, respawns = 0;
     const N = 8;
     for (let sd = 1; sd <= N; sd++) {

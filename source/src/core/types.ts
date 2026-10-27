@@ -75,6 +75,8 @@ export interface PlayerState {
   maxBombs: number;
   activeBombs: number;
   range: number;
+  /** temps (s) avant de pouvoir reposer une bombe (délai entre deux poses) */
+  bombCooldown: number;
   shieldCharges: number;
   shieldTime: number; // > 0 : bouclier actif
   deathTime: number; // temps de match à la mort

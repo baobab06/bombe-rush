@@ -1,4 +1,5 @@
 import type { Match } from "./match";
+import type { BombRules } from "./bombs";
 import { ChaosDirector } from "./chaos";
 import { HillState } from "./hill";
 
@@ -16,6 +17,8 @@ export interface ModeDef {
   emoji?: string;
   /** false : pas de mort subite (murs qui tombent) dans ce mode */
   suddenDeath?: boolean;
+  /** règles de bombes propres au mode (sinon celles du jeu) */
+  bombRules?: Partial<BombRules>;
   onStart?(m: Match): void;
   onTick?(m: Match, dt: number): void;
 }
@@ -48,6 +51,8 @@ export const MODES: ModeDef[] = [
     available: true,
     emoji: "👑",
     suddenDeath: false,
+    // 2 contre 2 : bombes plus lisibles (mèche 2,5 s, portée 2, explosion brève)
+    bombRules: { fuse: 2.5, warn: 0.8, startRange: 2, startBombs: 1, fireDuration: 0.4, cooldown: 0.5 },
     onStart(m) {
       // équipes rouges / bleues dès qu'il y a au moins 2 joueurs
       if (m.players.length >= 2) m.setTeams();

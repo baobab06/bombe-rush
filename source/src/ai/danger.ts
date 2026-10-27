@@ -85,7 +85,7 @@ export function computeDanger(m: Match, extra?: VirtualBomb): DangerMap {
   for (let a = 0; a < list.length; a++) {
     for (const c of blasts[a]) {
       if (t[a] < start[c]) start[c] = t[a];
-      const e = t[a] + RULES.fireDuration;
+      const e = t[a] + m.bombRules.fireDuration;
       if (e > end[c]) end[c] = e;
     }
   }
@@ -107,13 +107,13 @@ export function computeDanger(m: Match, extra?: VirtualBomb): DangerMap {
     const dur = m.chaos.pending.def.duration;
     for (const [i, left] of m.chaos.dangerZones()) {
       start[i] = Math.min(start[i], left);
-      end[i] = Math.max(end[i], left + dur + RULES.fireDuration);
+      end[i] = Math.max(end[i], left + dur + m.bombRules.fireDuration);
     }
   }
   for (const run of m.chaos?.active ?? []) {
     for (const i of run.zone) {
       start[i] = 0;
-      end[i] = Math.max(end[i], run.timer + RULES.fireDuration);
+      end[i] = Math.max(end[i], run.timer + m.bombRules.fireDuration);
     }
   }
   // éruptions de cheminées à venir
@@ -124,7 +124,7 @@ export function computeDanger(m: Match, extra?: VirtualBomb): DangerMap {
     for (const [x, y] of m.ventCells(v[0], v[1])) {
       const i = g.idx(x, y);
       start[i] = Math.min(start[i], left);
-      end[i] = Math.max(end[i], left + RULES.fireDuration);
+      end[i] = Math.max(end[i], left + m.bombRules.fireDuration);
     }
   }
   return { start, end };

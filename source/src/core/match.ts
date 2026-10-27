@@ -1,3 +1,4 @@
+import type { BombRules } from "./bombs";
 import { BONUSES } from "./bonuses";
 import { DIRS, Grid } from "./grid";
 import { LootTable } from "./loot";
@@ -81,9 +82,21 @@ export class Match {
   /** cheminées volcaniques : [x, y, décalage de phase] */
   readonly vents: [number, number, number][] = [];
 
+  /** règles des bombes de cette partie (jeu de base, ou réglages du mode) */
+  readonly bombRules: BombRules;
+
   constructor(config: MatchConfig) {
     this.config = config;
     this.mode = getMode(config.modeId);
+    this.bombRules = {
+      fuse: RULES.bombFuse,
+      warn: RULES.bombWarn,
+      startRange: RULES.startRange,
+      startBombs: RULES.startBombs,
+      fireDuration: RULES.fireDuration,
+      cooldown: 0,
+      ...(this.mode.bombRules ?? {}),
+    };
     this.rng = new Rng(config.seed);
     const arena = generateArena(config.map, config.players.length, config.seed);
     this.grid = new Grid(arena);
@@ -110,9 +123,10 @@ export class Match {
         slideY: 0,
         speed: RULES.baseSpeed,
         speedLevel: 0,
-        maxBombs: RULES.startBombs,
+        maxBombs: this.bombRules.startBombs,
         activeBombs: 0,
-        range: RULES.startRange,
+        range: this.bombRules.startRange,
+        bombCooldown: 0,
         shieldCharges: 0,
         shieldTime: 0,
         deathTime: -1,
@@ -224,6 +238,7 @@ export class Match {
 
   private updatePlayer(p: PlayerState, cmd: InputCmd): void {
     if (p.shieldTime > 0) p.shieldTime = Math.max(0, p.shieldTime - DT);
+    if (p.bombCooldown > 0) p.bombCooldown = Math.max(0, p.bombCooldown - DT);
     this.moveWithInput(p, cmd);
     if (cmd.bomb) this.tryPlaceBomb(p);
     if (cmd.ability) this.tryShield(p);
@@ -264,7 +279,7 @@ export class Match {
   }
 
   tryPlaceBomb(p: PlayerState): boolean {
-    if (!p.alive || p.activeBombs >= p.maxBombs) return false;
+    if (!p.alive || p.activeBombs >= p.maxBombs || p.bombCooldown > 0) return false;
     const [tx, ty] = this.playerTile(p);
     const g = this.grid;
     const i = g.idx(tx, ty);
@@ -277,14 +292,15 @@ export class Match {
       ownerId: p.id,
       tx,
       ty,
-      fuse: RULES.bombFuse * this.fuseMul,
-      fuseTotal: RULES.bombFuse * this.fuseMul,
+      fuse: this.bombRules.fuse * this.fuseMul,
+      fuseTotal: this.bombRules.fuse * this.fuseMul,
       range: p.range + this.rangeBonus,
       passable,
     };
     this.bombs.set(bomb.id, bomb);
     g.bombAt[i] = bomb.id;
     p.activeBombs++;
+    p.bombCooldown = this.bombRules.cooldown;
     p.stats.bombsPlaced++;
     this.events.push({ t: "bombPlaced", x: tx, y: ty, owner: p.id });
     return true;
@@ -411,7 +427,7 @@ export class Match {
     const g = this.grid;
     const i = g.idx(x, y);
     if (g.fire[i] <= 0) g.fireShape[i] = 0;
-    g.fire[i] = RULES.fireDuration;
+    g.fire[i] = this.bombRules.fireDuration;
     g.fireShape[i] |= shape;
     g.fireOwner[i] = owner;
   }
@@ -433,7 +449,7 @@ export class Match {
         type: hidden,
         tx: x,
         ty: y,
-        invuln: RULES.fireDuration + 0.05,
+        invuln: this.bombRules.fireDuration + 0.05,
         age: 0,
       };
       this.bonuses.set(bonus.id, bonus);
@@ -496,7 +512,7 @@ export class Match {
       const i = g.idx(tx, ty);
       if (g.fire[i] <= 0) continue;
       if (p.shieldTime > 0) {
-        if (g.fire[i] > RULES.fireDuration - DT * 1.5)
+        if (g.fire[i] > this.bombRules.fireDuration - DT * 1.5)
           this.events.push({ t: "shieldBlocked", player: p.id });
         continue;
       }
