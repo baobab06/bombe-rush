@@ -460,6 +460,7 @@ export const BONUS_COLORS: Record<string, [string, string]> = {
   speed: ["#3fd17a", "#1c8c4a"],
   shield: ["#3fc6ff", "#1a7fb8"],
   throw: ["#ffb31a", "#c7700a"],
+  big: ["#ff4257", "#a3101f"],
 };
 
 export function drawBonusIcon(ctx: Ctx, cx: number, cy: number, s: number, type: string) {
@@ -529,6 +530,43 @@ export function drawBonusIcon(ctx: Ctx, cx: number, cy: number, s: number, type:
         ctx.lineTo(cx - s * 0.26, cy - s * 0.08 + k * s * 0.12);
         ctx.stroke();
       }
+      break;
+    }
+    case "big": {
+      // grosse bombe cerclée + éclats autour : « ça va faire mal »
+      ctx.strokeStyle = "#ffe27a";
+      ctx.lineWidth = Math.max(1.2, s * 0.045);
+      ctx.lineCap = "round";
+      for (let k = 0; k < 6; k++) {
+        const a = -Math.PI / 2 + (k - 2.5) * 0.55;
+        ctx.beginPath();
+        ctx.moveTo(cx + Math.cos(a) * s * 0.3, cy + s * 0.04 + Math.sin(a) * s * 0.3);
+        ctx.lineTo(cx + Math.cos(a) * s * 0.38, cy + s * 0.04 + Math.sin(a) * s * 0.38);
+        ctx.stroke();
+      }
+      ctx.fillStyle = "#1b1c33";
+      ctx.beginPath();
+      ctx.arc(cx, cy + s * 0.06, s * 0.22, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#ff4257";
+      ctx.lineWidth = Math.max(1.2, s * 0.05);
+      ctx.beginPath();
+      ctx.ellipse(cx, cy + s * 0.09, s * 0.21, s * 0.07, 0, 0.1, Math.PI - 0.1);
+      ctx.stroke();
+      ctx.fillStyle = "rgba(255,255,255,0.55)";
+      ctx.beginPath();
+      ctx.arc(cx - s * 0.08, cy - s * 0.03, s * 0.05, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#fff3d0";
+      ctx.lineWidth = Math.max(1, s * 0.04);
+      ctx.beginPath();
+      ctx.moveTo(cx + s * 0.1, cy - s * 0.13);
+      ctx.quadraticCurveTo(cx + s * 0.16, cy - s * 0.24, cx + s * 0.24, cy - s * 0.22);
+      ctx.stroke();
+      ctx.fillStyle = "#ffd23f";
+      ctx.beginPath();
+      ctx.arc(cx + s * 0.25, cy - s * 0.22, s * 0.05, 0, Math.PI * 2);
+      ctx.fill();
       break;
     }
     case "throw": {

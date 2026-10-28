@@ -1,4 +1,4 @@
-import { THROW, type BombRules } from "./bombs";
+import { THROW, bigRange, type BombRules } from "./bombs";
 import { BONUSES } from "./bonuses";
 import { DIRS, Grid } from "./grid";
 import { LOOT, LootTable } from "./loot";
@@ -128,6 +128,7 @@ export class Match {
         range: this.bombRules.startRange,
         bombCooldown: 0,
         throwCharges: 0,
+        bigCharges: 0,
         shieldCharges: 0,
         shieldTime: 0,
         deathTime: -1,
@@ -302,8 +303,17 @@ export class Match {
     return p.alive && p.activeBombs < p.maxBombs && p.bombCooldown <= 0;
   }
 
+  /** Portée de la prochaine bombe du joueur (grosse bombe comprise). */
+  nextBombRange(p: PlayerState): number {
+    const r = p.range + this.rangeBonus;
+    return p.bigCharges > 0 ? bigRange(r) : r;
+  }
+
   /** Crée une bombe du joueur (posée, ou lancée si `flight`). */
   private makeBomb(p: PlayerState, tx: number, ty: number, flight?: BombState["flight"]): BombState {
+    // grosse bombe : la réserve est utilisée par cette bombe (posée ou lancée)
+    const big = p.bigCharges > 0;
+    if (big) p.bigCharges = 0;
     const bomb: BombState = {
       id: this.nextId++,
       ownerId: p.id,
@@ -311,10 +321,11 @@ export class Match {
       ty,
       fuse: this.bombRules.fuse * this.fuseMul,
       fuseTotal: this.bombRules.fuse * this.fuseMul,
-      range: p.range + this.rangeBonus,
+      range: big ? bigRange(p.range + this.rangeBonus) : p.range + this.rangeBonus,
       passable: [],
       flight,
     };
+    if (big) bomb.big = true;
     this.bombs.set(bomb.id, bomb);
     p.activeBombs++;
     p.bombCooldown = this.bombRules.cooldown;
@@ -515,7 +526,7 @@ export class Match {
           cells++;
         }
       }
-      this.events.push({ t: "explode", x: b.tx, y: b.ty, owner: b.ownerId, cells, chain });
+      this.events.push(b.big ? { t: "explode", x: b.tx, y: b.ty, owner: b.ownerId, cells, chain, big: true } : { t: "explode", x: b.tx, y: b.ty, owner: b.ownerId, cells, chain });
     }
   }
 
@@ -625,6 +636,7 @@ export class Match {
     p.deathTime = this.time;
     p.killedBy = killer;
     p.throwCharges = 0; // la capacité de lancer est perdue à l'élimination
+    p.bigCharges = 0; // la grosse bombe non utilisée aussi
     p.stats.survivalTime = this.time;
     if (killer >= 0 && killer !== p.id) this.players[killer].stats.kills++;
     this.events.push({ t: "playerDied", player: p.id, killer, x: p.x, y: p.y });

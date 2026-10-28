@@ -57,6 +57,17 @@ export const BONUSES: Record<string, BonusDef> = {
       return true;
     },
   },
+  big: {
+    id: "big",
+    label: "Grosse bombe",
+    description: "Ta prochaine bombe explose beaucoup plus loin.",
+    apply(p) {
+      // une seule grosse bombe en réserve
+      if (p.bigCharges >= 1) return false;
+      p.bigCharges = 1;
+      return true;
+    },
+  },
   shield: {
     id: "shield",
     label: "Bouclier",

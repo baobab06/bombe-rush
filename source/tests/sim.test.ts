@@ -604,6 +604,7 @@ console.log("Bombe à lancer (Domination)");
     m.phase = "playing";
     m.hill!.moveIn = 1e9;
     m.hill!.throwSpawnIn = 1e9; // pas d'apparition automatique pendant ces tests
+    m.hill!.bigSpawnIn = 1e9;
     place(m, 0, 1, 1); place(m, 1, 13, 1); place(m, 2, 1, 11); place(m, 3, 13, 11);
     return m;
   };
@@ -791,6 +792,228 @@ console.log("Bombe à lancer (Domination)");
       if (m.phase === "over") ended++;
     }
     check(ended === 6 && stuck === 0 && throws > 0, `bots : 6 parties terminées, ${throws} bombes lancées, personne coincé`);
+  }
+}
+
+console.log("Grosse bombe");
+{
+  const { FACTORY } = await import("../src/maps/factory");
+  const { BIG, bigRange } = await import("../src/core/bombs");
+  const { HILL_RULES } = await import("../src/core/hill");
+  const { encodeSnapshot, applySnapshot } = await import("../src/net/snapshot");
+  const slots = (n: number) => Array.from({ length: n }, (_, i) => ({ name: "P" + i, characterId: "pip", isBot: false, difficulty: "normal" as Difficulty }));
+  /** Classique, intérieur entièrement dégagé (aucun mur ni caisse) */
+  const open = (n = 2) => {
+    const m = emptyMatch(n);
+    const g = m.grid;
+    for (let y = 1; y < g.h - 1; y++) for (let x = 1; x < g.w - 1; x++) { g.tiles[g.idx(x, y)] = TILE.FLOOR; g.terrain[g.idx(x, y)] = TERRAIN.NONE; }
+    place(m, 0, 1, 1); place(m, 1, g.w - 2, g.h - 2);
+    return m;
+  };
+  const bombBy = (m: Match, id: number) => run(m, DT, (mm) => mm.players.map((p) => ({ mx: 0, my: 0, bomb: p.id === id, ability: false })));
+  const fireAt = (m: Match, x: number, y: number) => m.grid.fire[m.grid.idx(x, y)] > 0;
+  /** pose une bombe en (x, y) avec le joueur 0, puis l'éloigne hors de la croix */
+  const plant = (m: Match, x: number, y: number) => {
+    place(m, 0, x, y);
+    bombBy(m, 0);
+    place(m, 0, x + 1, y + 1);
+    return [...m.bombs.values()].find((b) => b.tx === x && b.ty === y);
+  };
+  const boom = (m: Match) => {
+    const evs: { big?: boolean; cells: number; chain: number }[] = [];
+    for (let i = 0; i < 400 && m.bombs.size; i++) { m.step(idle(m)); for (const e of m.events) if (e.t === "explode") evs.push(e); }
+    return evs;
+  };
+
+  check(bigRange(1) === 3 && bigRange(2) === 4 && bigRange(3) === 5 && bigRange(4) === 7 && bigRange(8) === BIG.maxRange,
+    `portée réglable : 1→${bigRange(1)}, 2→${bigRange(2)}, 3→${bigRange(3)}, 4→${bigRange(4)}, 8→${bigRange(8)} (plafond ${BIG.maxRange})`);
+  {
+    const c = new Match({ seed: 3, map: FOREST, modeId: "classic", players: slots(4) });
+    const k = new Match({ seed: 3, map: FACTORY, modeId: "koth", players: slots(4) });
+    const ch = new Match({ seed: 3, map: FOREST, modeId: "chaos", players: slots(4) });
+    check((c.loot.cfg.weights.big ?? 0) > 0 && (k.loot.cfg.weights.big ?? 0) > 0 && (ch.loot.cfg.weights.big ?? 0) > 0, "bonus présent dans le butin : Classique, Chaos et Domination");
+    check([c, k, ch].every((mm) => mm.players.every((p) => p.bigCharges === 0)), "personne ne commence avec une grosse bombe");
+  }
+  {
+    // bombe normale inchangée
+    const m = open();
+    const b = plant(m, 5, 5)!;
+    check(!!b && b.range === 2 && !b.big, "sans bonus : bombe normale (portée 2, pas grosse)");
+    const ev = boom(m);
+    check(fireAt(m, 7, 5) && !fireAt(m, 8, 5) && ev.length === 1 && !ev[0].big, "explosion normale : 2 cases, pas d'effet « grosse »");
+  }
+  {
+    // ramassage, pas de cumul, consommation par la bombe suivante
+    const m = open();
+    m.spawnBonus("big", 3, 3);
+    place(m, 0, 3, 3);
+    run(m, 0.5);
+    check(m.players[0].bigCharges === 1, "ramasser le bonus donne une grosse bombe");
+    m.spawnBonus("big", 4, 3);
+    place(m, 0, 4, 3);
+    run(m, 0.5);
+    check(m.players[0].bigCharges === 1, "une seule grosse bombe en réserve (pas de cumul)");
+    const b = plant(m, 5, 5)!;
+    check(!!b && b.big === true && b.range === 4 && m.players[0].bigCharges === 0, `la bombe suivante est grosse : portée ${b?.range}, réserve vidée`);
+    const ev = boom(m);
+    check(fireAt(m, 9, 5) && fireAt(m, 1, 5) && fireAt(m, 5, 9) && fireAt(m, 5, 1) && !fireAt(m, 10, 5), "explosion : 4 cases dans les 4 directions, pas plus");
+    check(ev.length === 1 && ev[0].big === true, "événement d'explosion marqué « grosse » (effets visuels et son)");
+    run(m, 0.6);
+    const n = plant(m, 5, 5)!;
+    check(!!n && n.range === 2 && !n.big, "la bombe d'après redevient normale");
+  }
+  {
+    // mur, caisse : mêmes règles que d'habitude
+    const m = open();
+    const g = m.grid;
+    g.tiles[g.idx(7, 5)] = TILE.WALL;
+    g.tiles[g.idx(5, 7)] = TILE.BLOCK;
+    m.players[0].bigCharges = 1;
+    plant(m, 5, 5);
+    boom(m);
+    check(fireAt(m, 6, 5) && !fireAt(m, 7, 5) && !fireAt(m, 8, 5), "un mur arrête la grosse explosion (ne le traverse pas)");
+    check(g.tile(5, 7) === TILE.FLOOR && !fireAt(m, 5, 8), "une caisse est cassée et arrête l'explosion derrière elle");
+  }
+  {
+    // bord de la carte
+    const m = open();
+    m.players[0].bigCharges = 1;
+    plant(m, 2, 3);
+    boom(m);
+    check(fireAt(m, 1, 3) && m.grid.tile(0, 3) === TILE.WALL, "près du bord : l'explosion s'arrête au bord de l'arène");
+  }
+  {
+    // dégâts : adversaire touché à 4 cases ; chaîne
+    const m = open(3);
+    m.players[0].bigCharges = 1;
+    place(m, 1, 9, 5);
+    place(m, 2, 11, 9);
+    plant(m, 5, 5);
+    // une bombe normale du joueur 2 dans le rayon : réaction en chaîne
+    place(m, 2, 5, 8); bombBy(m, 2); place(m, 2, 11, 9);
+    const ev = boom(m);
+    check(m.players[1].deathTime >= 0, "adversaire à 4 cases : éliminé (système de dégâts habituel)");
+    check(ev.length === 2 && ev.some((e) => e.chain >= 1), "réaction en chaîne avec une bombe dans le grand rayon");
+  }
+  {
+    // éliminé : la grosse bombe non utilisée disparaît
+    const m = open();
+    m.players[1].bigCharges = 1;
+    m.kill(m.players[1], -1);
+    check(m.players[1].bigCharges === 0, "éliminé : la grosse bombe non utilisée est perdue");
+    const n = new Match({ seed: 9, map: FOREST, modeId: "classic", players: slots(2) });
+    check(n.players.every((p) => p.bigCharges === 0), "nouvelle manche : personne ne la garde");
+  }
+  // ---- Domination 2v2 (usine)
+  const mk = (seed = 41) => {
+    const m = new Match({ seed, map: FACTORY, modeId: "koth", players: slots(4) });
+    m.phase = "playing";
+    m.hill!.moveIn = 1e9;
+    m.hill!.throwSpawnIn = 1e9;
+    m.hill!.bigSpawnIn = 1e9;
+    place(m, 0, 1, 1); place(m, 1, 13, 1); place(m, 2, 1, 11); place(m, 3, 13, 11);
+    return m;
+  };
+  {
+    // coéquipier épargné, adversaire touché ; portée Domination 2 → 4
+    const m = mk();
+    const team0 = m.players.filter((p) => p.id !== 0 && m.sameTeam(0, p.id))[0];
+    const foe = m.players.filter((p) => m.isFoe(m.players[0], p))[0];
+    m.players[0].bigCharges = 1;
+    place(m, team0.id, 3, 6); place(m, foe.id, 10, 6);
+    plant(m, 6, 6);
+    const b = [...m.bombs.values()][0];
+    check(!!b && b.big === true && b.range === 4, `Domination : grosse bombe portée ${b?.range}`);
+    boom(m);
+    check(team0.deathTime < 0 && foe.deathTime >= 0, "Domination : coéquipier épargné, adversaire touché à 4 cases");
+  }
+  {
+    // grosse bombe + bombe à lancer : les deux bonus se combinent sans rien casser
+    const m = mk();
+    const p = m.players[0];
+    p.throwCharges = 1; p.bigCharges = 1;
+    place(m, 0, 2, 6); p.faceX = 1; p.faceY = 0;
+    run(m, DT, (mm) => mm.players.map((q) => ({ mx: 0, my: 0, bomb: false, ability: false, throw: q.id === 0 })));
+    const b = [...m.bombs.values()][0];
+    check(!!b?.flight && b.big === true && b.tx === 5 && p.throwCharges === 0 && p.bigCharges === 0, "lancer une grosse bombe : elle vole, reste grosse, les deux réserves sont utilisées");
+    place(m, 0, 2, 8); // hors de la croix (ses propres bombes restent dangereuses)
+    const ev = boom(m);
+    check(ev.length === 1 && ev[0].big === true && fireAt(m, 5, 6), "la grosse bombe lancée explose en grand après l'atterrissage");
+    run(m, 0.6); // le feu s'éteint
+    p.throwCharges = 1;
+    place(m, 0, 2, 6);
+    run(m, DT, (mm) => mm.players.map((q) => ({ mx: 0, my: 0, bomb: false, ability: false, throw: q.id === 0 })));
+    const t = [...m.bombs.values()][0];
+    check(!!t && !t.big && t.range === m.bombRules.startRange, "bombe à lancer seule : toujours normale");
+  }
+  {
+    // réapparition sans la grosse bombe
+    const m = mk();
+    const p = m.players[0];
+    p.bigCharges = 1;
+    m.kill(p, 1);
+    run(m, HILL_RULES.respawnDelay + 0.3);
+    check(p.alive && p.bigCharges === 0, "Domination : réapparition sans grosse bombe");
+  }
+  {
+    // apparition régulière en Domination : case libre, hors zone, endroits variés
+    const spots = new Set<string>();
+    let bad = 0, appeared = 0;
+    for (let seed = 1; seed <= 12; seed++) {
+      const m = new Match({ seed, map: FACTORY, modeId: "koth", players: slots(4) });
+      m.phase = "playing";
+      m.hill!.moveIn = 1e9;
+      run(m, HILL_RULES.bigFirst + 0.2);
+      const b = [...m.bonuses.values()].find((x) => x.type === "big");
+      if (!b) continue;
+      appeared++;
+      spots.add(`${b.tx},${b.ty}`);
+      const [cx, cy] = m.hill!.center;
+      if (m.grid.blocksMove(b.tx, b.ty) || (b.tx === cx && b.ty === cy)) bad++;
+    }
+    check(appeared >= 10 && bad === 0 && spots.size >= 6, `Domination : le bonus apparaît régulièrement (${appeared}/12), sur des cases libres, à des endroits variés (${spots.size} endroits)`);
+  }
+  {
+    // butin des caisses (Classique) : tiré de temps en temps, dans le quota
+    const t = new LootTable(15, 13, [[1, 1], [13, 11]]);
+    const rng = new Rng(7);
+    let n = 0;
+    for (let i = 0; i < 400; i++) { const r = t.roll(rng, 1 + (i % 13), 1 + (i % 11), 0); if (r === "big") n++; }
+    check(n >= 1 && n <= LOOT.maxPerMatch.big, `Classique : la grosse bombe sort parfois des caisses (${n}, quota ${LOOT.maxPerMatch.big})`);
+  }
+  {
+    // en ligne : la grosse bombe est transmise
+    const m = mk();
+    m.players[0].bigCharges = 1;
+    plant(m, 6, 6);
+    const snap = JSON.parse(JSON.stringify(encodeSnapshot(m, [0, 0, 0, 0], [])));
+    const c = new Match({ seed: 41, map: FACTORY, modeId: "koth", players: slots(4) });
+    applySnapshot(c, snap);
+    const b = [...c.bombs.values()][0];
+    check(!!b?.big && b.range === 4, "instantané en ligne : grosse bombe bien recopiée");
+  }
+  {
+    // bots avec grosses bombes : parties complètes, personne coincé, peu de suicides
+    for (const [modeId, map] of [["classic", FOREST], ["koth", FACTORY]] as const) {
+      let stuck = 0, ended = 0, bigs = 0, selfKills = 0;
+      for (let seed = 1; seed <= 6; seed++) {
+        const m = new Match({ seed: seed * 77, map, modeId, players: Array.from({ length: 4 }, (_, i) => ({ name: "B" + i, characterId: "pip", isBot: true, difficulty: "hard" as Difficulty })) });
+        const brains = m.players.map((p) => new BotBrain(p.id, "hard", seed));
+        let g = 0;
+        while (m.phase !== "over" && g++ < 60 * 200) {
+          // on redonne régulièrement une grosse bombe aux bots
+          if (g % 300 === 0) for (const p of m.players) if (p.alive) p.bigCharges = 1;
+          m.step(brains.map((b) => b.update(m, DT)));
+          for (const e of m.events) {
+            if (e.t === "explode" && e.big) bigs++;
+            if (e.t === "playerDied" && e.killer === e.player) selfKills++;
+          }
+          for (const p of m.players) if (p.alive && m.grid.blocksMove(Math.floor(p.x), Math.floor(p.y))) stuck++;
+        }
+        if (m.phase === "over") ended++;
+      }
+      check(ended === 6 && stuck === 0 && bigs > 0, `bots (${modeId}) : 6 parties terminées, ${bigs} grosses explosions, ${selfKills} suicides, personne coincé`);
+    }
   }
 }
 
@@ -1030,7 +1253,7 @@ console.log("Butin aléatoire (core/loot.ts)");
   check(bad === 0, `${total} bonus apparus sur 24 parties : jamais superposés, ni dans un mur, un bloc ou une bombe, quotas respectés`);
   check(maxBoard <= LOOT.maxOnBoard, `au plus ${LOOT.maxOnBoard} bonus visibles en même temps (max observé ${maxBoard})`);
   check(new Set(firstSeq).size >= 18, `ordre différent d'une partie à l'autre (${new Set(firstSeq).size}/24 débuts différents)`);
-  check(Object.keys(typeTotals).length === 4, `les 4 bonus apparaissent : ${Object.entries(typeTotals).map(([k, v]) => `${k} ${v}`).join(", ")}`);
+  check(Object.keys(typeTotals).length === Object.keys(LOOT.weights).length, `les ${Object.keys(LOOT.weights).length} bonus apparaissent : ${Object.entries(typeTotals).map(([k, v]) => `${k} ${v}`).join(", ")}`);
   check(Math.max(...quadSpread) <= 12, `équilibre entre les coins (écart max ${Math.max(...quadSpread)})`);
   // tirages bruts : proportions conformes aux poids
   const t = new LootTable(13, 11, [[1, 1], [11, 9]], { ...LOOT, maxPerMatch: {}, maxOnBoard: 1e9, quadrantLead: 1e9 });

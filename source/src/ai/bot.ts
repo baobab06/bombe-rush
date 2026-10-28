@@ -135,8 +135,8 @@ export class BotBrain {
       const to = m.throwTarget(px, py, dx, dy);
       if (!to) continue;
       const dist = Math.abs(to[0] - px) + Math.abs(to[1] - py);
-      if (dist <= p.range) continue;
-      const cells = new Set(m.blastCells(to[0], to[1], p.range));
+      if (dist <= m.nextBombRange(p)) continue;
+      const cells = new Set(m.blastCells(to[0], to[1], m.nextBombRange(p)));
       if (m.players.some((o) => m.isFoe(p, o) && o.shieldTime <= 0 && cells.has(m.grid.idx(Math.floor(o.x), Math.floor(o.y))))) {
         this.wantThrow = [dx, dy];
         this.lastDecision = "throw";
@@ -250,16 +250,16 @@ export class BotBrain {
     if (target.has(here)) {
       // zone disputée : on se bat au lieu d'attendre
       if (!goNext && hill.contested) {
-        if (p.activeBombs < p.maxBombs && g.bombAt[here] < 0 && this.enemyInLine(m, p, px, py, p.range) && this.rng.chance(0.35 + this.prof.aggression * 0.55)) {
+        if (p.activeBombs < p.maxBombs && g.bombAt[here] < 0 && this.enemyInLine(m, p, px, py, m.nextBombRange(p)) && this.rng.chance(0.35 + this.prof.aggression * 0.55)) {
           if (this.placeIfEscapable(m, p, false)) return true;
         }
         // se placer dans l'axe d'un adversaire (dans la zone ou juste à côté)
-        if (!this.enemyInLine(m, p, px, py, p.range) && this.rng.chance(0.3 + this.prof.aggression * 0.5)) {
+        if (!this.enemyInLine(m, p, px, py, m.nextBombRange(p)) && this.rng.chance(0.3 + this.prof.aggression * 0.5)) {
           const aim = this.findTarget(m, p, danger, 4, (i) => {
             if (g.bombAt[i] >= 0) return false;
             const x = i % g.w;
             const y = Math.floor(i / g.w);
-            return this.enemyInLine(m, p, x, y, p.range);
+            return this.enemyInLine(m, p, x, y, m.nextBombRange(p));
           });
           if (aim && aim.length) {
             this.path = aim;
@@ -341,7 +341,7 @@ export class BotBrain {
     const cells: number[] = [];
     const bombCells = new Set<number>();
     for (const b of m.bombs.values()) bombCells.add(g.idx(b.tx, b.ty));
-    blastCells(m, Math.floor(p.x), Math.floor(p.y), p.range, bombCells, cells);
+    blastCells(m, Math.floor(p.x), Math.floor(p.y), m.nextBombRange(p), bombCells, cells);
     let blocks = 0;
     let enemy = false;
     for (const c of cells) {
@@ -381,7 +381,7 @@ export class BotBrain {
     const tx = Math.floor(p.x);
     const ty = Math.floor(p.y);
     if (!sloppy) {
-      const danger = computeDanger(m, { tx, ty, fuse: m.bombRules.fuse * m.fuseMul, range: p.range });
+      const danger = computeDanger(m, { tx, ty, fuse: m.bombRules.fuse * m.fuseMul, range: m.nextBombRange(p) });
       const escape = this.findSafe(m, p, danger, this.prof.margin + 0.15, true);
       if (!escape) return false;
       let room = 0;

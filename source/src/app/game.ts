@@ -303,7 +303,7 @@ export class GameScreen {
     this.renderer.draw(m, frozen ? 0 : dt, this.prev, frozen ? 1 : Math.min(1, this.acc / DT));
     if (!this.demo && !this.finished) {
       const me = m.players[s.localPlayer];
-      this.controls.draw(this.renderer.ctx, me.shieldCharges, me.shieldTime, me.maxBombs - me.activeBombs, me.maxBombs, me.alive ? me.throwCharges : 0);
+      this.controls.draw(this.renderer.ctx, me.shieldCharges, me.shieldTime, me.maxBombs - me.activeBombs, me.maxBombs, me.alive ? me.throwCharges : 0, me.alive ? me.bigCharges : 0);
     }
   }
 
@@ -462,6 +462,7 @@ export class GameScreen {
     const me = m.players[s.localPlayer];
     const near = (x: number, y: number) => Math.max(0.15, 1 - Math.hypot(x - me.x, y - me.y) / 11);
     let explodeVol = 0;
+    let bigBoom = false;
     for (const e of events) {
       switch (e.t) {
         case "bombPlaced":
@@ -478,6 +479,8 @@ export class GameScreen {
         case "explode": {
           const v = near(e.x + 0.5, e.y + 0.5);
           explodeVol = Math.max(explodeVol, v);
+          // grosse bombe : on l'entend de plus loin et une seconde détonation grave s'ajoute
+          if (e.big) { explodeVol = Math.max(explodeVol, Math.min(1, v + 0.35)); bigBoom = true; }
           if (me.alive && Math.hypot(e.x + 0.5 - me.x, e.y + 0.5 - me.y) < 3.5) haptics.explosionNear();
           break;
         }
@@ -556,6 +559,7 @@ export class GameScreen {
       }
     }
     if (explodeVol > 0) audio.play("explode", explodeVol);
+    if (bigBoom) setTimeout(() => audio.play("explode", 0.7), 90);
   }
 
   // ------------------------------------------------------------ emotes

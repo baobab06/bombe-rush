@@ -81,6 +81,8 @@ export interface PlayerState {
   bombCooldown: number;
   /** capacité « bombe à lancer » (0 ou 1) : la prochaine bombe peut être lancée */
   throwCharges: number;
+  /** capacité « grosse bombe » (0 ou 1) : la prochaine bombe a une portée bien plus grande */
+  bigCharges: number;
   shieldCharges: number;
   shieldTime: number; // > 0 : bouclier actif
   deathTime: number; // temps de match à la mort
@@ -105,6 +107,8 @@ export interface BombState {
    * à rebours, rien ne peut la faire sauter. Absent = posée au sol.
    */
   flight?: { fromX: number; fromY: number; t: number; dur: number };
+  /** grosse bombe (bonus) : portée augmentée, dessin et explosion plus imposants */
+  big?: boolean;
 }
 
 export interface BonusState {
@@ -123,7 +127,7 @@ export type SimEvent =
   | { t: "bombPlaced"; x: number; y: number; owner: number }
   | { t: "bombThrown"; x: number; y: number; toX: number; toY: number; owner: number }
   | { t: "bombLanded"; x: number; y: number; owner: number }
-  | { t: "explode"; x: number; y: number; owner: number; cells: number; chain: number }
+  | { t: "explode"; x: number; y: number; owner: number; cells: number; chain: number; big?: boolean }
   | { t: "blockDestroyed"; x: number; y: number }
   | { t: "bonusSpawn"; x: number; y: number; type: string }
   | { t: "bonusPicked"; x: number; y: number; type: string; player: number }

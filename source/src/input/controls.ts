@@ -254,7 +254,7 @@ export class Controls {
   }
 
   // ---------------------------------------------------------------- dessin
-  draw(ctx: CanvasRenderingContext2D, shieldCharges: number, shieldActive: number, bombsLeft: number, maxBombs: number, throwCharges = 0) {
+  draw(ctx: CanvasRenderingContext2D, shieldCharges: number, shieldActive: number, bombsLeft: number, maxBombs: number, throwCharges = 0, bigCharges = 0) {
     const L = this.layout;
     const now = performance.now();
     // la capacité vient d'apparaître / de disparaître
@@ -296,12 +296,25 @@ export class Controls {
     ctx.fill();
     ctx.restore();
 
-    // bouton bombe
+    // bouton bombe (grosse bombe prête : halo rouge qui pulse, bombe plus grosse, étiquette XL)
+    const big = bigCharges > 0;
+    if (big) {
+      const pulse = 0.5 + 0.5 * Math.sin(now / 160);
+      ctx.save();
+      const halo = ctx.createRadialGradient(L.bomb.x, L.bomb.y, L.bomb.r * 0.8, L.bomb.x, L.bomb.y, L.bomb.r * (1.35 + pulse * 0.12));
+      halo.addColorStop(0, "rgba(255,60,70,0.55)");
+      halo.addColorStop(1, "rgba(255,60,70,0)");
+      ctx.fillStyle = halo;
+      ctx.beginPath();
+      ctx.arc(L.bomb.x, L.bomb.y, L.bomb.r * 1.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
     const bp = this.bombPointer !== null || now - this.bombPressT < 120;
-    this.button(ctx, L.bomb, "#ff6a2b", "#b8380c", bp, bombsLeft > 0, (x, y, r) => {
+    this.button(ctx, L.bomb, big ? "#ff3d4f" : "#ff6a2b", big ? "#a3101f" : "#b8380c", bp, bombsLeft > 0, (x, y, r) => {
       ctx.fillStyle = "#1b1c33";
       ctx.beginPath();
-      ctx.arc(x - r * 0.06, y + r * 0.08, r * 0.42, 0, Math.PI * 2);
+      ctx.arc(x - r * 0.06, y + r * 0.08, r * (big ? 0.5 : 0.42), 0, Math.PI * 2);
       ctx.fill();
       ctx.strokeStyle = "#fff3d0";
       ctx.lineWidth = r * 0.09;
@@ -317,6 +330,7 @@ export class Controls {
     });
     // compteur de bombes disponibles
     this.badge(ctx, L.bomb.x + L.bomb.r * 0.62, L.bomb.y - L.bomb.r * 0.86, `${bombsLeft}/${maxBombs}`, "#1b1c33");
+    if (big) this.badge(ctx, L.bomb.x - L.bomb.r * 0.7, L.bomb.y - L.bomb.r * 0.86, "XL", "#d61f33");
 
     // bouton bouclier
     const sp = this.shieldPointer !== null || now - this.shieldPressT < 120;

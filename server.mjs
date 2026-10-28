@@ -244,14 +244,23 @@ var THROW = {
   flightPerCell: 0.11,
   arcHeight: 0.9
 };
+var BIG = {
+  rangeMul: 1.75,
+  minExtra: 2,
+  maxRange: 9,
+  scale: 1.3
+};
+function bigRange(range) {
+  return Math.min(BIG.maxRange, Math.max(range + BIG.minExtra, Math.round(range * BIG.rangeMul)));
+}
 var BOMB_WARN = Math.max(...Object.values(BOMB_KINDS).map((k) => k.warn));
 
 // src/core/loot.ts
 var LOOT = {
   dropChance: 0.42,
-  weights: { bomb: 34, flame: 30, speed: 18, shield: 18 },
+  weights: { bomb: 34, flame: 30, speed: 18, shield: 18, big: 10 },
   maxOnBoard: 6,
-  maxPerMatch: { bomb: 14, flame: 12, speed: 6, shield: 5 },
+  maxPerMatch: { bomb: 14, flame: 12, speed: 6, shield: 5, big: 4 },
   quadrantLead: 3,
   boostExtraOnBoard: 6
 };
@@ -712,7 +721,9 @@ var HILL_RULES = {
   moveEvery: 10,
   moveWarn: 3,
   throwFirst: 12,
-  throwEvery: 16
+  throwEvery: 16,
+  bigFirst: 22,
+  bigEvery: 18
 };
 
 class HillState {
@@ -723,6 +734,7 @@ class HillState {
   moveIn = HILL_RULES.moveEvery;
   scores;
   throwSpawnIn = HILL_RULES.throwFirst;
+  bigSpawnIn = HILL_RULES.bigFirst;
   respawnIn;
   holder = -1;
   contested = false;
@@ -945,7 +957,16 @@ class HillState {
         m.events.push({ t: "hillMoved", x: this.center[0], y: this.center[1] });
       }
     }
-    this.spawnThrowBonus();
+    this.throwSpawnIn -= DT;
+    if (this.throwSpawnIn <= 0) {
+      this.throwSpawnIn = HILL_RULES.throwEvery;
+      this.spawnSpecialBonus("throw");
+    }
+    this.bigSpawnIn -= DT;
+    if (this.bigSpawnIn <= 0) {
+      this.bigSpawnIn = HILL_RULES.bigEvery;
+      this.spawnSpecialBonus("big");
+    }
     const n = m.players.length;
     for (let k = 0;k < n; k++) {
       const p = m.players[(k + m.tick) % n];
@@ -956,22 +977,19 @@ class HillState {
         this.respawn(p);
     }
   }
-  lastThrowCell = -1;
-  spawnThrowBonus() {
+  lastSpecialCell = {};
+  spawnSpecialBonus(type) {
     const m = this.m;
-    this.throwSpawnIn -= DT;
-    if (this.throwSpawnIn > 0)
+    if ([...m.bonuses.values()].some((b) => b.type === type))
       return;
-    this.throwSpawnIn = HILL_RULES.throwEvery;
-    if ([...m.bonuses.values()].some((b) => b.type === "throw"))
-      return;
-    const max = m.loot.cfg.maxPerMatch.throw;
-    if (max !== undefined && (m.loot.perType.throw ?? 0) >= max)
+    const max = m.loot.cfg.maxPerMatch[type];
+    if (max !== undefined && (m.loot.perType[type] ?? 0) >= max)
       return;
     const g = m.grid;
     const [cx, cy] = this.center;
+    const last = this.lastSpecialCell[type] ?? -1;
     const cells = m.randomFreeCells(400).filter(([x, y]) => {
-      if (g.idx(x, y) === this.lastThrowCell)
+      if (g.idx(x, y) === last)
         return false;
       if (Math.abs(x - cx) + Math.abs(y - cy) < 2)
         return false;
@@ -982,9 +1000,9 @@ class HillState {
     const c = cells[0];
     if (!c)
       return;
-    if (m.spawnBonus("throw", c[0], c[1])) {
-      m.loot.record("throw", c[0], c[1]);
-      this.lastThrowCell = g.idx(c[0], c[1]);
+    if (m.spawnBonus(type, c[0], c[1])) {
+      m.loot.record(type, c[0], c[1]);
+      this.lastSpecialCell[type] = g.idx(c[0], c[1]);
     }
   }
   get reached() {
@@ -1044,6 +1062,7 @@ class HillState {
     p.speedLevel = 0;
     p.maxBombs = m.bombRules.startBombs;
     p.throwCharges = 0;
+    p.bigCharges = 0;
     p.range = m.bombRules.startRange;
     p.bombCooldown = 0;
     p.activeBombs = Math.min(p.activeBombs, p.maxBombs);
@@ -1093,7 +1112,7 @@ var MODES = [
     emoji: "\uD83D\uDC51",
     suddenDeath: false,
     bombRules: { fuse: 2.5, warn: 0.8, startRange: 2, startBombs: 1, fireDuration: 0.4, cooldown: 0.5 },
-    loot: { weights: { throw: 14 }, maxPerMatch: { throw: 4 } },
+    loot: { weights: { throw: 14 }, maxPerMatch: { throw: 4, big: 5 } },
     onStart(m) {
       if (m.players.length >= 2)
         m.setTeams();
@@ -1637,9 +1656,9 @@ class BotBrain {
       if (!to)
         continue;
       const dist = Math.abs(to[0] - px) + Math.abs(to[1] - py);
-      if (dist <= p.range)
+      if (dist <= m.nextBombRange(p))
         continue;
-      const cells = new Set(m.blastCells(to[0], to[1], p.range));
+      const cells = new Set(m.blastCells(to[0], to[1], m.nextBombRange(p)));
       if (m.players.some((o) => m.isFoe(p, o) && o.shieldTime <= 0 && cells.has(m.grid.idx(Math.floor(o.x), Math.floor(o.y))))) {
         this.wantThrow = [dx, dy];
         this.lastDecision = "throw";
@@ -1736,17 +1755,17 @@ class BotBrain {
     const target = goNext ? hill.nextSet : hill.cellSet;
     if (target.has(here)) {
       if (!goNext && hill.contested) {
-        if (p.activeBombs < p.maxBombs && g.bombAt[here] < 0 && this.enemyInLine(m, p, px, py, p.range) && this.rng.chance(0.35 + this.prof.aggression * 0.55)) {
+        if (p.activeBombs < p.maxBombs && g.bombAt[here] < 0 && this.enemyInLine(m, p, px, py, m.nextBombRange(p)) && this.rng.chance(0.35 + this.prof.aggression * 0.55)) {
           if (this.placeIfEscapable(m, p, false))
             return true;
         }
-        if (!this.enemyInLine(m, p, px, py, p.range) && this.rng.chance(0.3 + this.prof.aggression * 0.5)) {
+        if (!this.enemyInLine(m, p, px, py, m.nextBombRange(p)) && this.rng.chance(0.3 + this.prof.aggression * 0.5)) {
           const aim = this.findTarget(m, p, danger, 4, (i) => {
             if (g.bombAt[i] >= 0)
               return false;
             const x = i % g.w;
             const y = Math.floor(i / g.w);
-            return this.enemyInLine(m, p, x, y, p.range);
+            return this.enemyInLine(m, p, x, y, m.nextBombRange(p));
           });
           if (aim && aim.length) {
             this.path = aim;
@@ -1831,7 +1850,7 @@ class BotBrain {
     const bombCells = new Set;
     for (const b of m.bombs.values())
       bombCells.add(g.idx(b.tx, b.ty));
-    blastCells(m, Math.floor(p.x), Math.floor(p.y), p.range, bombCells, cells);
+    blastCells(m, Math.floor(p.x), Math.floor(p.y), m.nextBombRange(p), bombCells, cells);
     let blocks = 0;
     let enemy = false;
     for (const c of cells) {
@@ -1874,7 +1893,7 @@ class BotBrain {
     const tx = Math.floor(p.x);
     const ty = Math.floor(p.y);
     if (!sloppy) {
-      const danger = computeDanger(m, { tx, ty, fuse: m.bombRules.fuse * m.fuseMul, range: p.range });
+      const danger = computeDanger(m, { tx, ty, fuse: m.bombRules.fuse * m.fuseMul, range: m.nextBombRange(p) });
       const escape = this.findSafe(m, p, danger, this.prof.margin + 0.15, true);
       if (!escape)
         return false;
@@ -2048,6 +2067,17 @@ var BONUSES = {
       if (p.throwCharges >= 1)
         return false;
       p.throwCharges = 1;
+      return true;
+    }
+  },
+  big: {
+    id: "big",
+    label: "Grosse bombe",
+    description: "Ta prochaine bombe explose beaucoup plus loin.",
+    apply(p) {
+      if (p.bigCharges >= 1)
+        return false;
+      p.bigCharges = 1;
       return true;
     }
   },
@@ -2592,6 +2622,7 @@ class Match {
         range: this.bombRules.startRange,
         bombCooldown: 0,
         throwCharges: 0,
+        bigCharges: 0,
         shieldCharges: 0,
         shieldTime: 0,
         deathTime: -1,
@@ -2753,7 +2784,14 @@ class Match {
   canUseBomb(p) {
     return p.alive && p.activeBombs < p.maxBombs && p.bombCooldown <= 0;
   }
+  nextBombRange(p) {
+    const r = p.range + this.rangeBonus;
+    return p.bigCharges > 0 ? bigRange(r) : r;
+  }
   makeBomb(p, tx, ty, flight) {
+    const big = p.bigCharges > 0;
+    if (big)
+      p.bigCharges = 0;
     const bomb = {
       id: this.nextId++,
       ownerId: p.id,
@@ -2761,10 +2799,12 @@ class Match {
       ty,
       fuse: this.bombRules.fuse * this.fuseMul,
       fuseTotal: this.bombRules.fuse * this.fuseMul,
-      range: p.range + this.rangeBonus,
+      range: big ? bigRange(p.range + this.rangeBonus) : p.range + this.rangeBonus,
       passable: [],
       flight
     };
+    if (big)
+      bomb.big = true;
     this.bombs.set(bomb.id, bomb);
     p.activeBombs++;
     p.bombCooldown = this.bombRules.cooldown;
@@ -2952,7 +2992,7 @@ class Match {
           cells++;
         }
       }
-      this.events.push({ t: "explode", x: b.tx, y: b.ty, owner: b.ownerId, cells, chain });
+      this.events.push(b.big ? { t: "explode", x: b.tx, y: b.ty, owner: b.ownerId, cells, chain, big: true } : { t: "explode", x: b.tx, y: b.ty, owner: b.ownerId, cells, chain });
     }
   }
   setFire(x, y, shape, owner) {
@@ -3060,6 +3100,7 @@ class Match {
     p.deathTime = this.time;
     p.killedBy = killer;
     p.throwCharges = 0;
+    p.bigCharges = 0;
     p.stats.survivalTime = this.time;
     if (killer >= 0 && killer !== p.id)
       this.players[killer].stats.kills++;
@@ -3344,7 +3385,7 @@ function encodeSnapshot(m, acks, events) {
     tiles: Array.from(g.tiles).join(""),
     terrain: Array.from(g.terrain).join(""),
     fire,
-    bombs: [...m.bombs.values()].map((b) => [b.id, b.ownerId, b.tx, b.ty, r2(b.fuse), b.range, b.passable, b.fuseTotal, b.flight ? [b.flight.fromX, b.flight.fromY, r2(b.flight.t), r2(b.flight.dur)] : null]),
+    bombs: [...m.bombs.values()].map((b) => [b.id, b.ownerId, b.tx, b.ty, r2(b.fuse), b.range, b.passable, b.fuseTotal, b.flight ? [b.flight.fromX, b.flight.fromY, r2(b.flight.t), r2(b.flight.dur)] : null, b.big ? 1 : 0]),
     bonuses: [...m.bonuses.values()].map((b) => [b.id, b.type, b.tx, b.ty, r2(b.invuln), r2(b.age)]),
     pending: m.pendingDrops.map(([x, y, l]) => [x, y, r2(l)]),
     hill: m.hill ? { scores: m.hill.scores.map(r2), respawn: m.hill.respawnIn.map(r2), holder: m.hill.holder, contested: m.hill.contested, site: m.hill.site, next: m.hill.next, moveIn: r2(m.hill.moveIn) } : null,

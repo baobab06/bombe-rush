@@ -5,7 +5,7 @@ import { abilityBurst, emitAura, emitTrail, speedLines } from "./charfx";
 import { getBoom, getEmote } from "../core/cosmetics";
 import { EMOTE_DURATION, drawEmoteBubble } from "./emote";
 import { RULES, TEAM_COLORS } from "../core/rules";
-import { THROW } from "../core/bombs";
+import { BIG, THROW } from "../core/bombs";
 import { TERRAIN, TILE, type SimEvent } from "../core/types";
 import { Particles } from "./particles";
 import {
@@ -32,6 +32,7 @@ const BONUS_TEXT: Record<string, string> = {
   speed: "VITESSE !",
   shield: "BOUCLIER",
   throw: "BOMBE À LANCER !",
+  big: "GROSSE BOMBE !",
 };
 
 interface Dying {
@@ -155,8 +156,20 @@ export class Renderer {
         }
         case "explode":
           P.explosion(e.x + 0.5, e.y + 0.5, m.players[e.owner]?.boomId);
-          this.shake = Math.min(1, this.shake + 0.35 + e.cells * 0.02);
-          this.flash = Math.min(0.5, this.flash + 0.18);
+          if (e.big) {
+            // grosse bombe : onde de choc large, étincelles en plus, secousse plus forte (flash limité pour garder le jeu lisible)
+            P.spawn("ring", e.x + 0.5, e.y + 0.5, { life: 0.45, size: 1.6, color: "#ffb347" });
+            P.spawn("ring", e.x + 0.5, e.y + 0.5, { life: 0.6, size: 2.6, color: "#ff5a3c" });
+            for (let k = 0; k < 16; k++) {
+              const a = (k / 16) * Math.PI * 2;
+              P.spawn("spark", e.x + 0.5, e.y + 0.5, { vx: Math.cos(a) * 5, vy: Math.sin(a) * 5, vz: 3 + Math.random() * 3, life: 0.55, size: 0.1, color: k % 2 ? "#ffd23f" : "#ff6a2b" });
+            }
+            this.shake = Math.min(1, this.shake + 0.6);
+            this.flash = Math.min(0.32, this.flash + 0.22);
+          } else {
+            this.shake = Math.min(1, this.shake + 0.35 + e.cells * 0.02);
+            this.flash = Math.min(0.5, this.flash + 0.18);
+          }
           break;
         case "blockDestroyed": {
           this.breaking.push({ x: e.x, y: e.y, t: 0 });
@@ -307,6 +320,38 @@ export class Renderer {
   }
 
   /** Bombe à lancer en vol : arc, ombre au sol, cible d'atterrissage. */
+  /** Grosse bombe : halo rouge au sol qui pulse (plus vite quand elle va sauter). */
+  private drawBigAura(ctx: CanvasRenderingContext2D, cx: number, cy: number, s: number, t: number, _range: number) {
+    const pulse = 0.5 + 0.5 * Math.sin(t * 7);
+    ctx.save();
+    const g = ctx.createRadialGradient(cx, cy + s * 0.18, s * 0.1, cx, cy + s * 0.18, s * (0.62 + pulse * 0.08));
+    g.addColorStop(0, "rgba(255,70,60,0.55)");
+    g.addColorStop(1, "rgba(255,70,60,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + s * 0.18, s * 0.7, s * 0.42, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  /** Grosse bombe : cerclage métallique rouge + rivets (on la reconnaît d'un coup d'œil). */
+  private drawBigBand(ctx: CanvasRenderingContext2D, cx: number, cy: number, s: number) {
+    const y = cy + s * 0.12;
+    ctx.save();
+    ctx.strokeStyle = "#d61f33";
+    ctx.lineWidth = Math.max(2, s * 0.07);
+    ctx.beginPath();
+    ctx.ellipse(cx, y, s * 0.4, s * 0.12, 0, 0.15, Math.PI - 0.15);
+    ctx.stroke();
+    ctx.fillStyle = "#ffd9a0";
+    for (const k of [-0.24, 0, 0.24]) {
+      ctx.beginPath();
+      ctx.arc(cx + s * k, y + s * 0.1 * Math.cos((k / 0.4) * Math.PI / 2), Math.max(1.2, s * 0.028), 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
   private drawFlyingBomb(m: Match, b: BombState) {
     const f = b.flight!;
     const ctx = this.ctx;
@@ -354,6 +399,7 @@ export class Renderer {
     ctx.save();
     ctx.translate(x, y - lift);
     ctx.rotate(Math.sin(k * Math.PI) * 0.5);
+    if (b.big) ctx.scale(BIG.scale, BIG.scale);
     drawBomb(ctx, 0, 0, s, 1, t, 1, 9, m.bombRules.warn, owner?.boomId ? getBoom(owner.boomId).bomb : undefined);
     ctx.restore();
   }
@@ -628,7 +674,15 @@ export class Renderer {
           if (b) {
             if (!this.bombBorn.has(b.id)) this.bombBorn.set(b.id, t);
             const owner = b.ownerId >= 0 ? m.players[b.ownerId] : undefined;
-            drawBomb(ctx, X + s / 2, Y + s / 2, s, b.fuse / b.fuseTotal, t, t - this.bombBorn.get(b.id)!, b.fuse, m.bombRules.warn, owner?.boomId ? getBoom(owner.boomId).bomb : undefined);
+            if (b.big) {
+              this.drawBigAura(ctx, X + s / 2, Y + s / 2, s, t, b.range);
+              ctx.save();
+              ctx.translate(X + s / 2, Y + s * 0.62);
+              ctx.scale(BIG.scale, BIG.scale);
+              drawBomb(ctx, 0, -s * 0.12, s, b.fuse / b.fuseTotal, t, t - this.bombBorn.get(b.id)!, b.fuse, m.bombRules.warn, owner?.boomId ? getBoom(owner.boomId).bomb : undefined);
+              ctx.restore();
+              this.drawBigBand(ctx, X + s / 2, Y + s / 2, s);
+            } else drawBomb(ctx, X + s / 2, Y + s / 2, s, b.fuse / b.fuseTotal, t, t - this.bombBorn.get(b.id)!, b.fuse, m.bombRules.warn, owner?.boomId ? getBoom(owner.boomId).bomb : undefined);
           }
         }
       }

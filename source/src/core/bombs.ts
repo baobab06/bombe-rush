@@ -36,6 +36,28 @@ export const THROW = {
   arcHeight: 0.9,
 } as const;
 
+/**
+ * GROSSE BOMBE — réglages. La prochaine bombe posée (ou lancée) après le
+ * bonus a une portée multipliée : portée = max(portée + minExtra,
+ * arrondi(portée × rangeMul)), plafonnée à maxRange. Ex. portée 2 → 4,
+ * portée 3 → 5. Le reste (murs, caisses, chaînes, dégâts) ne change pas.
+ */
+export const BIG = {
+  /** multiplicateur de portée (≈ 1,5 à 2) */
+  rangeMul: 1.75,
+  /** au moins +2 cases par rapport à la bombe normale */
+  minExtra: 2,
+  /** portée maximale d'une grosse bombe */
+  maxRange: 9,
+  /** taille à l'écran (1 = bombe normale) */
+  scale: 1.3,
+} as const;
+
+/** Portée d'une grosse bombe à partir de la portée normale du joueur. */
+export function bigRange(range: number): number {
+  return Math.min(BIG.maxRange, Math.max(range + BIG.minExtra, Math.round(range * BIG.rangeMul)));
+}
+
 /** Durée d'alerte la plus longue (sert aux indices visuels et sonores). */
 export const BOMB_WARN = Math.max(...Object.values(BOMB_KINDS).map((k) => k.warn));
 

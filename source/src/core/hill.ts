@@ -35,6 +35,9 @@ export const HILL_RULES = {
   /** bonus « bombe à lancer » : première apparition, puis intervalle (s) */
   throwFirst: 12,
   throwEvery: 16,
+  /** bonus « grosse bombe » : première apparition, puis intervalle (s) */
+  bigFirst: 22,
+  bigEvery: 18,
 } as const;
 
 interface Site {
@@ -56,6 +59,8 @@ export class HillState {
   readonly scores: number[];
   /** secondes avant la prochaine apparition d'un bonus « bombe à lancer » */
   throwSpawnIn: number = HILL_RULES.throwFirst;
+  /** secondes avant la prochaine apparition d'un bonus « grosse bombe » */
+  bigSpawnIn: number = HILL_RULES.bigFirst;
   /** temps restant avant la réapparition de chaque joueur (≤ 0 = rien en attente) */
   readonly respawnIn: number[];
   /** joueur qui marque en ce moment (-1 = personne) */
@@ -288,7 +293,16 @@ export class HillState {
         m.events.push({ t: "hillMoved", x: this.center[0], y: this.center[1] });
       }
     }
-    this.spawnThrowBonus();
+    this.throwSpawnIn -= DT;
+    if (this.throwSpawnIn <= 0) {
+      this.throwSpawnIn = HILL_RULES.throwEvery;
+      this.spawnSpecialBonus("throw");
+    }
+    this.bigSpawnIn -= DT;
+    if (this.bigSpawnIn <= 0) {
+      this.bigSpawnIn = HILL_RULES.bigEvery;
+      this.spawnSpecialBonus("big");
+    }
     // réapparitions
     // ordre tournant : à réapparition simultanée, personne ne choisit toujours sa case en premier
     const n = m.players.length;
@@ -301,33 +315,32 @@ export class HillState {
   }
 
   /**
-   * Bonus « bombe à lancer » : il apparaît régulièrement sur une case libre
-   * tirée au sort (rng de la partie : même endroit pour tous en ligne, mais
-   * jamais deux fois de suite le même), loin de la zone et des joueurs.
-   * Un seul à la fois sur la carte, dans la limite du quota de la partie.
+   * Bonus spéciaux (« bombe à lancer », « grosse bombe ») : ils apparaissent
+   * régulièrement sur une case libre tirée au sort (rng de la partie : même
+   * endroit pour tous en ligne, mais jamais deux fois de suite le même),
+   * loin de la zone et des joueurs. Un seul de chaque type à la fois sur la
+   * carte, dans la limite du quota de la partie.
    */
-  private lastThrowCell = -1;
-  private spawnThrowBonus(): void {
+  private lastSpecialCell: Record<string, number> = {};
+  private spawnSpecialBonus(type: string): void {
     const m = this.m;
-    this.throwSpawnIn -= DT;
-    if (this.throwSpawnIn > 0) return;
-    this.throwSpawnIn = HILL_RULES.throwEvery;
-    if ([...m.bonuses.values()].some((b) => b.type === "throw")) return;
-    const max = m.loot.cfg.maxPerMatch.throw;
-    if (max !== undefined && (m.loot.perType.throw ?? 0) >= max) return;
+    if ([...m.bonuses.values()].some((b) => b.type === type)) return;
+    const max = m.loot.cfg.maxPerMatch[type];
+    if (max !== undefined && (m.loot.perType[type] ?? 0) >= max) return;
     const g = m.grid;
     const [cx, cy] = this.center;
+    const last = this.lastSpecialCell[type] ?? -1;
     const cells = m.randomFreeCells(400).filter(([x, y]) => {
-      if (g.idx(x, y) === this.lastThrowCell) return false;
+      if (g.idx(x, y) === last) return false;
       if (Math.abs(x - cx) + Math.abs(y - cy) < 2) return false;
       if (g.fire[g.idx(x, y)] > 0) return false;
       return m.players.every((p) => !p.alive || Math.abs(Math.floor(p.x) - x) + Math.abs(Math.floor(p.y) - y) >= 2);
     });
     const c = cells[0];
     if (!c) return;
-    if (m.spawnBonus("throw", c[0], c[1])) {
-      m.loot.record("throw", c[0], c[1]);
-      this.lastThrowCell = g.idx(c[0], c[1]);
+    if (m.spawnBonus(type, c[0], c[1])) {
+      m.loot.record(type, c[0], c[1]);
+      this.lastSpecialCell[type] = g.idx(c[0], c[1]);
     }
   }
 
@@ -392,6 +405,7 @@ export class HillState {
     p.speedLevel = 0;
     p.maxBombs = m.bombRules.startBombs;
     p.throwCharges = 0;
+    p.bigCharges = 0;
     p.range = m.bombRules.startRange;
     p.bombCooldown = 0;
     p.activeBombs = Math.min(p.activeBombs, p.maxBombs);
