@@ -1,4 +1,4 @@
-import { THROW, bigRange, type BombRules } from "./bombs";
+import { SHOCK, THROW, bigRange, type BombRules } from "./bombs";
 import { BONUSES } from "./bonuses";
 import { DIRS, Grid } from "./grid";
 import { LOOT, LootTable } from "./loot";
@@ -129,6 +129,9 @@ export class Match {
         bombCooldown: 0,
         throwCharges: 0,
         bigCharges: 0,
+        elecCharges: 0,
+        stunTime: 0,
+        stunImmune: 0,
         shieldCharges: 0,
         shieldTime: 0,
         deathTime: -1,
@@ -247,6 +250,17 @@ export class Match {
   private updatePlayer(p: PlayerState, cmd: InputCmd): void {
     if (p.shieldTime > 0) p.shieldTime = Math.max(0, p.shieldTime - DT);
     if (p.bombCooldown > 0) p.bombCooldown = Math.max(0, p.bombCooldown - DT);
+    if (p.stunImmune > 0) p.stunImmune = Math.max(0, p.stunImmune - DT);
+    if (p.stunTime > 0) {
+      p.stunTime = Math.max(0, p.stunTime - DT);
+      if (p.stunTime <= 0) p.stunImmune = SHOCK.immunity;
+    }
+    if (p.stunTime > 0) {
+      // paralysé : ni déplacement, ni bombe, ni lancer ; le bouclier reste possible
+      this.moveWithInput(p, cmd);
+      if (cmd.ability) this.tryShield(p);
+      return;
+    }
     this.moveWithInput(p, cmd);
     if (cmd.bomb) this.tryPlaceBomb(p);
     if (cmd.throw) this.tryThrowBomb(p);
@@ -255,6 +269,12 @@ export class Match {
 
   /** Déplacement seul (glace et vitesse comprises) : sert aussi à la prédiction en ligne. */
   moveWithInput(p: PlayerState, cmd: InputCmd): void {
+    if (p.stunTime > 0) {
+      // paralysé : on reste sur place (même sur la glace) ; aussi utilisé par la prédiction en ligne
+      p.moving = false;
+      p.slideX = p.slideY = 0;
+      return;
+    }
     let mx = cmd.mx;
     let my = cmd.my;
     const hasInput = Math.max(Math.abs(mx), Math.abs(my)) >= 0.25;
@@ -314,6 +334,8 @@ export class Match {
     // grosse bombe : la réserve est utilisée par cette bombe (posée ou lancée)
     const big = p.bigCharges > 0;
     if (big) p.bigCharges = 0;
+    const elec = p.elecCharges > 0;
+    if (elec) p.elecCharges = 0;
     const bomb: BombState = {
       id: this.nextId++,
       ownerId: p.id,
@@ -326,6 +348,7 @@ export class Match {
       flight,
     };
     if (big) bomb.big = true;
+    if (elec) bomb.elec = true;
     this.bombs.set(bomb.id, bomb);
     p.activeBombs++;
     p.bombCooldown = this.bombRules.cooldown;
@@ -482,6 +505,8 @@ export class Match {
       const owner = this.players[b.ownerId];
       if (owner) owner.activeBombs = Math.max(0, owner.activeBombs - 1);
 
+      // zone de décharge calculée AVANT l'explosion (une caisse cassée par cette bombe arrête quand même la décharge)
+      const shockZone = b.elec ? this.shockCells(b.tx, b.ty, b.range) : null;
       let cells = 1;
       this.setFire(b.tx, b.ty, FIRE.CENTER, b.ownerId);
       for (const [dx, dy, bit] of DIRS) {
@@ -526,8 +551,70 @@ export class Match {
           cells++;
         }
       }
+      if (shockZone) this.discharge(b, shockZone);
       this.events.push(b.big ? { t: "explode", x: b.tx, y: b.ty, owner: b.ownerId, cells, chain, big: true } : { t: "explode", x: b.tx, y: b.ty, owner: b.ownerId, cells, chain });
     }
+  }
+
+  /**
+   * Cases touchées par la décharge d'une bombe électrique : la croix de
+   * l'explosion + les cases à SHOCK.radius pas au plus du centre (la décharge
+   * contourne les coins mais s'arrête aux murs et aux caisses).
+   */
+  shockCells(tx: number, ty: number, range: number): number[] {
+    const g = this.grid;
+    const set = new Set(this.blastCells(tx, ty, range));
+    const start = g.idx(tx, ty);
+    const dist = new Map<number, number>([[start, 0]]);
+    const q = [start];
+    while (q.length) {
+      const c = q.shift()!;
+      const d = dist.get(c)!;
+      set.add(c);
+      if (d >= SHOCK.radius) continue;
+      const x = c % g.w;
+      const y = (c - x) / g.w;
+      for (const [dx, dy] of DIRS) {
+        const nx = x + dx;
+        const ny = y + dy;
+        const t = g.tile(nx, ny);
+        if (t === TILE.WALL || t === TILE.BLOCK) continue;
+        const n = g.idx(nx, ny);
+        if (dist.has(n)) continue;
+        dist.set(n, d + 1);
+        q.push(n);
+      }
+    }
+    return [...set];
+  }
+
+  /**
+   * Décharge électrique (séparée des dégâts) : paralyse les joueurs touchés.
+   * Respecte les équipes (coéquipiers du poseur épargnés ; le poseur, lui,
+   * n'est pas protégé), le bouclier, et ne se cumule jamais.
+   */
+  private discharge(b: BombState, cells: number[]): void {
+    const g = this.grid;
+    const zone = new Set(cells);
+    this.events.push({ t: "shock", x: b.tx, y: b.ty, owner: b.ownerId, cells });
+    for (const p of this.players) {
+      if (!p.alive || !zone.has(g.idx(Math.floor(p.x), Math.floor(p.y)))) continue;
+      if (this.sameTeam(p.id, b.ownerId)) continue;
+      if (p.shieldTime > 0) {
+        this.events.push({ t: "shieldBlocked", player: p.id });
+        continue;
+      }
+      if (p.stunTime > 0 || p.stunImmune > 0) continue; // pas de cumul, pas de paralysie en boucle
+      this.stun(p, b.ownerId, SHOCK.stun);
+    }
+  }
+
+  /** Paralyse un joueur (durée bornée ; se termine toute seule dans updatePlayer). */
+  stun(p: PlayerState, by: number, dur: number): void {
+    p.stunTime = Math.min(SHOCK.stun, Math.max(0, dur));
+    p.moving = false;
+    p.slideX = p.slideY = 0;
+    this.events.push({ t: "stunned", player: p.id, by, dur: p.stunTime });
   }
 
   setFire(x: number, y: number, shape: number, owner: number): void {
@@ -637,6 +724,9 @@ export class Match {
     p.killedBy = killer;
     p.throwCharges = 0; // la capacité de lancer est perdue à l'élimination
     p.bigCharges = 0; // la grosse bombe non utilisée aussi
+    p.elecCharges = 0;
+    p.stunTime = 0;
+    p.stunImmune = 0;
     p.stats.survivalTime = this.time;
     if (killer >= 0 && killer !== p.id) this.players[killer].stats.kills++;
     this.events.push({ t: "playerDied", player: p.id, killer, x: p.x, y: p.y });

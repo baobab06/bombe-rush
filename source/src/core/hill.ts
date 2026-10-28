@@ -38,6 +38,9 @@ export const HILL_RULES = {
   /** bonus « grosse bombe » : première apparition, puis intervalle (s) */
   bigFirst: 22,
   bigEvery: 18,
+  /** bonus « bombe électrique » : première apparition, puis intervalle (s) */
+  elecFirst: 32,
+  elecEvery: 20,
 } as const;
 
 interface Site {
@@ -61,6 +64,8 @@ export class HillState {
   throwSpawnIn: number = HILL_RULES.throwFirst;
   /** secondes avant la prochaine apparition d'un bonus « grosse bombe » */
   bigSpawnIn: number = HILL_RULES.bigFirst;
+  /** secondes avant la prochaine apparition d'un bonus « bombe électrique » */
+  elecSpawnIn: number = HILL_RULES.elecFirst;
   /** temps restant avant la réapparition de chaque joueur (≤ 0 = rien en attente) */
   readonly respawnIn: number[];
   /** joueur qui marque en ce moment (-1 = personne) */
@@ -303,6 +308,11 @@ export class HillState {
       this.bigSpawnIn = HILL_RULES.bigEvery;
       this.spawnSpecialBonus("big");
     }
+    this.elecSpawnIn -= DT;
+    if (this.elecSpawnIn <= 0) {
+      this.elecSpawnIn = HILL_RULES.elecEvery;
+      this.spawnSpecialBonus("elec");
+    }
     // réapparitions
     // ordre tournant : à réapparition simultanée, personne ne choisit toujours sa case en premier
     const n = m.players.length;
@@ -406,6 +416,9 @@ export class HillState {
     p.maxBombs = m.bombRules.startBombs;
     p.throwCharges = 0;
     p.bigCharges = 0;
+    p.elecCharges = 0;
+    p.stunTime = 0;
+    p.stunImmune = 0;
     p.range = m.bombRules.startRange;
     p.bombCooldown = 0;
     p.activeBombs = Math.min(p.activeBombs, p.maxBombs);

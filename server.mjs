@@ -250,6 +250,11 @@ var BIG = {
   maxRange: 9,
   scale: 1.3
 };
+var SHOCK = {
+  stun: 1,
+  radius: 2,
+  immunity: 0.75
+};
 function bigRange(range) {
   return Math.min(BIG.maxRange, Math.max(range + BIG.minExtra, Math.round(range * BIG.rangeMul)));
 }
@@ -258,9 +263,9 @@ var BOMB_WARN = Math.max(...Object.values(BOMB_KINDS).map((k) => k.warn));
 // src/core/loot.ts
 var LOOT = {
   dropChance: 0.42,
-  weights: { bomb: 34, flame: 30, speed: 18, shield: 18, big: 10 },
+  weights: { bomb: 34, flame: 30, speed: 18, shield: 18, big: 10, elec: 10 },
   maxOnBoard: 6,
-  maxPerMatch: { bomb: 14, flame: 12, speed: 6, shield: 5, big: 4 },
+  maxPerMatch: { bomb: 14, flame: 12, speed: 6, shield: 5, big: 4, elec: 4 },
   quadrantLead: 3,
   boostExtraOnBoard: 6
 };
@@ -723,7 +728,9 @@ var HILL_RULES = {
   throwFirst: 12,
   throwEvery: 16,
   bigFirst: 22,
-  bigEvery: 18
+  bigEvery: 18,
+  elecFirst: 32,
+  elecEvery: 20
 };
 
 class HillState {
@@ -735,6 +742,7 @@ class HillState {
   scores;
   throwSpawnIn = HILL_RULES.throwFirst;
   bigSpawnIn = HILL_RULES.bigFirst;
+  elecSpawnIn = HILL_RULES.elecFirst;
   respawnIn;
   holder = -1;
   contested = false;
@@ -967,6 +975,11 @@ class HillState {
       this.bigSpawnIn = HILL_RULES.bigEvery;
       this.spawnSpecialBonus("big");
     }
+    this.elecSpawnIn -= DT;
+    if (this.elecSpawnIn <= 0) {
+      this.elecSpawnIn = HILL_RULES.elecEvery;
+      this.spawnSpecialBonus("elec");
+    }
     const n = m.players.length;
     for (let k = 0;k < n; k++) {
       const p = m.players[(k + m.tick) % n];
@@ -1063,6 +1076,9 @@ class HillState {
     p.maxBombs = m.bombRules.startBombs;
     p.throwCharges = 0;
     p.bigCharges = 0;
+    p.elecCharges = 0;
+    p.stunTime = 0;
+    p.stunImmune = 0;
     p.range = m.bombRules.startRange;
     p.bombCooldown = 0;
     p.activeBombs = Math.min(p.activeBombs, p.maxBombs);
@@ -1112,7 +1128,7 @@ var MODES = [
     emoji: "\uD83D\uDC51",
     suddenDeath: false,
     bombRules: { fuse: 2.5, warn: 0.8, startRange: 2, startBombs: 1, fireDuration: 0.4, cooldown: 0.5 },
-    loot: { weights: { throw: 14 }, maxPerMatch: { throw: 4, big: 5 } },
+    loot: { weights: { throw: 14 }, maxPerMatch: { throw: 4, big: 5, elec: 5 } },
     onStart(m) {
       if (m.players.length >= 2)
         m.setTeams();
@@ -2081,6 +2097,17 @@ var BONUSES = {
       return true;
     }
   },
+  elec: {
+    id: "elec",
+    label: "Bombe électrique",
+    description: "Ta prochaine bombe paralyse les adversaires proches (1 s).",
+    apply(p) {
+      if (p.elecCharges >= 1)
+        return false;
+      p.elecCharges = 1;
+      return true;
+    }
+  },
   shield: {
     id: "shield",
     label: "Bouclier",
@@ -2623,6 +2650,9 @@ class Match {
         bombCooldown: 0,
         throwCharges: 0,
         bigCharges: 0,
+        elecCharges: 0,
+        stunTime: 0,
+        stunImmune: 0,
         shieldCharges: 0,
         shieldTime: 0,
         deathTime: -1,
@@ -2730,6 +2760,19 @@ class Match {
       p.shieldTime = Math.max(0, p.shieldTime - DT);
     if (p.bombCooldown > 0)
       p.bombCooldown = Math.max(0, p.bombCooldown - DT);
+    if (p.stunImmune > 0)
+      p.stunImmune = Math.max(0, p.stunImmune - DT);
+    if (p.stunTime > 0) {
+      p.stunTime = Math.max(0, p.stunTime - DT);
+      if (p.stunTime <= 0)
+        p.stunImmune = SHOCK.immunity;
+    }
+    if (p.stunTime > 0) {
+      this.moveWithInput(p, cmd);
+      if (cmd.ability)
+        this.tryShield(p);
+      return;
+    }
     this.moveWithInput(p, cmd);
     if (cmd.bomb)
       this.tryPlaceBomb(p);
@@ -2739,6 +2782,11 @@ class Match {
       this.tryShield(p);
   }
   moveWithInput(p, cmd) {
+    if (p.stunTime > 0) {
+      p.moving = false;
+      p.slideX = p.slideY = 0;
+      return;
+    }
     let mx = cmd.mx;
     let my = cmd.my;
     const hasInput = Math.max(Math.abs(mx), Math.abs(my)) >= 0.25;
@@ -2792,6 +2840,9 @@ class Match {
     const big = p.bigCharges > 0;
     if (big)
       p.bigCharges = 0;
+    const elec = p.elecCharges > 0;
+    if (elec)
+      p.elecCharges = 0;
     const bomb = {
       id: this.nextId++,
       ownerId: p.id,
@@ -2805,6 +2856,8 @@ class Match {
     };
     if (big)
       bomb.big = true;
+    if (elec)
+      bomb.elec = true;
     this.bombs.set(bomb.id, bomb);
     p.activeBombs++;
     p.bombCooldown = this.bombRules.cooldown;
@@ -2948,6 +3001,7 @@ class Match {
       const owner = this.players[b.ownerId];
       if (owner)
         owner.activeBombs = Math.max(0, owner.activeBombs - 1);
+      const shockZone = b.elec ? this.shockCells(b.tx, b.ty, b.range) : null;
       let cells = 1;
       this.setFire(b.tx, b.ty, FIRE.CENTER, b.ownerId);
       for (const [dx, dy, bit] of DIRS) {
@@ -2992,8 +3046,63 @@ class Match {
           cells++;
         }
       }
+      if (shockZone)
+        this.discharge(b, shockZone);
       this.events.push(b.big ? { t: "explode", x: b.tx, y: b.ty, owner: b.ownerId, cells, chain, big: true } : { t: "explode", x: b.tx, y: b.ty, owner: b.ownerId, cells, chain });
     }
+  }
+  shockCells(tx, ty, range) {
+    const g = this.grid;
+    const set = new Set(this.blastCells(tx, ty, range));
+    const start = g.idx(tx, ty);
+    const dist = new Map([[start, 0]]);
+    const q = [start];
+    while (q.length) {
+      const c = q.shift();
+      const d = dist.get(c);
+      set.add(c);
+      if (d >= SHOCK.radius)
+        continue;
+      const x = c % g.w;
+      const y = (c - x) / g.w;
+      for (const [dx, dy] of DIRS) {
+        const nx = x + dx;
+        const ny = y + dy;
+        const t = g.tile(nx, ny);
+        if (t === TILE.WALL || t === TILE.BLOCK)
+          continue;
+        const n = g.idx(nx, ny);
+        if (dist.has(n))
+          continue;
+        dist.set(n, d + 1);
+        q.push(n);
+      }
+    }
+    return [...set];
+  }
+  discharge(b, cells) {
+    const g = this.grid;
+    const zone = new Set(cells);
+    this.events.push({ t: "shock", x: b.tx, y: b.ty, owner: b.ownerId, cells });
+    for (const p of this.players) {
+      if (!p.alive || !zone.has(g.idx(Math.floor(p.x), Math.floor(p.y))))
+        continue;
+      if (this.sameTeam(p.id, b.ownerId))
+        continue;
+      if (p.shieldTime > 0) {
+        this.events.push({ t: "shieldBlocked", player: p.id });
+        continue;
+      }
+      if (p.stunTime > 0 || p.stunImmune > 0)
+        continue;
+      this.stun(p, b.ownerId, SHOCK.stun);
+    }
+  }
+  stun(p, by, dur) {
+    p.stunTime = Math.min(SHOCK.stun, Math.max(0, dur));
+    p.moving = false;
+    p.slideX = p.slideY = 0;
+    this.events.push({ t: "stunned", player: p.id, by, dur: p.stunTime });
   }
   setFire(x, y, shape, owner) {
     const g = this.grid;
@@ -3101,6 +3210,9 @@ class Match {
     p.killedBy = killer;
     p.throwCharges = 0;
     p.bigCharges = 0;
+    p.elecCharges = 0;
+    p.stunTime = 0;
+    p.stunImmune = 0;
     p.stats.survivalTime = this.time;
     if (killer >= 0 && killer !== p.id)
       this.players[killer].stats.kills++;
@@ -3385,7 +3497,7 @@ function encodeSnapshot(m, acks, events) {
     tiles: Array.from(g.tiles).join(""),
     terrain: Array.from(g.terrain).join(""),
     fire,
-    bombs: [...m.bombs.values()].map((b) => [b.id, b.ownerId, b.tx, b.ty, r2(b.fuse), b.range, b.passable, b.fuseTotal, b.flight ? [b.flight.fromX, b.flight.fromY, r2(b.flight.t), r2(b.flight.dur)] : null, b.big ? 1 : 0]),
+    bombs: [...m.bombs.values()].map((b) => [b.id, b.ownerId, b.tx, b.ty, r2(b.fuse), b.range, b.passable, b.fuseTotal, b.flight ? [b.flight.fromX, b.flight.fromY, r2(b.flight.t), r2(b.flight.dur)] : null, b.big ? 1 : 0, b.elec ? 1 : 0]),
     bonuses: [...m.bonuses.values()].map((b) => [b.id, b.type, b.tx, b.ty, r2(b.invuln), r2(b.age)]),
     pending: m.pendingDrops.map(([x, y, l]) => [x, y, r2(l)]),
     hill: m.hill ? { scores: m.hill.scores.map(r2), respawn: m.hill.respawnIn.map(r2), holder: m.hill.holder, contested: m.hill.contested, site: m.hill.site, next: m.hill.next, moveIn: r2(m.hill.moveIn) } : null,

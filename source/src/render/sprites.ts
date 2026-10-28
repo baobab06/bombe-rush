@@ -461,6 +461,7 @@ export const BONUS_COLORS: Record<string, [string, string]> = {
   shield: ["#3fc6ff", "#1a7fb8"],
   throw: ["#ffb31a", "#c7700a"],
   big: ["#ff4257", "#a3101f"],
+  elec: ["#3fa9ff", "#1546a8"],
 };
 
 export function drawBonusIcon(ctx: Ctx, cx: number, cy: number, s: number, type: string) {
@@ -529,6 +530,29 @@ export function drawBonusIcon(ctx: Ctx, cx: number, cy: number, s: number, type:
         ctx.moveTo(cx - s * 0.36, cy - s * 0.08 + k * s * 0.12);
         ctx.lineTo(cx - s * 0.26, cy - s * 0.08 + k * s * 0.12);
         ctx.stroke();
+      }
+      break;
+    }
+    case "elec": {
+      // éclair jaune cerné de sombre
+      ctx.fillStyle = "#ffe45c";
+      ctx.strokeStyle = "#1b1b2e";
+      ctx.lineWidth = Math.max(1, s * 0.04);
+      ctx.beginPath();
+      ctx.moveTo(cx + s * 0.08, cy - s * 0.3);
+      ctx.lineTo(cx - s * 0.17, cy + s * 0.04);
+      ctx.lineTo(cx - s * 0.01, cy + s * 0.04);
+      ctx.lineTo(cx - s * 0.09, cy + s * 0.3);
+      ctx.lineTo(cx + s * 0.18, cy - s * 0.06);
+      ctx.lineTo(cx + s * 0.02, cy - s * 0.06);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#ffffff";
+      for (const [dx, dy] of [[-0.24, -0.2], [0.24, 0.16], [0.22, -0.24]]) {
+        ctx.beginPath();
+        ctx.arc(cx + s * dx, cy + s * dy, s * 0.03, 0, Math.PI * 2);
+        ctx.fill();
       }
       break;
     }

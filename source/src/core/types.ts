@@ -83,6 +83,12 @@ export interface PlayerState {
   throwCharges: number;
   /** capacité « grosse bombe » (0 ou 1) : la prochaine bombe a une portée bien plus grande */
   bigCharges: number;
+  /** capacité « bombe électrique » (0 ou 1) : la prochaine bombe paralyse autour d'elle */
+  elecCharges: number;
+  /** > 0 : paralysé (ne bouge pas, ne pose pas de bombe) pendant ce temps */
+  stunTime: number;
+  /** > 0 : vient d'être paralysé, ne peut pas l'être de nouveau tout de suite */
+  stunImmune: number;
   shieldCharges: number;
   shieldTime: number; // > 0 : bouclier actif
   deathTime: number; // temps de match à la mort
@@ -109,6 +115,8 @@ export interface BombState {
   flight?: { fromX: number; fromY: number; t: number; dur: number };
   /** grosse bombe (bonus) : portée augmentée, dessin et explosion plus imposants */
   big?: boolean;
+  /** bombe électrique (bonus) : décharge paralysante à l'explosion */
+  elec?: boolean;
 }
 
 export interface BonusState {
@@ -129,6 +137,9 @@ export type SimEvent =
   | { t: "bombLanded"; x: number; y: number; owner: number }
   | { t: "explode"; x: number; y: number; owner: number; cells: number; chain: number; big?: boolean }
   | { t: "blockDestroyed"; x: number; y: number }
+  /** décharge d'une bombe électrique : cases touchées (indices de grille) */
+  | { t: "shock"; x: number; y: number; owner: number; cells: number[] }
+  | { t: "stunned"; player: number; by: number; dur: number }
   | { t: "bonusSpawn"; x: number; y: number; type: string }
   | { t: "bonusPicked"; x: number; y: number; type: string; player: number }
   | { t: "bonusBurned"; x: number; y: number }

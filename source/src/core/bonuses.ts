@@ -68,6 +68,16 @@ export const BONUSES: Record<string, BonusDef> = {
       return true;
     },
   },
+  elec: {
+    id: "elec",
+    label: "Bombe électrique",
+    description: "Ta prochaine bombe paralyse les adversaires proches (1 s).",
+    apply(p) {
+      if (p.elecCharges >= 1) return false;
+      p.elecCharges = 1;
+      return true;
+    },
+  },
   shield: {
     id: "shield",
     label: "Bouclier",

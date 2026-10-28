@@ -254,7 +254,7 @@ export class Controls {
   }
 
   // ---------------------------------------------------------------- dessin
-  draw(ctx: CanvasRenderingContext2D, shieldCharges: number, shieldActive: number, bombsLeft: number, maxBombs: number, throwCharges = 0, bigCharges = 0) {
+  draw(ctx: CanvasRenderingContext2D, shieldCharges: number, shieldActive: number, bombsLeft: number, maxBombs: number, throwCharges = 0, bigCharges = 0, elecCharges = 0, stunTime = 0) {
     const L = this.layout;
     const now = performance.now();
     // la capacité vient d'apparaître / de disparaître
@@ -298,6 +298,7 @@ export class Controls {
 
     // bouton bombe (grosse bombe prête : halo rouge qui pulse, bombe plus grosse, étiquette XL)
     const big = bigCharges > 0;
+    const elec = elecCharges > 0;
     if (big) {
       const pulse = 0.5 + 0.5 * Math.sin(now / 160);
       ctx.save();
@@ -311,7 +312,8 @@ export class Controls {
       ctx.restore();
     }
     const bp = this.bombPointer !== null || now - this.bombPressT < 120;
-    this.button(ctx, L.bomb, big ? "#ff3d4f" : "#ff6a2b", big ? "#a3101f" : "#b8380c", bp, bombsLeft > 0, (x, y, r) => {
+    if (elec) this.drawElecHalo(ctx, L.bomb, now);
+    this.button(ctx, L.bomb, big ? "#ff3d4f" : elec ? "#2f8dff" : "#ff6a2b", big ? "#a3101f" : elec ? "#1546a8" : "#b8380c", bp, bombsLeft > 0 && stunTime <= 0, (x, y, r) => {
       ctx.fillStyle = "#1b1c33";
       ctx.beginPath();
       ctx.arc(x - r * 0.06, y + r * 0.08, r * (big ? 0.5 : 0.42), 0, Math.PI * 2);
@@ -331,6 +333,17 @@ export class Controls {
     // compteur de bombes disponibles
     this.badge(ctx, L.bomb.x + L.bomb.r * 0.62, L.bomb.y - L.bomb.r * 0.86, `${bombsLeft}/${maxBombs}`, "#1b1c33");
     if (big) this.badge(ctx, L.bomb.x - L.bomb.r * 0.7, L.bomb.y - L.bomb.r * 0.86, "XL", "#d61f33");
+    if (elec) this.badge(ctx, L.bomb.x - L.bomb.r * 0.95, L.bomb.y + (big ? -L.bomb.r * 0.2 : -L.bomb.r * 0.86), "⚡", "#1546a8");
+    if (stunTime > 0) {
+      // paralysé : jauge bleue autour du bouton bombe (les commandes reviennent à la fin)
+      ctx.save();
+      ctx.strokeStyle = "#7fd4ff";
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.arc(L.bomb.x, L.bomb.y, L.bomb.r + 7, -Math.PI / 2, -Math.PI / 2 + Math.min(1, stunTime / 1) * Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
 
     // bouton bouclier
     const sp = this.shieldPointer !== null || now - this.shieldPressT < 120;
@@ -447,6 +460,36 @@ export class Controls {
     ctx.arc(c.x, y, c.r - 4, Math.PI * 1.1, Math.PI * 1.9);
     ctx.stroke();
     icon(c.x, y, c.r);
+    ctx.restore();
+  }
+
+  /** Bombe électrique prête : petits éclairs bleus/jaunes autour du bouton bombe. */
+  private drawElecHalo(ctx: CanvasRenderingContext2D, c: Circle, now: number) {
+    ctx.save();
+    const halo = ctx.createRadialGradient(c.x, c.y, c.r * 0.8, c.x, c.y, c.r * 1.45);
+    halo.addColorStop(0, "rgba(80,170,255,0.5)");
+    halo.addColorStop(1, "rgba(80,170,255,0)");
+    ctx.fillStyle = halo;
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, c.r * 1.5, 0, Math.PI * 2);
+    ctx.fill();
+    const seed = Math.floor(now / 70);
+    ctx.lineWidth = 2.2;
+    ctx.lineJoin = "round";
+    for (let k = 0; k < 3; k++) {
+      const a = ((seed * 7 + k * 131) % 360) * (Math.PI / 180);
+      ctx.strokeStyle = k % 2 ? "#ffe45c" : "#9fe0ff";
+      ctx.beginPath();
+      for (let j = 0; j <= 4; j++) {
+        const rr = c.r * (1.02 + j * 0.09);
+        const aa = a + (j % 2 ? 0.12 : -0.12);
+        const px = c.x + Math.cos(aa) * rr;
+        const py = c.y + Math.sin(aa) * rr;
+        if (j === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.stroke();
+    }
     ctx.restore();
   }
 

@@ -53,6 +53,25 @@ export const BIG = {
   scale: 1.3,
 } as const;
 
+/**
+ * BOMBE ÉLECTRIQUE — réglages. À l'explosion (dégâts habituels, inchangés),
+ * une décharge part du centre : elle couvre la croix de l'explosion + toutes
+ * les cases à `radius` pas au plus (elle contourne les coins mais ne traverse
+ * ni les murs ni les caisses). Les joueurs touchés (sauf coéquipiers du
+ * poseur et joueurs sous bouclier) sont paralysés `stun` secondes.
+ *  - pas de cumul : un joueur déjà paralysé n'est pas re-paralysé ;
+ *  - après une paralysie, `immunity` secondes de protection (pas de
+ *    paralysie en boucle par des décharges qui s'enchaînent).
+ */
+export const SHOCK = {
+  /** durée de la paralysie (s) */
+  stun: 1.0,
+  /** portée de la décharge autour du centre (pas, contourne les coins) */
+  radius: 2,
+  /** protection contre une nouvelle paralysie juste après (s) */
+  immunity: 0.75,
+} as const;
+
 /** Portée d'une grosse bombe à partir de la portée normale du joueur. */
 export function bigRange(range: number): number {
   return Math.min(BIG.maxRange, Math.max(range + BIG.minExtra, Math.round(range * BIG.rangeMul)));

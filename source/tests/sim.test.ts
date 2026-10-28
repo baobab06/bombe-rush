@@ -605,6 +605,7 @@ console.log("Bombe à lancer (Domination)");
     m.hill!.moveIn = 1e9;
     m.hill!.throwSpawnIn = 1e9; // pas d'apparition automatique pendant ces tests
     m.hill!.bigSpawnIn = 1e9;
+    m.hill!.elecSpawnIn = 1e9;
     place(m, 0, 1, 1); place(m, 1, 13, 1); place(m, 2, 1, 11); place(m, 3, 13, 11);
     return m;
   };
@@ -911,6 +912,7 @@ console.log("Grosse bombe");
     m.hill!.moveIn = 1e9;
     m.hill!.throwSpawnIn = 1e9;
     m.hill!.bigSpawnIn = 1e9;
+    m.hill!.elecSpawnIn = 1e9;
     place(m, 0, 1, 1); place(m, 1, 13, 1); place(m, 2, 1, 11); place(m, 3, 13, 11);
     return m;
   };
@@ -1013,6 +1015,300 @@ console.log("Grosse bombe");
         if (m.phase === "over") ended++;
       }
       check(ended === 6 && stuck === 0 && bigs > 0, `bots (${modeId}) : 6 parties terminées, ${bigs} grosses explosions, ${selfKills} suicides, personne coincé`);
+    }
+  }
+}
+
+console.log("Bombe électrique");
+{
+  const { FACTORY } = await import("../src/maps/factory");
+  const { SHOCK } = await import("../src/core/bombs");
+  const { HILL_RULES } = await import("../src/core/hill");
+  const { encodeSnapshot, applySnapshot } = await import("../src/net/snapshot");
+  const slots = (n: number) => Array.from({ length: n }, (_, i) => ({ name: "P" + i, characterId: "pip", isBot: false, difficulty: "normal" as Difficulty }));
+  const open = (n = 3) => {
+    const m = emptyMatch(n);
+    const g = m.grid;
+    for (let y = 1; y < g.h - 1; y++) for (let x = 1; x < g.w - 1; x++) { g.tiles[g.idx(x, y)] = TILE.FLOOR; g.terrain[g.idx(x, y)] = TERRAIN.NONE; }
+    place(m, 0, 1, 1); place(m, 1, 11, 9);
+    if (n > 2) place(m, 2, 1, 9);
+    return m;
+  };
+  const cmdFor = (id: number, c: Partial<InputCmd>) => (mm: Match) => mm.players.map((p) => (p.id === id ? { mx: 0, my: 0, bomb: false, ability: false, ...c } : NO_INPUT));
+  const bombBy = (m: Match, id: number) => run(m, DT, cmdFor(id, { bomb: true }));
+  /** bombe du joueur 0 en (x, y), joueur 0 rangé ailleurs ensuite (hors zone) */
+  const plant = (m: Match, x: number, y: number, park: [number, number] = [1, 1]) => {
+    place(m, 0, x, y); bombBy(m, 0); place(m, 0, park[0], park[1]);
+    return [...m.bombs.values()].find((b) => b.tx === x && b.ty === y);
+  };
+  const untilBoom = (m: Match) => {
+    const ev: { t: string; player?: number }[] = [];
+    for (let i = 0; i < 400 && m.bombs.size; i++) { m.step(idle(m)); ev.push(...m.events); }
+    return ev;
+  };
+  {
+    const c = new Match({ seed: 3, map: FOREST, modeId: "classic", players: slots(4) });
+    const k = new Match({ seed: 3, map: FACTORY, modeId: "koth", players: slots(4) });
+    const ch = new Match({ seed: 3, map: FOREST, modeId: "chaos", players: slots(4) });
+    check([c, k, ch].every((mm) => (mm.loot.cfg.weights.elec ?? 0) > 0), "bonus présent dans le butin : Classique, Chaos et Domination");
+    check([c, k, ch].every((mm) => mm.players.every((p) => p.elecCharges === 0 && p.stunTime === 0)), "personne ne commence électrique ni paralysé");
+    check(SHOCK.stun >= 0.8 && SHOCK.stun <= 1.2, `durée de paralysie réglable (${SHOCK.stun} s)`);
+  }
+  {
+    // ramassage, pas de cumul, bombe suivante électrique puis normale
+    const m = open();
+    m.spawnBonus("elec", 3, 3); place(m, 0, 3, 3); run(m, 0.5);
+    check(m.players[0].elecCharges === 1, "ramasser le bonus donne une bombe électrique");
+    m.spawnBonus("elec", 4, 3); place(m, 0, 4, 3); run(m, 0.5);
+    check(m.players[0].elecCharges === 1, "une seule en réserve (pas de cumul)");
+    const b = plant(m, 5, 5)!;
+    check(!!b?.elec && b.range === 2 && !b.big && m.players[0].elecCharges === 0, "la bombe suivante est électrique (portée normale), réserve vidée");
+    untilBoom(m); run(m, 0.6);
+    const n = plant(m, 5, 5)!;
+    check(!!n && !n.elec, "la bombe d'après redevient normale");
+  }
+  {
+    // bombe normale : aucune décharge, personne paralysé
+    const m = open();
+    place(m, 1, 6, 6);
+    plant(m, 5, 5);
+    const ev = untilBoom(m);
+    check(!ev.some((e) => e.t === "shock" || e.t === "stunned") && m.players[1].stunTime === 0 && m.players[1].alive, "bombe normale : pas de décharge, l'adversaire en diagonale n'a rien");
+  }
+  {
+    // décharge : diagonale paralysée, croix = dégâts habituels, trop loin = rien
+    const m = open(4);
+    m.players[0].elecCharges = 1;
+    place(m, 1, 6, 6); place(m, 2, 7, 5); place(m, 3, 9, 7);
+    plant(m, 5, 5);
+    const ev = untilBoom(m);
+    const p1 = m.players[1];
+    check(ev.some((e) => e.t === "shock"), "explosion électrique : événement de décharge (éclairs)");
+    check(p1.alive && Math.abs(p1.stunTime - (SHOCK.stun - DT)) < 2 * DT + 1e-9 || (p1.alive && p1.stunTime > SHOCK.stun - 0.05), `adversaire en diagonale : vivant et paralysé (${p1.stunTime.toFixed(2)} s)`);
+    check(!m.players[2].alive, "adversaire dans la croix : éliminé comme d'habitude (dégâts séparés)");
+    check(m.players[3].stunTime === 0, "adversaire hors de portée : rien");
+  }
+  {
+    // paralysé : ne bouge pas, ne pose pas, ne lance pas ; tout revient à la fin, sans bombe « en attente »
+    const m = open();
+    const p = m.players[1];
+    p.throwCharges = 1;
+    place(m, 1, 6, 6);
+    m.players[0].elecCharges = 1;
+    plant(m, 5, 5);
+    for (let i = 0; i < 400 && m.bombs.size; i++) m.step(idle(m));
+    const x0 = p.x, y0 = p.y;
+    let moved = false, placed = 0, ticks = 0;
+    while (p.stunTime > DT + 1e-9 && ticks < 200) {
+      run(m, DT, cmdFor(1, { mx: 1, bomb: true, throw: true }));
+      ticks++;
+      if (p.x !== x0 || p.y !== y0) moved = true;
+      placed += m.events.filter((e) => e.t === "bombPlaced" || e.t === "bombThrown").length;
+    }
+    check(!moved && placed === 0, "paralysé : ne bouge pas, ne pose pas, ne lance pas (même en appuyant)");
+    run(m, DT); ticks++; // dernière image de la paralysie, sans appui
+    check(p.stunTime === 0 && ticks * DT <= SHOCK.stun + 1e-9 && ticks * DT >= SHOCK.stun - 0.05, `la paralysie s'arrête toute seule (${(ticks * DT).toFixed(2)} s)`);
+    check(p.throwCharges === 1, "la bombe à lancer n'a pas été gaspillée pendant la paralysie");
+    run(m, 0.3);
+    check(m.bombs.size === 0, "aucune action « en attente » ne part à la fin");
+    run(m, 0.25, cmdFor(1, { mx: 1 }));
+    check(p.x > x0 + 0.5, "après la paralysie : le joueur se déplace normalement");
+    run(m, 0.6);
+    run(m, DT, cmdFor(1, { bomb: true }));
+    check(m.bombs.size === 1, "après la paralysie : il pose une bombe normalement");
+  }
+  {
+    // bouclier utilisable pendant la paralysie
+    const m = open();
+    const p = m.players[1];
+    place(m, 1, 6, 6); p.shieldCharges = 1;
+    m.players[0].elecCharges = 1;
+    plant(m, 5, 5); untilBoom(m);
+    run(m, DT, cmdFor(1, { ability: true }));
+    check(p.stunTime > 0 && p.shieldTime > 0, "paralysé : le bouclier peut quand même s'activer");
+  }
+  {
+    // deux décharges qui se chevauchent (réaction en chaîne) : une seule paralysie, pas de cumul de durée
+    const m = open();
+    const p = m.players[1];
+    place(m, 1, 6, 6);
+    m.players[0].elecCharges = 1;
+    plant(m, 5, 5);
+    m.players[2].elecCharges = 1;
+    place(m, 2, 5, 7); bombBy(m, 2); place(m, 2, 1, 9);
+    const ev = untilBoom(m);
+    const shocks = ev.filter((e) => e.t === "shock").length;
+    const stuns = ev.filter((e) => e.t === "stunned" && e.player === 1).length;
+    check(shocks === 2 && stuns === 1 && p.stunTime <= SHOCK.stun, `2 décharges en même temps : paralysé une seule fois (${stuns}), durée ≤ ${SHOCK.stun} s`);
+  }
+  {
+    // paralysies enchaînées : protection juste après la fin, jamais bloqué indéfiniment
+    const m = open();
+    const p = m.players[1];
+    place(m, 1, 6, 6);
+    m.players[0].elecCharges = 1;
+    plant(m, 5, 5); untilBoom(m);
+    while (p.stunTime > 0) run(m, DT);
+    check(p.stunImmune > 0, "fin de paralysie : courte protection");
+    m.stun(p, 0, 5);
+    check(p.stunTime <= SHOCK.stun, "durée toujours bornée (même si on demande plus)");
+    p.stunTime = 0; p.stunImmune = SHOCK.immunity;
+    // nouvelle bombe électrique qui explose pendant la protection : rien
+    m.players[0].bombCooldown = 0; m.players[0].activeBombs = 0;
+    m.players[0].elecCharges = 1;
+    const b = plant(m, 7, 5)!;
+    b.fuse = DT;
+    run(m, 2 * DT);
+    check(p.alive && p.stunTime === 0, "pendant la protection : pas de nouvelle paralysie");
+    run(m, SHOCK.immunity + 0.6);
+    m.players[0].elecCharges = 1;
+    const c = plant(m, 7, 5)!;
+    c.fuse = DT;
+    run(m, 2 * DT);
+    check(p.stunTime > 0, "après la protection : de nouveau sensible");
+    // pire cas : décharges en boucle → le joueur a toujours des moments libres
+    const q = open(); const v = q.players[1]; place(q, 1, 6, 6);
+    let free = 0, longest = 0, cur = 0;
+    for (let i = 0; i < 60 * 10; i++) {
+      if (i % 20 === 0) { q.players[0].elecCharges = 1; q.players[0].bombCooldown = 0; q.players[0].activeBombs = 0; const bb = plant(q, 7, 5); if (bb) bb.fuse = DT; }
+      run(q, DT);
+      if (v.stunTime > 0) { cur++; longest = Math.max(longest, cur); } else { cur = 0; free++; }
+    }
+    check(v.alive && longest * DT <= SHOCK.stun + 1e-9 && longest > 0 && free * DT >= 2, `décharges toutes les 0,33 s pendant 10 s : jamais plus de ${SHOCK.stun} s d'affilée (${(longest * DT).toFixed(2)} s), ${(free * DT).toFixed(1)} s libres`);
+  }
+  {
+    // murs et caisses arrêtent la décharge
+    const m = open();
+    const g = m.grid;
+    g.tiles[g.idx(6, 5)] = TILE.WALL; g.tiles[g.idx(5, 6)] = TILE.BLOCK;
+    place(m, 1, 6, 6);
+    m.players[0].elecCharges = 1;
+    plant(m, 5, 5); untilBoom(m);
+    check(m.players[1].stunTime === 0, "derrière un mur et une caisse : pas de décharge");
+  }
+  {
+    // le poseur n'est pas protégé ; bouclier = protégé
+    const m = open();
+    m.players[0].elecCharges = 1;
+    plant(m, 5, 5, [6, 6]);
+    place(m, 1, 4, 4); m.players[1].shieldTime = 2;
+    const ev = untilBoom(m);
+    check(m.players[0].alive && m.players[0].stunTime > 0, "le poseur trop près de sa bombe électrique est paralysé aussi");
+    check(m.players[1].stunTime === 0 && ev.some((e) => e.t === "shieldBlocked" && e.player === 1), "bouclier actif : la décharge est bloquée");
+  }
+  {
+    // éliminé : réserve et paralysie effacées
+    const m = open();
+    m.players[1].elecCharges = 1; m.players[1].stunTime = 0.5;
+    m.kill(m.players[1], -1);
+    check(m.players[1].elecCharges === 0 && m.players[1].stunTime === 0, "éliminé : bombe électrique perdue, plus de paralysie");
+  }
+  {
+    // glace : pas de glissade pendant la paralysie
+    const m = open();
+    const g = m.grid;
+    for (let x = 1; x < g.w - 1; x++) g.terrain[g.idx(x, 7)] = TERRAIN.ICE;
+    const p = m.players[1];
+    place(m, 1, 4, 7);
+    p.slideX = 1; p.moving = true;
+    m.stun(p, 0, SHOCK.stun);
+    const x0 = p.x;
+    run(m, 0.5);
+    check(p.x === x0 && !p.moving && p.slideX === 0, "sur la glace : paralysé = immobile, pas de glissade");
+  }
+  // ---- Domination 2v2
+  const mk = (seed = 41) => {
+    const m = new Match({ seed, map: FACTORY, modeId: "koth", players: slots(4) });
+    m.phase = "playing";
+    m.hill!.moveIn = 1e9; m.hill!.throwSpawnIn = 1e9; m.hill!.bigSpawnIn = 1e9; m.hill!.elecSpawnIn = 1e9;
+    place(m, 0, 1, 1); place(m, 1, 13, 1); place(m, 2, 1, 11); place(m, 3, 13, 11);
+    return m;
+  };
+  {
+    const m = mk();
+    const mate = m.players.filter((p) => p.id !== 0 && m.sameTeam(0, p.id))[0];
+    const foe = m.players.filter((p) => m.isFoe(m.players[0], p))[0];
+    m.players[0].elecCharges = 1;
+    place(m, mate.id, 7, 5); place(m, foe.id, 5, 7);
+    plant(m, 6, 6);
+    untilBoom(m);
+    check(mate.stunTime === 0 && foe.alive && foe.stunTime > 0, "Domination : coéquipier épargné, adversaire paralysé");
+  }
+  {
+    // + grosse bombe et + lancer
+    const m = mk();
+    const p = m.players[0];
+    p.elecCharges = 1; p.bigCharges = 1; p.throwCharges = 1;
+    place(m, 0, 2, 6); p.faceX = 1; p.faceY = 0;
+    run(m, DT, cmdFor(0, { throw: true }));
+    const b = [...m.bombs.values()][0];
+    check(!!b?.flight && b.elec === true && b.big === true && p.elecCharges === 0, "électrique + grosse + lancée : les trois se combinent");
+    place(m, 0, 2, 8);
+    const foe = m.players.filter((o) => m.isFoe(p, o))[0];
+    place(m, foe.id, 6, 7);
+    const ev = untilBoom(m);
+    check(ev.some((e) => e.t === "shock") && foe.alive && foe.stunTime > 0, "la décharge part à l'atterrissage puis l'explosion");
+  }
+  {
+    // réapparition propre
+    const m = mk();
+    const p = m.players[0];
+    p.elecCharges = 1; p.stunTime = 0.8;
+    m.kill(p, 1);
+    run(m, HILL_RULES.respawnDelay + 0.3);
+    check(p.alive && p.elecCharges === 0 && p.stunTime === 0 && p.stunImmune === 0, "Domination : réapparition sans bombe électrique ni paralysie");
+  }
+  {
+    const spots = new Set<string>();
+    let appeared = 0, bad = 0;
+    for (let seed = 1; seed <= 12; seed++) {
+      const m = new Match({ seed, map: FACTORY, modeId: "koth", players: slots(4) });
+      m.phase = "playing"; m.hill!.moveIn = 1e9;
+      run(m, HILL_RULES.elecFirst + 0.2);
+      const b = [...m.bonuses.values()].find((x) => x.type === "elec");
+      if (!b) continue;
+      appeared++; spots.add(`${b.tx},${b.ty}`);
+      if (m.grid.blocksMove(b.tx, b.ty)) bad++;
+    }
+    check(appeared >= 9 && bad === 0 && spots.size >= 5, `Domination : le bonus apparaît régulièrement (${appeared}/12), à des endroits variés (${spots.size})`);
+  }
+  {
+    // en ligne : bombe électrique + paralysie transmises ; la prédiction ne fait pas bouger un joueur paralysé
+    const m = mk();
+    m.players[0].elecCharges = 1;
+    plant(m, 6, 6);
+    m.players[1].stunTime = 0.7;
+    const snap = JSON.parse(JSON.stringify(encodeSnapshot(m, [0, 0, 0, 0], [])));
+    const c = new Match({ seed: 41, map: FACTORY, modeId: "koth", players: slots(4) });
+    applySnapshot(c, snap);
+    const b = [...c.bombs.values()][0];
+    const q = c.players[1];
+    const x0 = q.x;
+    c.moveWithInput(q, { mx: -1, my: 0, bomb: false, ability: false });
+    check(!!b?.elec && Math.abs(q.stunTime - 0.7) < 1e-6 && q.x === x0, "en ligne : bombe électrique et paralysie recopiées, pas de faux déplacement prédit");
+  }
+  {
+    // bots avec bombes électriques : parties complètes, personne coincé, jamais paralysé plus de la durée
+    for (const [modeId, map] of [["classic", FOREST], ["koth", FACTORY]] as const) {
+      let stuck = 0, ended = 0, stuns = 0, longest = 0;
+      for (let seed = 1; seed <= 6; seed++) {
+        const m = new Match({ seed: seed * 53, map, modeId, players: Array.from({ length: 4 }, (_, i) => ({ name: "B" + i, characterId: "pip", isBot: true, difficulty: "hard" as Difficulty })) });
+        const brains = m.players.map((p) => new BotBrain(p.id, "hard", seed));
+        const cur = [0, 0, 0, 0];
+        let g = 0;
+        while (m.phase !== "over" && g++ < 60 * 200) {
+          if (g % 300 === 0) for (const p of m.players) if (p.alive) p.elecCharges = 1;
+          m.step(brains.map((b) => b.update(m, DT)));
+          stuns += m.events.filter((e) => e.t === "stunned").length;
+          for (const p of m.players) {
+            cur[p.id] = p.stunTime > 0 ? cur[p.id] + 1 : 0;
+            longest = Math.max(longest, cur[p.id]);
+            if (p.alive && m.grid.blocksMove(Math.floor(p.x), Math.floor(p.y))) stuck++;
+          }
+        }
+        if (m.phase === "over") ended++;
+      }
+      check(ended === 6 && stuck === 0 && stuns > 0 && longest * DT <= SHOCK.stun + 1e-9, `bots (${modeId}) : 6 parties terminées, ${stuns} paralysies, jamais plus de ${(longest * DT).toFixed(2)} s, personne coincé`);
     }
   }
 }

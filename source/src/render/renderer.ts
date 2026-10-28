@@ -5,7 +5,7 @@ import { abilityBurst, emitAura, emitTrail, speedLines } from "./charfx";
 import { getBoom, getEmote } from "../core/cosmetics";
 import { EMOTE_DURATION, drawEmoteBubble } from "./emote";
 import { RULES, TEAM_COLORS } from "../core/rules";
-import { BIG, THROW } from "../core/bombs";
+import { BIG, SHOCK, THROW } from "../core/bombs";
 import { TERRAIN, TILE, type SimEvent } from "../core/types";
 import { Particles } from "./particles";
 import {
@@ -33,6 +33,7 @@ const BONUS_TEXT: Record<string, string> = {
   shield: "BOUCLIER",
   throw: "BOMBE À LANCER !",
   big: "GROSSE BOMBE !",
+  elec: "BOMBE ÉLECTRIQUE !",
 };
 
 interface Dying {
@@ -78,6 +79,8 @@ export class Renderer {
   private bombBorn = new Map<number, number>();
   private dying: Dying[] = [];
   private breaking: { x: number; y: number; t: number }[] = [];
+  /** décharges électriques en cours d'affichage (bref) */
+  private shocks: { x: number; y: number; cells: number[]; at: number }[] = [];
   private landed = new Map<number, number>();
   private boomAt = -10;
   private pfx = new Map<number, PlayerFx>();
@@ -96,6 +99,7 @@ export class Renderer {
     this.bombBorn.clear();
     this.dying = [];
     this.breaking = [];
+    this.shocks = [];
     this.landed.clear();
     this.pfx.clear();
     this.shake = 0;
@@ -171,6 +175,24 @@ export class Renderer {
             this.flash = Math.min(0.5, this.flash + 0.18);
           }
           break;
+        case "shock": {
+          this.shocks.push({ x: e.x, y: e.y, cells: e.cells, at: this.time });
+          P.spawn("ring", e.x + 0.5, e.y + 0.5, { life: 0.35, size: 1.2, color: "#7fd4ff" });
+          for (let k = 0; k < 10; k++) {
+            const a = (k / 10) * Math.PI * 2;
+            P.spawn("spark", e.x + 0.5, e.y + 0.5, { vx: Math.cos(a) * 4, vy: Math.sin(a) * 4, vz: 2 + Math.random() * 2, life: 0.4, size: 0.08, color: k % 2 ? "#ffe45c" : "#9fe0ff" });
+          }
+          this.flash = Math.min(0.3, this.flash + 0.08);
+          break;
+        }
+        case "stunned": {
+          const sp = m.players[e.player];
+          if (sp) {
+            P.spawn("ring", sp.x, sp.y, { life: 0.3, size: 0.45, color: "#ffe45c" });
+            if (e.player === this.localPlayer) P.text(sp.x, sp.y - 0.9, "PARALYSÉ !", "#7fd4ff");
+          }
+          break;
+        }
         case "blockDestroyed": {
           this.breaking.push({ x: e.x, y: e.y, t: 0 });
           P.blockBreak(e.x + 0.5, e.y + 0.5, this.art.debris(e.x, e.y));
@@ -401,6 +423,7 @@ export class Renderer {
     ctx.rotate(Math.sin(k * Math.PI) * 0.5);
     if (b.big) ctx.scale(BIG.scale, BIG.scale);
     drawBomb(ctx, 0, 0, s, 1, t, 1, 9, m.bombRules.warn, owner?.boomId ? getBoom(owner.boomId).bomb : undefined);
+    if (b.elec) this.drawElecBomb(ctx, 0, 0, s, t);
     ctx.restore();
   }
 
@@ -683,6 +706,7 @@ export class Renderer {
               ctx.restore();
               this.drawBigBand(ctx, X + s / 2, Y + s / 2, s);
             } else drawBomb(ctx, X + s / 2, Y + s / 2, s, b.fuse / b.fuseTotal, t, t - this.bombBorn.get(b.id)!, b.fuse, m.bombRules.warn, owner?.boomId ? getBoom(owner.boomId).bomb : undefined);
+            if (b.elec) this.drawElecBomb(ctx, X + s / 2, Y + s / 2, s * (b.big ? BIG.scale : 1), t);
           }
         }
       }
@@ -717,6 +741,9 @@ export class Renderer {
 
     // bombes lancées : cible au sol, ombre qui suit et bombe en cloche par-dessus tout
     for (const b of m.bombs.values()) if (b.flight) this.drawFlyingBomb(m, b);
+
+    // bombes électriques : zone de la décharge (voile bleu léger) + éclairs, très bref
+    if (this.shocks.length) this.drawShocks(m);
 
     // mode Chaos : zones annoncées (rayures rouges qui pulsent)
     if (ch?.pending) {
@@ -1018,6 +1045,126 @@ export class Renderer {
       celebrate: won,
     }, this.art.ink);
     if (p.shieldTime > 0) drawShield(ctx, cx, cy - s * 0.12, s, t, p.shieldTime);
+    if (p.alive && p.stunTime > 0) this.drawStunned(ctx, cx, cy, s, t, p.stunTime);
+  }
+
+  /** Éclair en zigzag entre deux points (pixels). */
+  private bolt(ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2: number, jag: number, steps = 5) {
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    const nx = -(y2 - y1);
+    const ny = x2 - x1;
+    const len = Math.hypot(nx, ny) || 1;
+    for (let k = 1; k < steps; k++) {
+      const f = k / steps;
+      const o = (Math.random() - 0.5) * 2 * jag;
+      ctx.lineTo(x1 + (x2 - x1) * f + (nx / len) * o, y1 + (y2 - y1) * f + (ny / len) * o);
+    }
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+  }
+
+  /** Bombe électrique : reflet bleu + petits arcs qui crépitent autour. */
+  private drawElecBomb(ctx: CanvasRenderingContext2D, cx: number, cy: number, s: number, t: number) {
+    ctx.save();
+    const g = ctx.createRadialGradient(cx, cy, s * 0.15, cx, cy, s * 0.55);
+    g.addColorStop(0, "rgba(90,180,255,0.0)");
+    g.addColorStop(0.6, "rgba(90,180,255,0.28)");
+    g.addColorStop(1, "rgba(90,180,255,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(cx, cy, s * 0.55, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    const n = 2 + (Math.floor(t * 14) % 2);
+    for (let k = 0; k < n; k++) {
+      const a = Math.random() * Math.PI * 2;
+      ctx.strokeStyle = k % 2 ? "#ffe45c" : "#bfeaff";
+      ctx.lineWidth = Math.max(1.2, s * 0.035);
+      this.bolt(ctx, cx + Math.cos(a) * s * 0.22, cy + Math.sin(a) * s * 0.22, cx + Math.cos(a + 0.4) * s * 0.46, cy + Math.sin(a + 0.4) * s * 0.46, s * 0.05, 3);
+    }
+    // petit éclair sur la bombe
+    ctx.fillStyle = "#ffe45c";
+    ctx.beginPath();
+    ctx.moveTo(cx + s * 0.03, cy - s * 0.12);
+    ctx.lineTo(cx - s * 0.07, cy + s * 0.03);
+    ctx.lineTo(cx, cy + s * 0.03);
+    ctx.lineTo(cx - s * 0.03, cy + s * 0.14);
+    ctx.lineTo(cx + s * 0.08, cy - s * 0.02);
+    ctx.lineTo(cx + s * 0.01, cy - s * 0.02);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  /** Décharge : voile bleu léger sur les cases touchées + éclairs depuis le centre (≈ 0,4 s). */
+  private drawShocks(m: Match) {
+    const ctx = this.ctx;
+    const s = this.s;
+    const g = m.grid;
+    const DUR = 0.4;
+    this.shocks = this.shocks.filter((sh) => this.time - sh.at < DUR);
+    for (const sh of this.shocks) {
+      const k = (this.time - sh.at) / DUR;
+      const a = 1 - k;
+      ctx.save();
+      ctx.fillStyle = `rgba(110,190,255,${0.26 * a})`;
+      for (const i of sh.cells) {
+        const x = i % g.w;
+        const y = (i - x) / g.w;
+        ctx.fillRect(x * s + 1, y * s + 1, s - 2, s - 2);
+      }
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      const cx = (sh.x + 0.5) * s;
+      const cy = (sh.y + 0.5) * s;
+      const far = sh.cells.filter((_, j) => j % 2 === 0).slice(0, 10);
+      for (const [j, i] of far.entries()) {
+        const x = i % g.w;
+        const y = (i - x) / g.w;
+        ctx.globalAlpha = a;
+        ctx.strokeStyle = j % 3 === 0 ? "#ffe45c" : "#bfeaff";
+        ctx.lineWidth = Math.max(2, s * 0.07 * a + 1);
+        this.bolt(ctx, cx, cy, (x + 0.5) * s, (y + 0.5) * s, s * 0.14, 4);
+      }
+      ctx.restore();
+    }
+  }
+
+  /** Joueur paralysé : arcs électriques autour du corps + jauge de temps restant. */
+  private drawStunned(ctx: CanvasRenderingContext2D, cx: number, cy: number, s: number, t: number, left: number) {
+    ctx.save();
+    // halo bleu discret autour du personnage (il reste bien visible)
+    const hg = ctx.createRadialGradient(cx, cy - s * 0.15, s * 0.15, cx, cy - s * 0.15, s * 0.6);
+    hg.addColorStop(0, "rgba(120,200,255,0)");
+    hg.addColorStop(0.7, `rgba(120,200,255,${0.22 + 0.12 * Math.sin(t * 30)})`);
+    hg.addColorStop(1, "rgba(120,200,255,0)");
+    ctx.fillStyle = hg;
+    ctx.beginPath();
+    ctx.arc(cx, cy - s * 0.15, s * 0.6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    for (let k = 0; k < 4; k++) {
+      const a = Math.random() * Math.PI * 2;
+      ctx.strokeStyle = k % 2 ? "#ffe45c" : "#bfeaff";
+      ctx.lineWidth = Math.max(2, s * 0.06);
+      this.bolt(ctx, cx + Math.cos(a) * s * 0.18, cy - s * 0.15 + Math.sin(a) * s * 0.28, cx + Math.cos(a + 0.9) * s * 0.36, cy - s * 0.15 + Math.sin(a + 0.9) * s * 0.4, s * 0.06, 3);
+    }
+    // jauge : anneau bleu au sol qui se vide
+    ctx.strokeStyle = "#7fd4ff";
+    ctx.lineWidth = Math.max(2, s * 0.06);
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + s * 0.32, s * 0.4, s * 0.15, 0, -Math.PI / 2, -Math.PI / 2 + Math.min(1, left / SHOCK.stun) * Math.PI * 2);
+    ctx.stroke();
+    // petit éclair au-dessus de la tête
+    const bob = Math.sin(t * 18) * s * 0.03;
+    ctx.font = `${Math.round(s * 0.34)}px sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("⚡", cx + s * 0.28, cy - s * 0.78 + bob);
+    ctx.restore();
   }
 
   private drawEmote(id: number, x: number, y: number, head: number) {

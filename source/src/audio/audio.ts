@@ -28,7 +28,9 @@ export type Sfx =
   | "whoosh"
   | "unlock"
   | "deny"
-  | "tab";
+  | "tab"
+  | "zap"
+  | "stunned";
 
 type Track = "menu" | "game" | null;
 
@@ -202,6 +204,15 @@ class AudioEngine {
       case "equip":
         this.osc("sine", 400, 900, t, 0.16, 0.25);
         this.osc("triangle", 1200, 1600, t + 0.06, 0.14, 0.12);
+        break;
+      case "zap":
+        // décharge électrique : grésillement aigu + bourdonnement en dents de scie
+        this.burst(t, 0.22, 0.4 * v, "highpass", 5000, 2500);
+        this.osc("sawtooth", 1400, 180, t, 0.25, 0.16 * v);
+        this.osc("square", 90, 60, t + 0.02, 0.3, 0.12 * v);
+        break;
+      case "stunned":
+        for (let i = 0; i < 4; i++) this.osc("square", 1200 - i * 150, 900 - i * 150, t + i * 0.06, 0.05, 0.08 * v);
         break;
       case "whoosh":
         this.burst(t, 0.28, 0.25 * v, "bandpass", 600, 2400);
