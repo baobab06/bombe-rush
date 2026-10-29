@@ -78,6 +78,16 @@ export const BONUSES: Record<string, BonusDef> = {
       return true;
     },
   },
+  freeze: {
+    id: "freeze",
+    label: "Bombe gelante",
+    description: "Ta prochaine bombe ralentit les adversaires proches (−40 %, 2,5 s).",
+    apply(p) {
+      if (p.freezeCharges >= 1) return false;
+      p.freezeCharges = 1;
+      return true;
+    },
+  },
   shield: {
     id: "shield",
     label: "Bouclier",

@@ -5,7 +5,7 @@ import { abilityBurst, emitAura, emitTrail, speedLines } from "./charfx";
 import { getBoom, getEmote } from "../core/cosmetics";
 import { EMOTE_DURATION, drawEmoteBubble } from "./emote";
 import { RULES, TEAM_COLORS } from "../core/rules";
-import { BIG, SHOCK, THROW } from "../core/bombs";
+import { BIG, FREEZE, SHOCK, THROW } from "../core/bombs";
 import { TERRAIN, TILE, type SimEvent } from "../core/types";
 import { Particles } from "./particles";
 import {
@@ -34,6 +34,7 @@ const BONUS_TEXT: Record<string, string> = {
   throw: "BOMBE À LANCER !",
   big: "GROSSE BOMBE !",
   elec: "BOMBE ÉLECTRIQUE !",
+  freeze: "BOMBE GELANTE !",
 };
 
 interface Dying {
@@ -81,6 +82,8 @@ export class Renderer {
   private breaking: { x: number; y: number; t: number }[] = [];
   /** décharges électriques en cours d'affichage (bref) */
   private shocks: { x: number; y: number; cells: number[]; at: number }[] = [];
+  /** souffles glacés en cours d'affichage */
+  private frosts: { x: number; y: number; cells: number[]; at: number }[] = [];
   private landed = new Map<number, number>();
   private boomAt = -10;
   private pfx = new Map<number, PlayerFx>();
@@ -100,6 +103,7 @@ export class Renderer {
     this.dying = [];
     this.breaking = [];
     this.shocks = [];
+    this.frosts = [];
     this.landed.clear();
     this.pfx.clear();
     this.shake = 0;
@@ -183,6 +187,31 @@ export class Renderer {
             P.spawn("spark", e.x + 0.5, e.y + 0.5, { vx: Math.cos(a) * 4, vy: Math.sin(a) * 4, vz: 2 + Math.random() * 2, life: 0.4, size: 0.08, color: k % 2 ? "#ffe45c" : "#9fe0ff" });
           }
           this.flash = Math.min(0.3, this.flash + 0.08);
+          break;
+        }
+        case "frost": {
+          this.frosts.push({ x: e.x, y: e.y, cells: e.cells, at: this.time });
+          P.spawn("ring", e.x + 0.5, e.y + 0.5, { life: 0.5, size: 1.3, color: "#c9f3ff" });
+          // particules de glace : éclats qui partent du centre + flocons sur la zone
+          for (let k = 0; k < 14; k++) {
+            const a = (k / 14) * Math.PI * 2;
+            P.spawn("spark", e.x + 0.5, e.y + 0.5, { vx: Math.cos(a) * 3.5, vy: Math.sin(a) * 3.5, vz: 2 + Math.random() * 2, life: 0.55, size: 0.09, color: k % 2 ? "#ffffff" : "#9be7ff" });
+          }
+          const gw = m.grid.w;
+          for (const i of e.cells) {
+            if (Math.random() < 0.5) continue;
+            const x = i % gw;
+            const y = (i - x) / gw;
+            P.spawn("twinkle", x + 0.5 + (Math.random() - 0.5) * 0.7, y + 0.5 + (Math.random() - 0.5) * 0.7, { z: 0.3 + Math.random() * 0.6, vz: -0.2, life: 0.9, size: 0.09, color: Math.random() < 0.5 ? "#ffffff" : "#bff0ff" });
+          }
+          break;
+        }
+        case "frozen": {
+          const fp = m.players[e.player];
+          if (fp) {
+            P.spawn("ring", fp.x, fp.y, { life: 0.4, size: 0.5, color: "#c9f3ff" });
+            if (e.player === this.localPlayer) P.text(fp.x, fp.y - 0.9, "GELÉ !", "#bff0ff");
+          }
           break;
         }
         case "stunned": {
@@ -424,6 +453,7 @@ export class Renderer {
     if (b.big) ctx.scale(BIG.scale, BIG.scale);
     drawBomb(ctx, 0, 0, s, 1, t, 1, 9, m.bombRules.warn, owner?.boomId ? getBoom(owner.boomId).bomb : undefined);
     if (b.elec) this.drawElecBomb(ctx, 0, 0, s, t);
+    if (b.freeze) this.drawFrostBomb(ctx, 0, 0, s, t);
     ctx.restore();
   }
 
@@ -707,6 +737,7 @@ export class Renderer {
               this.drawBigBand(ctx, X + s / 2, Y + s / 2, s);
             } else drawBomb(ctx, X + s / 2, Y + s / 2, s, b.fuse / b.fuseTotal, t, t - this.bombBorn.get(b.id)!, b.fuse, m.bombRules.warn, owner?.boomId ? getBoom(owner.boomId).bomb : undefined);
             if (b.elec) this.drawElecBomb(ctx, X + s / 2, Y + s / 2, s * (b.big ? BIG.scale : 1), t);
+            if (b.freeze) this.drawFrostBomb(ctx, X + s / 2, Y + s / 2, s * (b.big ? BIG.scale : 1), t);
           }
         }
       }
@@ -744,6 +775,8 @@ export class Renderer {
 
     // bombes électriques : zone de la décharge (voile bleu léger) + éclairs, très bref
     if (this.shocks.length) this.drawShocks(m);
+    // bombes gelantes : givre sur les cases touchées, qui fond doucement
+    if (this.frosts.length) this.drawFrosts(m);
 
     // mode Chaos : zones annoncées (rayures rouges qui pulsent)
     if (ch?.pending) {
@@ -1045,7 +1078,124 @@ export class Renderer {
       celebrate: won,
     }, this.art.ink);
     if (p.shieldTime > 0) drawShield(ctx, cx, cy - s * 0.12, s, t, p.shieldTime);
+    if (p.alive && p.slowTime > 0) this.drawFrozen(ctx, cx, cy, s, t, p.slowTime);
     if (p.alive && p.stunTime > 0) this.drawStunned(ctx, cx, cy, s, t, p.stunTime);
+  }
+
+  /** Flocon simple (3 traits) — centre (x, y), rayon r. */
+  private flake(ctx: CanvasRenderingContext2D, x: number, y: number, r: number) {
+    for (let j = 0; j < 3; j++) {
+      const b = (j * Math.PI) / 3;
+      ctx.beginPath();
+      ctx.moveTo(x - Math.cos(b) * r, y - Math.sin(b) * r);
+      ctx.lineTo(x + Math.cos(b) * r, y + Math.sin(b) * r);
+      ctx.stroke();
+    }
+  }
+
+  /** Bombe gelante : reflet glacé, givre sur le dessus et petit flocon. */
+  private drawFrostBomb(ctx: CanvasRenderingContext2D, cx: number, cy: number, s: number, t: number) {
+    ctx.save();
+    const g = ctx.createRadialGradient(cx, cy, s * 0.12, cx, cy, s * 0.52);
+    g.addColorStop(0, "rgba(200,245,255,0.0)");
+    g.addColorStop(0.65, "rgba(200,245,255,0.32)");
+    g.addColorStop(1, "rgba(200,245,255,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(cx, cy, s * 0.52, 0, Math.PI * 2);
+    ctx.fill();
+    // calotte de givre
+    ctx.fillStyle = "rgba(230,250,255,0.85)";
+    ctx.beginPath();
+    ctx.ellipse(cx - s * 0.04, cy - s * 0.17, s * 0.17, s * 0.07, -0.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = Math.max(1.2, s * 0.035);
+    ctx.lineCap = "round";
+    this.flake(ctx, cx + s * 0.02, cy + s * 0.04, s * 0.1);
+    // cristaux qui scintillent autour
+    for (let k = 0; k < 3; k++) {
+      const a = t * 1.5 + (k * Math.PI * 2) / 3;
+      ctx.globalAlpha = 0.5 + 0.5 * Math.sin(t * 5 + k);
+      this.flake(ctx, cx + Math.cos(a) * s * 0.42, cy + Math.sin(a) * s * 0.36, s * 0.05);
+    }
+    ctx.restore();
+  }
+
+  /** Souffle glacé : voile blanc-bleu et éclats de givre sur les cases touchées (≈ 0,7 s). */
+  private drawFrosts(m: Match) {
+    const ctx = this.ctx;
+    const s = this.s;
+    const g = m.grid;
+    const DUR = 0.7;
+    this.frosts = this.frosts.filter((f) => this.time - f.at < DUR);
+    for (const f of this.frosts) {
+      const k = (this.time - f.at) / DUR;
+      const a = 1 - k;
+      const grow = Math.min(1, k * 4);
+      ctx.save();
+      for (const i of f.cells) {
+        const x = i % g.w;
+        const y = (i - x) / g.w;
+        const d = Math.abs(x - f.x) + Math.abs(y - f.y);
+        // l'onde de froid part du centre
+        if (d > grow * 6) continue;
+        ctx.fillStyle = `rgba(190,240,255,${0.3 * a})`;
+        ctx.fillRect(x * s + 2, y * s + 2, s - 4, s - 4);
+        ctx.strokeStyle = `rgba(255,255,255,${0.7 * a})`;
+        ctx.lineWidth = Math.max(1, s * 0.03);
+        ctx.strokeRect(x * s + 2, y * s + 2, s - 4, s - 4);
+        // éclats de glace aux coins de la case
+        ctx.fillStyle = `rgba(255,255,255,${0.8 * a})`;
+        const h = ((i * 37) % 5) / 5;
+        ctx.beginPath();
+        ctx.moveTo(x * s + s * (0.2 + h * 0.5), y * s + s * 0.22);
+        ctx.lineTo(x * s + s * (0.26 + h * 0.5), y * s + s * 0.42);
+        ctx.lineTo(x * s + s * (0.14 + h * 0.5), y * s + s * 0.38);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+  }
+
+  /** Joueur gelé : voile glacé léger sur le personnage, givre au sol, flocon et jauge. */
+  private drawFrozen(ctx: CanvasRenderingContext2D, cx: number, cy: number, s: number, t: number, left: number) {
+    ctx.save();
+    // voile glacé (le personnage reste bien visible dessous)
+    const vg = ctx.createRadialGradient(cx, cy - s * 0.15, s * 0.05, cx, cy - s * 0.15, s * 0.5);
+    vg.addColorStop(0, "rgba(200,245,255,0.4)");
+    vg.addColorStop(1, "rgba(200,245,255,0)");
+    ctx.fillStyle = vg;
+    ctx.beginPath();
+    ctx.arc(cx, cy - s * 0.15, s * 0.5, 0, Math.PI * 2);
+    ctx.fill();
+    // plaque de givre au sol
+    ctx.fillStyle = "rgba(210,248,255,0.45)";
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + s * 0.32, s * 0.36, s * 0.13, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // jauge du temps restant
+    ctx.strokeStyle = "#e8fbff";
+    ctx.lineWidth = Math.max(2, s * 0.05);
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + s * 0.32, s * 0.4, s * 0.15, 0, -Math.PI / 2, -Math.PI / 2 + Math.min(1, left / FREEZE.duration) * Math.PI * 2);
+    ctx.stroke();
+    // cristaux qui tournent autour
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = Math.max(1, s * 0.03);
+    ctx.lineCap = "round";
+    for (let k = 0; k < 3; k++) {
+      const a = t * 2 + (k * Math.PI * 2) / 3;
+      ctx.globalAlpha = 0.6 + 0.4 * Math.sin(t * 6 + k);
+      this.flake(ctx, cx + Math.cos(a) * s * 0.38, cy - s * 0.1 + Math.sin(a) * s * 0.28, s * 0.06);
+    }
+    ctx.globalAlpha = 1;
+    ctx.font = `${Math.round(s * 0.32)}px sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("❄️", cx - s * 0.3, cy - s * 0.78 + Math.sin(t * 4) * s * 0.03);
+    ctx.restore();
   }
 
   /** Éclair en zigzag entre deux points (pixels). */

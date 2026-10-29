@@ -89,6 +89,12 @@ export interface PlayerState {
   stunTime: number;
   /** > 0 : vient d'être paralysé, ne peut pas l'être de nouveau tout de suite */
   stunImmune: number;
+  /** capacité « bombe gelante » (0 ou 1) : la prochaine bombe ralentit autour d'elle */
+  freezeCharges: number;
+  /** > 0 : gelé (ralenti) pendant ce temps — la vitesse de base n'est pas touchée */
+  slowTime: number;
+  /** > 0 : vient d'être gelé, ne peut pas l'être de nouveau tout de suite */
+  slowImmune: number;
   shieldCharges: number;
   shieldTime: number; // > 0 : bouclier actif
   deathTime: number; // temps de match à la mort
@@ -117,6 +123,8 @@ export interface BombState {
   big?: boolean;
   /** bombe électrique (bonus) : décharge paralysante à l'explosion */
   elec?: boolean;
+  /** bombe gelante (bonus) : souffle glacé ralentissant à l'explosion */
+  freeze?: boolean;
 }
 
 export interface BonusState {
@@ -140,6 +148,9 @@ export type SimEvent =
   /** décharge d'une bombe électrique : cases touchées (indices de grille) */
   | { t: "shock"; x: number; y: number; owner: number; cells: number[] }
   | { t: "stunned"; player: number; by: number; dur: number }
+  /** souffle glacé d'une bombe gelante : cases touchées (indices de grille) */
+  | { t: "frost"; x: number; y: number; owner: number; cells: number[] }
+  | { t: "frozen"; player: number; by: number; dur: number }
   | { t: "bonusSpawn"; x: number; y: number; type: string }
   | { t: "bonusPicked"; x: number; y: number; type: string; player: number }
   | { t: "bonusBurned"; x: number; y: number }

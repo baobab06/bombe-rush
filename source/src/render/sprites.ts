@@ -462,6 +462,7 @@ export const BONUS_COLORS: Record<string, [string, string]> = {
   throw: ["#ffb31a", "#c7700a"],
   big: ["#ff4257", "#a3101f"],
   elec: ["#3fa9ff", "#1546a8"],
+  freeze: ["#7fe0f7", "#2a8fb0"],
 };
 
 export function drawBonusIcon(ctx: Ctx, cx: number, cy: number, s: number, type: string) {
@@ -531,6 +532,36 @@ export function drawBonusIcon(ctx: Ctx, cx: number, cy: number, s: number, type:
         ctx.lineTo(cx - s * 0.26, cy - s * 0.08 + k * s * 0.12);
         ctx.stroke();
       }
+      break;
+    }
+    case "freeze": {
+      // gros flocon blanc
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineCap = "round";
+      ctx.lineWidth = Math.max(1.5, s * 0.06);
+      for (let j = 0; j < 3; j++) {
+        const b = (j * Math.PI) / 3 + Math.PI / 2;
+        const dx = Math.cos(b) * s * 0.27;
+        const dy = Math.sin(b) * s * 0.27;
+        ctx.beginPath();
+        ctx.moveTo(cx - dx, cy - dy);
+        ctx.lineTo(cx + dx, cy + dy);
+        ctx.stroke();
+        for (const sg of [1, -1]) {
+          const ex = cx + sg * dx * 0.62;
+          const ey = cy + sg * dy * 0.62;
+          for (const side of [0.6, -0.6]) {
+            ctx.beginPath();
+            ctx.moveTo(ex, ey);
+            ctx.lineTo(ex + Math.cos(b + side + (sg < 0 ? Math.PI : 0)) * s * 0.09, ey + Math.sin(b + side + (sg < 0 ? Math.PI : 0)) * s * 0.09);
+            ctx.stroke();
+          }
+        }
+      }
+      ctx.fillStyle = "#1f7f9e";
+      ctx.beginPath();
+      ctx.arc(cx, cy, s * 0.05, 0, Math.PI * 2);
+      ctx.fill();
       break;
     }
     case "elec": {

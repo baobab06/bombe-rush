@@ -254,7 +254,7 @@ export class Controls {
   }
 
   // ---------------------------------------------------------------- dessin
-  draw(ctx: CanvasRenderingContext2D, shieldCharges: number, shieldActive: number, bombsLeft: number, maxBombs: number, throwCharges = 0, bigCharges = 0, elecCharges = 0, stunTime = 0) {
+  draw(ctx: CanvasRenderingContext2D, shieldCharges: number, shieldActive: number, bombsLeft: number, maxBombs: number, throwCharges = 0, bigCharges = 0, elecCharges = 0, stunTime = 0, freezeCharges = 0) {
     const L = this.layout;
     const now = performance.now();
     // la capacité vient d'apparaître / de disparaître
@@ -299,6 +299,7 @@ export class Controls {
     // bouton bombe (grosse bombe prête : halo rouge qui pulse, bombe plus grosse, étiquette XL)
     const big = bigCharges > 0;
     const elec = elecCharges > 0;
+    const frz = freezeCharges > 0;
     if (big) {
       const pulse = 0.5 + 0.5 * Math.sin(now / 160);
       ctx.save();
@@ -313,7 +314,8 @@ export class Controls {
     }
     const bp = this.bombPointer !== null || now - this.bombPressT < 120;
     if (elec) this.drawElecHalo(ctx, L.bomb, now);
-    this.button(ctx, L.bomb, big ? "#ff3d4f" : elec ? "#2f8dff" : "#ff6a2b", big ? "#a3101f" : elec ? "#1546a8" : "#b8380c", bp, bombsLeft > 0 && stunTime <= 0, (x, y, r) => {
+    if (frz) this.drawFrostHalo(ctx, L.bomb, now);
+    this.button(ctx, L.bomb, big ? "#ff3d4f" : elec ? "#2f8dff" : frz ? "#5fd3f0" : "#ff6a2b", big ? "#a3101f" : elec ? "#1546a8" : frz ? "#1f7f9e" : "#b8380c", bp, bombsLeft > 0 && stunTime <= 0, (x, y, r) => {
       ctx.fillStyle = "#1b1c33";
       ctx.beginPath();
       ctx.arc(x - r * 0.06, y + r * 0.08, r * (big ? 0.5 : 0.42), 0, Math.PI * 2);
@@ -334,6 +336,7 @@ export class Controls {
     this.badge(ctx, L.bomb.x + L.bomb.r * 0.62, L.bomb.y - L.bomb.r * 0.86, `${bombsLeft}/${maxBombs}`, "#1b1c33");
     if (big) this.badge(ctx, L.bomb.x - L.bomb.r * 0.7, L.bomb.y - L.bomb.r * 0.86, "XL", "#d61f33");
     if (elec) this.badge(ctx, L.bomb.x - L.bomb.r * 0.95, L.bomb.y + (big ? -L.bomb.r * 0.2 : -L.bomb.r * 0.86), "⚡", "#1546a8");
+    if (frz) this.badge(ctx, L.bomb.x - L.bomb.r * 0.95, L.bomb.y + L.bomb.r * (elec ? 0.45 : big ? -0.2 : -0.86), "❄", "#1f7f9e");
     if (stunTime > 0) {
       // paralysé : jauge bleue autour du bouton bombe (les commandes reviennent à la fin)
       ctx.save();
@@ -489,6 +492,33 @@ export class Controls {
         else ctx.lineTo(px, py);
       }
       ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  /** Bombe gelante prête : halo glacé + petits flocons qui tournent autour du bouton bombe. */
+  private drawFrostHalo(ctx: CanvasRenderingContext2D, c: Circle, now: number) {
+    ctx.save();
+    const halo = ctx.createRadialGradient(c.x, c.y, c.r * 0.8, c.x, c.y, c.r * 1.45);
+    halo.addColorStop(0, "rgba(170,235,255,0.5)");
+    halo.addColorStop(1, "rgba(170,235,255,0)");
+    ctx.fillStyle = halo;
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, c.r * 1.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#e8fbff";
+    ctx.lineWidth = 1.8;
+    for (let k = 0; k < 4; k++) {
+      const a = now / 1400 + (k * Math.PI) / 2;
+      const x = c.x + Math.cos(a) * c.r * 1.18;
+      const y = c.y + Math.sin(a) * c.r * 1.18;
+      for (let j = 0; j < 3; j++) {
+        const b = (j * Math.PI) / 3;
+        ctx.beginPath();
+        ctx.moveTo(x - Math.cos(b) * 5, y - Math.sin(b) * 5);
+        ctx.lineTo(x + Math.cos(b) * 5, y + Math.sin(b) * 5);
+        ctx.stroke();
+      }
     }
     ctx.restore();
   }

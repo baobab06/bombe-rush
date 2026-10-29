@@ -255,6 +255,12 @@ var SHOCK = {
   radius: 2,
   immunity: 0.75
 };
+var FREEZE = {
+  slow: 0.4,
+  duration: 2.5,
+  radius: 2,
+  immunity: 1
+};
 function bigRange(range) {
   return Math.min(BIG.maxRange, Math.max(range + BIG.minExtra, Math.round(range * BIG.rangeMul)));
 }
@@ -263,9 +269,9 @@ var BOMB_WARN = Math.max(...Object.values(BOMB_KINDS).map((k) => k.warn));
 // src/core/loot.ts
 var LOOT = {
   dropChance: 0.42,
-  weights: { bomb: 34, flame: 30, speed: 18, shield: 18, big: 10, elec: 10 },
+  weights: { bomb: 34, flame: 30, speed: 18, shield: 18, big: 10, elec: 10, freeze: 10 },
   maxOnBoard: 6,
-  maxPerMatch: { bomb: 14, flame: 12, speed: 6, shield: 5, big: 4, elec: 4 },
+  maxPerMatch: { bomb: 14, flame: 12, speed: 6, shield: 5, big: 4, elec: 4, freeze: 4 },
   quadrantLead: 3,
   boostExtraOnBoard: 6
 };
@@ -730,7 +736,9 @@ var HILL_RULES = {
   bigFirst: 4,
   bigEvery: 18,
   elecFirst: 5,
-  elecEvery: 20
+  elecEvery: 20,
+  freezeFirst: 6,
+  freezeEvery: 20
 };
 
 class HillState {
@@ -743,6 +751,7 @@ class HillState {
   throwSpawnIn = HILL_RULES.throwFirst;
   bigSpawnIn = HILL_RULES.bigFirst;
   elecSpawnIn = HILL_RULES.elecFirst;
+  freezeSpawnIn = HILL_RULES.freezeFirst;
   respawnIn;
   holder = -1;
   contested = false;
@@ -980,6 +989,11 @@ class HillState {
       this.elecSpawnIn = HILL_RULES.elecEvery;
       this.spawnSpecialBonus("elec");
     }
+    this.freezeSpawnIn -= DT;
+    if (this.freezeSpawnIn <= 0) {
+      this.freezeSpawnIn = HILL_RULES.freezeEvery;
+      this.spawnSpecialBonus("freeze");
+    }
     const n = m.players.length;
     for (let k = 0;k < n; k++) {
       const p = m.players[(k + m.tick) % n];
@@ -1079,6 +1093,9 @@ class HillState {
     p.elecCharges = 0;
     p.stunTime = 0;
     p.stunImmune = 0;
+    p.freezeCharges = 0;
+    p.slowTime = 0;
+    p.slowImmune = 0;
     p.range = m.bombRules.startRange;
     p.bombCooldown = 0;
     p.activeBombs = Math.min(p.activeBombs, p.maxBombs);
@@ -1128,7 +1145,7 @@ var MODES = [
     emoji: "\uD83D\uDC51",
     suddenDeath: false,
     bombRules: { fuse: 2.5, warn: 0.8, startRange: 2, startBombs: 1, fireDuration: 0.4, cooldown: 0.5 },
-    loot: { weights: { throw: 14 }, maxPerMatch: { throw: 4, big: 5, elec: 5 } },
+    loot: { weights: { throw: 14 }, maxPerMatch: { throw: 4, big: 5, elec: 5, freeze: 5 } },
     onStart(m) {
       if (m.players.length >= 2)
         m.setTeams();
@@ -1596,11 +1613,13 @@ class BotBrain {
     this.rng = new Rng(seed * 7919 + playerId * 104729);
     this.thinkTimer = this.rng.next() * this.prof.think;
   }
+  speedNow = 0;
   update(m, dt) {
     const p = m.players[this.playerId];
     const cmd = { mx: 0, my: 0, bomb: false, ability: false };
     if (!p.alive || m.phase !== "playing" && m.phase !== "ending")
       return cmd;
+    this.speedNow = m.effectiveSpeed(p);
     this.thinkTimer -= dt;
     let mustThink = this.thinkTimer <= 0;
     if (!mustThink && this.prof.reflex && this.path.length) {
@@ -1940,7 +1959,7 @@ class BotBrain {
     return true;
   }
   eta(p, steps) {
-    return (steps + 0.3) / p.speed;
+    return (steps + 0.3) / (p.id === this.playerId && this.speedNow > 0 ? this.speedNow : p.speed);
   }
   cellOkAt(danger, idx, tArrive, tLeave, margin) {
     const s = danger.start[idx];
@@ -2105,6 +2124,17 @@ var BONUSES = {
       if (p.elecCharges >= 1)
         return false;
       p.elecCharges = 1;
+      return true;
+    }
+  },
+  freeze: {
+    id: "freeze",
+    label: "Bombe gelante",
+    description: "Ta prochaine bombe ralentit les adversaires proches (−40 %, 2,5 s).",
+    apply(p) {
+      if (p.freezeCharges >= 1)
+        return false;
+      p.freezeCharges = 1;
       return true;
     }
   },
@@ -2653,6 +2683,9 @@ class Match {
         elecCharges: 0,
         stunTime: 0,
         stunImmune: 0,
+        freezeCharges: 0,
+        slowTime: 0,
+        slowImmune: 0,
         shieldCharges: 0,
         shieldTime: 0,
         deathTime: -1,
@@ -2762,6 +2795,13 @@ class Match {
       p.bombCooldown = Math.max(0, p.bombCooldown - DT);
     if (p.stunImmune > 0)
       p.stunImmune = Math.max(0, p.stunImmune - DT);
+    if (p.slowImmune > 0)
+      p.slowImmune = Math.max(0, p.slowImmune - DT);
+    if (p.slowTime > 0) {
+      p.slowTime = Math.max(0, p.slowTime - DT);
+      if (p.slowTime <= 0)
+        p.slowImmune = FREEZE.immunity;
+    }
     if (p.stunTime > 0) {
       p.stunTime = Math.max(0, p.stunTime - DT);
       if (p.stunTime <= 0)
@@ -2781,6 +2821,9 @@ class Match {
     if (cmd.ability)
       this.tryShield(p);
   }
+  effectiveSpeed(p) {
+    return p.speed * this.speedMul * (p.slowTime > 0 ? 1 - FREEZE.slow : 1);
+  }
   moveWithInput(p, cmd) {
     if (p.stunTime > 0) {
       p.moving = false;
@@ -2798,7 +2841,7 @@ class Match {
     const bx = p.x;
     const by = p.y;
     const baseSpeed = p.speed;
-    p.speed *= this.speedMul;
+    p.speed = this.effectiveSpeed(p);
     movePlayer(p, mx, my, DT, (tx, ty) => this.canEnter(p, tx, ty));
     p.speed = baseSpeed;
     const dx = p.x - bx;
@@ -2843,6 +2886,9 @@ class Match {
     const elec = p.elecCharges > 0;
     if (elec)
       p.elecCharges = 0;
+    const freeze = p.freezeCharges > 0;
+    if (freeze)
+      p.freezeCharges = 0;
     const bomb = {
       id: this.nextId++,
       ownerId: p.id,
@@ -2858,6 +2904,8 @@ class Match {
       bomb.big = true;
     if (elec)
       bomb.elec = true;
+    if (freeze)
+      bomb.freeze = true;
     this.bombs.set(bomb.id, bomb);
     p.activeBombs++;
     p.bombCooldown = this.bombRules.cooldown;
@@ -3002,6 +3050,7 @@ class Match {
       if (owner)
         owner.activeBombs = Math.max(0, owner.activeBombs - 1);
       const shockZone = b.elec ? this.shockCells(b.tx, b.ty, b.range) : null;
+      const frostZone = b.freeze ? this.shockCells(b.tx, b.ty, b.range, FREEZE.radius) : null;
       let cells = 1;
       this.setFire(b.tx, b.ty, FIRE.CENTER, b.ownerId);
       for (const [dx, dy, bit] of DIRS) {
@@ -3048,10 +3097,12 @@ class Match {
       }
       if (shockZone)
         this.discharge(b, shockZone);
+      if (frostZone)
+        this.frostBlast(b, frostZone);
       this.events.push(b.big ? { t: "explode", x: b.tx, y: b.ty, owner: b.ownerId, cells, chain, big: true } : { t: "explode", x: b.tx, y: b.ty, owner: b.ownerId, cells, chain });
     }
   }
-  shockCells(tx, ty, range) {
+  shockCells(tx, ty, range, radius = SHOCK.radius) {
     const g = this.grid;
     const set = new Set(this.blastCells(tx, ty, range));
     const start = g.idx(tx, ty);
@@ -3061,7 +3112,7 @@ class Match {
       const c = q.shift();
       const d = dist.get(c);
       set.add(c);
-      if (d >= SHOCK.radius)
+      if (d >= radius)
         continue;
       const x = c % g.w;
       const y = (c - x) / g.w;
@@ -3097,6 +3148,28 @@ class Match {
         continue;
       this.stun(p, b.ownerId, SHOCK.stun);
     }
+  }
+  frostBlast(b, cells) {
+    const g = this.grid;
+    const zone = new Set(cells);
+    this.events.push({ t: "frost", x: b.tx, y: b.ty, owner: b.ownerId, cells });
+    for (const p of this.players) {
+      if (!p.alive || !zone.has(g.idx(Math.floor(p.x), Math.floor(p.y))))
+        continue;
+      if (this.sameTeam(p.id, b.ownerId))
+        continue;
+      if (p.shieldTime > 0) {
+        this.events.push({ t: "shieldBlocked", player: p.id });
+        continue;
+      }
+      if (p.slowTime > 0 || p.slowImmune > 0)
+        continue;
+      this.slow(p, b.ownerId, FREEZE.duration);
+    }
+  }
+  slow(p, by, dur) {
+    p.slowTime = Math.min(FREEZE.duration, Math.max(0, dur));
+    this.events.push({ t: "frozen", player: p.id, by, dur: p.slowTime });
   }
   stun(p, by, dur) {
     p.stunTime = Math.min(SHOCK.stun, Math.max(0, dur));
@@ -3213,6 +3286,9 @@ class Match {
     p.elecCharges = 0;
     p.stunTime = 0;
     p.stunImmune = 0;
+    p.freezeCharges = 0;
+    p.slowTime = 0;
+    p.slowImmune = 0;
     p.stats.survivalTime = this.time;
     if (killer >= 0 && killer !== p.id)
       this.players[killer].stats.kills++;
@@ -3497,7 +3573,7 @@ function encodeSnapshot(m, acks, events) {
     tiles: Array.from(g.tiles).join(""),
     terrain: Array.from(g.terrain).join(""),
     fire,
-    bombs: [...m.bombs.values()].map((b) => [b.id, b.ownerId, b.tx, b.ty, r2(b.fuse), b.range, b.passable, b.fuseTotal, b.flight ? [b.flight.fromX, b.flight.fromY, r2(b.flight.t), r2(b.flight.dur)] : null, b.big ? 1 : 0, b.elec ? 1 : 0]),
+    bombs: [...m.bombs.values()].map((b) => [b.id, b.ownerId, b.tx, b.ty, r2(b.fuse), b.range, b.passable, b.fuseTotal, b.flight ? [b.flight.fromX, b.flight.fromY, r2(b.flight.t), r2(b.flight.dur)] : null, b.big ? 1 : 0, b.elec ? 1 : 0, b.freeze ? 1 : 0]),
     bonuses: [...m.bonuses.values()].map((b) => [b.id, b.type, b.tx, b.ty, r2(b.invuln), r2(b.age)]),
     pending: m.pendingDrops.map(([x, y, l]) => [x, y, r2(l)]),
     hill: m.hill ? { scores: m.hill.scores.map(r2), respawn: m.hill.respawnIn.map(r2), holder: m.hill.holder, contested: m.hill.contested, site: m.hill.site, next: m.hill.next, moveIn: r2(m.hill.moveIn) } : null,

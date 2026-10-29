@@ -1,4 +1,4 @@
-import { SHOCK, THROW, bigRange, type BombRules } from "./bombs";
+import { FREEZE, SHOCK, THROW, bigRange, type BombRules } from "./bombs";
 import { BONUSES } from "./bonuses";
 import { DIRS, Grid } from "./grid";
 import { LOOT, LootTable } from "./loot";
@@ -132,6 +132,9 @@ export class Match {
         elecCharges: 0,
         stunTime: 0,
         stunImmune: 0,
+        freezeCharges: 0,
+        slowTime: 0,
+        slowImmune: 0,
         shieldCharges: 0,
         shieldTime: 0,
         deathTime: -1,
@@ -251,6 +254,11 @@ export class Match {
     if (p.shieldTime > 0) p.shieldTime = Math.max(0, p.shieldTime - DT);
     if (p.bombCooldown > 0) p.bombCooldown = Math.max(0, p.bombCooldown - DT);
     if (p.stunImmune > 0) p.stunImmune = Math.max(0, p.stunImmune - DT);
+    if (p.slowImmune > 0) p.slowImmune = Math.max(0, p.slowImmune - DT);
+    if (p.slowTime > 0) {
+      p.slowTime = Math.max(0, p.slowTime - DT);
+      if (p.slowTime <= 0) p.slowImmune = FREEZE.immunity;
+    }
     if (p.stunTime > 0) {
       p.stunTime = Math.max(0, p.stunTime - DT);
       if (p.stunTime <= 0) p.stunImmune = SHOCK.immunity;
@@ -265,6 +273,11 @@ export class Match {
     if (cmd.bomb) this.tryPlaceBomb(p);
     if (cmd.throw) this.tryThrowBomb(p);
     if (cmd.ability) this.tryShield(p);
+  }
+
+  /** Vitesse réelle du moment (Chaos, gel) ; la vitesse de base du joueur n'est jamais modifiée. */
+  effectiveSpeed(p: PlayerState): number {
+    return p.speed * this.speedMul * (p.slowTime > 0 ? 1 - FREEZE.slow : 1);
   }
 
   /** Déplacement seul (glace et vitesse comprises) : sert aussi à la prédiction en ligne. */
@@ -287,7 +300,7 @@ export class Match {
     const bx = p.x;
     const by = p.y;
     const baseSpeed = p.speed;
-    p.speed *= this.speedMul;
+    p.speed = this.effectiveSpeed(p);
     movePlayer(p, mx, my, DT, (tx, ty) => this.canEnter(p, tx, ty));
     p.speed = baseSpeed;
     const dx = p.x - bx;
@@ -336,6 +349,8 @@ export class Match {
     if (big) p.bigCharges = 0;
     const elec = p.elecCharges > 0;
     if (elec) p.elecCharges = 0;
+    const freeze = p.freezeCharges > 0;
+    if (freeze) p.freezeCharges = 0;
     const bomb: BombState = {
       id: this.nextId++,
       ownerId: p.id,
@@ -349,6 +364,7 @@ export class Match {
     };
     if (big) bomb.big = true;
     if (elec) bomb.elec = true;
+    if (freeze) bomb.freeze = true;
     this.bombs.set(bomb.id, bomb);
     p.activeBombs++;
     p.bombCooldown = this.bombRules.cooldown;
@@ -507,6 +523,7 @@ export class Match {
 
       // zone de décharge calculée AVANT l'explosion (une caisse cassée par cette bombe arrête quand même la décharge)
       const shockZone = b.elec ? this.shockCells(b.tx, b.ty, b.range) : null;
+      const frostZone = b.freeze ? this.shockCells(b.tx, b.ty, b.range, FREEZE.radius) : null;
       let cells = 1;
       this.setFire(b.tx, b.ty, FIRE.CENTER, b.ownerId);
       for (const [dx, dy, bit] of DIRS) {
@@ -552,6 +569,7 @@ export class Match {
         }
       }
       if (shockZone) this.discharge(b, shockZone);
+      if (frostZone) this.frostBlast(b, frostZone);
       this.events.push(b.big ? { t: "explode", x: b.tx, y: b.ty, owner: b.ownerId, cells, chain, big: true } : { t: "explode", x: b.tx, y: b.ty, owner: b.ownerId, cells, chain });
     }
   }
@@ -561,7 +579,7 @@ export class Match {
    * l'explosion + les cases à SHOCK.radius pas au plus du centre (la décharge
    * contourne les coins mais s'arrête aux murs et aux caisses).
    */
-  shockCells(tx: number, ty: number, range: number): number[] {
+  shockCells(tx: number, ty: number, range: number, radius: number = SHOCK.radius): number[] {
     const g = this.grid;
     const set = new Set(this.blastCells(tx, ty, range));
     const start = g.idx(tx, ty);
@@ -571,7 +589,7 @@ export class Match {
       const c = q.shift()!;
       const d = dist.get(c)!;
       set.add(c);
-      if (d >= SHOCK.radius) continue;
+      if (d >= radius) continue;
       const x = c % g.w;
       const y = (c - x) / g.w;
       for (const [dx, dy] of DIRS) {
@@ -607,6 +625,33 @@ export class Match {
       if (p.stunTime > 0 || p.stunImmune > 0) continue; // pas de cumul, pas de paralysie en boucle
       this.stun(p, b.ownerId, SHOCK.stun);
     }
+  }
+
+  /**
+   * Souffle glacé (séparé des dégâts) : ralentit les joueurs touchés.
+   * Mêmes règles que la décharge : coéquipiers épargnés, poseur non protégé,
+   * bouclier = protégé, pas de cumul ni de prolongation.
+   */
+  private frostBlast(b: BombState, cells: number[]): void {
+    const g = this.grid;
+    const zone = new Set(cells);
+    this.events.push({ t: "frost", x: b.tx, y: b.ty, owner: b.ownerId, cells });
+    for (const p of this.players) {
+      if (!p.alive || !zone.has(g.idx(Math.floor(p.x), Math.floor(p.y)))) continue;
+      if (this.sameTeam(p.id, b.ownerId)) continue;
+      if (p.shieldTime > 0) {
+        this.events.push({ t: "shieldBlocked", player: p.id });
+        continue;
+      }
+      if (p.slowTime > 0 || p.slowImmune > 0) continue; // ne prolonge jamais un gel en cours
+      this.slow(p, b.ownerId, FREEZE.duration);
+    }
+  }
+
+  /** Ralentit un joueur (durée bornée ; se termine toute seule dans updatePlayer). */
+  slow(p: PlayerState, by: number, dur: number): void {
+    p.slowTime = Math.min(FREEZE.duration, Math.max(0, dur));
+    this.events.push({ t: "frozen", player: p.id, by, dur: p.slowTime });
   }
 
   /** Paralyse un joueur (durée bornée ; se termine toute seule dans updatePlayer). */
@@ -727,6 +772,9 @@ export class Match {
     p.elecCharges = 0;
     p.stunTime = 0;
     p.stunImmune = 0;
+    p.freezeCharges = 0;
+    p.slowTime = 0;
+    p.slowImmune = 0;
     p.stats.survivalTime = this.time;
     if (killer >= 0 && killer !== p.id) this.players[killer].stats.kills++;
     this.events.push({ t: "playerDied", player: p.id, killer, x: p.x, y: p.y });

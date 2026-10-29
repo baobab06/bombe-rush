@@ -303,7 +303,7 @@ export class GameScreen {
     this.renderer.draw(m, frozen ? 0 : dt, this.prev, frozen ? 1 : Math.min(1, this.acc / DT));
     if (!this.demo && !this.finished) {
       const me = m.players[s.localPlayer];
-      this.controls.draw(this.renderer.ctx, me.shieldCharges, me.shieldTime, me.maxBombs - me.activeBombs, me.maxBombs, me.alive ? me.throwCharges : 0, me.alive ? me.bigCharges : 0, me.alive ? me.elecCharges : 0, me.alive ? me.stunTime : 0);
+      this.controls.draw(this.renderer.ctx, me.shieldCharges, me.shieldTime, me.maxBombs - me.activeBombs, me.maxBombs, me.alive ? me.throwCharges : 0, me.alive ? me.bigCharges : 0, me.alive ? me.elecCharges : 0, me.alive ? me.stunTime : 0, me.alive ? me.freezeCharges : 0);
     }
   }
 
@@ -478,6 +478,12 @@ export class GameScreen {
           break;
         case "shock":
           audio.play("zap", near(e.x + 0.5, e.y + 0.5));
+          break;
+        case "frost":
+          audio.play("freeze", near(e.x + 0.5, e.y + 0.5));
+          break;
+        case "frozen":
+          if (e.player === me.id) haptics.pulse(35);
           break;
         case "stunned":
           if (e.player === me.id) {

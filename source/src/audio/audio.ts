@@ -30,6 +30,7 @@ export type Sfx =
   | "deny"
   | "tab"
   | "zap"
+  | "freeze"
   | "stunned";
 
 type Track = "menu" | "game" | null;
@@ -210,6 +211,11 @@ class AudioEngine {
         this.burst(t, 0.22, 0.4 * v, "highpass", 5000, 2500);
         this.osc("sawtooth", 1400, 180, t, 0.25, 0.16 * v);
         this.osc("square", 90, 60, t + 0.02, 0.3, 0.12 * v);
+        break;
+      case "freeze":
+        // souffle glacé : souffle filtré + petits tintements cristallins
+        this.burst(t, 0.45, 0.35 * v, "bandpass", 3500, 7000);
+        [2093, 2637, 3136].forEach((f, i) => this.osc("sine", f, f * 1.01, t + 0.04 + i * 0.05, 0.22, 0.09 * v));
         break;
       case "stunned":
         for (let i = 0; i < 4; i++) this.osc("square", 1200 - i * 150, 900 - i * 150, t + i * 0.06, 0.05, 0.08 * v);

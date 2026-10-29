@@ -52,10 +52,15 @@ export class BotBrain {
     this.thinkTimer = this.rng.next() * this.prof.think;
   }
 
+  /** vitesse réelle au moment de réfléchir (ralentissements compris) */
+  private speedNow = 0;
+
   update(m: Match, dt: number): InputCmd {
     const p = m.players[this.playerId];
     const cmd: InputCmd = { mx: 0, my: 0, bomb: false, ability: false };
     if (!p.alive || m.phase !== "playing" && m.phase !== "ending") return cmd;
+    // vitesse réelle (gel, Chaos) : les temps de fuite en tiennent compte
+    this.speedNow = m.effectiveSpeed(p);
 
     this.thinkTimer -= dt;
     let mustThink = this.thinkTimer <= 0;
@@ -413,7 +418,7 @@ export class BotBrain {
 
   /** Temps (s) pour atteindre une case à `steps` pas d'ici. */
   private eta(p: PlayerState, steps: number): number {
-    return (steps + 0.3) / p.speed;
+    return (steps + 0.3) / (p.id === this.playerId && this.speedNow > 0 ? this.speedNow : p.speed);
   }
 
   private cellOkAt(danger: DangerMap, idx: number, tArrive: number, tLeave: number, margin: number): boolean {

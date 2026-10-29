@@ -606,6 +606,7 @@ console.log("Bombe à lancer (Domination)");
     m.hill!.throwSpawnIn = 1e9; // pas d'apparition automatique pendant ces tests
     m.hill!.bigSpawnIn = 1e9;
     m.hill!.elecSpawnIn = 1e9;
+    m.hill!.freezeSpawnIn = 1e9;
     place(m, 0, 1, 1); place(m, 1, 13, 1); place(m, 2, 1, 11); place(m, 3, 13, 11);
     return m;
   };
@@ -913,6 +914,7 @@ console.log("Grosse bombe");
     m.hill!.throwSpawnIn = 1e9;
     m.hill!.bigSpawnIn = 1e9;
     m.hill!.elecSpawnIn = 1e9;
+    m.hill!.freezeSpawnIn = 1e9;
     place(m, 0, 1, 1); place(m, 1, 13, 1); place(m, 2, 1, 11); place(m, 3, 13, 11);
     return m;
   };
@@ -1220,7 +1222,7 @@ console.log("Bombe électrique");
   const mk = (seed = 41) => {
     const m = new Match({ seed, map: FACTORY, modeId: "koth", players: slots(4) });
     m.phase = "playing";
-    m.hill!.moveIn = 1e9; m.hill!.throwSpawnIn = 1e9; m.hill!.bigSpawnIn = 1e9; m.hill!.elecSpawnIn = 1e9;
+    m.hill!.moveIn = 1e9; m.hill!.throwSpawnIn = 1e9; m.hill!.bigSpawnIn = 1e9; m.hill!.elecSpawnIn = 1e9; m.hill!.freezeSpawnIn = 1e9;
     place(m, 0, 1, 1); place(m, 1, 13, 1); place(m, 2, 1, 11); place(m, 3, 13, 11);
     return m;
   };
@@ -1309,6 +1311,280 @@ console.log("Bombe électrique");
         if (m.phase === "over") ended++;
       }
       check(ended === 6 && stuck === 0 && stuns > 0 && longest * DT <= SHOCK.stun + 1e-9, `bots (${modeId}) : 6 parties terminées, ${stuns} paralysies, jamais plus de ${(longest * DT).toFixed(2)} s, personne coincé`);
+    }
+  }
+}
+
+console.log("Bombe gelante");
+{
+  const { FACTORY } = await import("../src/maps/factory");
+  const { FREEZE } = await import("../src/core/bombs");
+  const { HILL_RULES } = await import("../src/core/hill");
+  const { encodeSnapshot, applySnapshot } = await import("../src/net/snapshot");
+  const slots = (n: number) => Array.from({ length: n }, (_, i) => ({ name: "P" + i, characterId: "pip", isBot: false, difficulty: "normal" as Difficulty }));
+  const open = (n = 3) => {
+    const m = emptyMatch(n);
+    const g = m.grid;
+    for (let y = 1; y < g.h - 1; y++) for (let x = 1; x < g.w - 1; x++) { g.tiles[g.idx(x, y)] = TILE.FLOOR; g.terrain[g.idx(x, y)] = TERRAIN.NONE; }
+    place(m, 0, 1, 1); place(m, 1, 11, 9);
+    if (n > 2) place(m, 2, 1, 9);
+    return m;
+  };
+  const cmdFor = (id: number, c: Partial<InputCmd>) => (mm: Match) => mm.players.map((p) => (p.id === id ? { mx: 0, my: 0, bomb: false, ability: false, ...c } : NO_INPUT));
+  const bombBy = (m: Match, id: number) => run(m, DT, cmdFor(id, { bomb: true }));
+  const plant = (m: Match, x: number, y: number, park: [number, number] = [1, 1]) => {
+    place(m, 0, x, y); bombBy(m, 0); place(m, 0, park[0], park[1]);
+    return [...m.bombs.values()].find((b) => b.tx === x && b.ty === y);
+  };
+  const untilBoom = (m: Match) => {
+    const ev: { t: string; player?: number }[] = [];
+    for (let i = 0; i < 400 && m.bombs.size; i++) { m.step(idle(m)); ev.push(...m.events); }
+    return ev;
+  };
+  /** distance parcourue par le joueur `id` en `secs` secondes, en allant tout droit vers la gauche */
+  const walk = (m: Match, id: number, secs: number) => {
+    const x0 = m.players[id].x;
+    run(m, secs, cmdFor(id, { mx: -1 }));
+    return x0 - m.players[id].x;
+  };
+  {
+    const c = new Match({ seed: 3, map: FOREST, modeId: "classic", players: slots(4) });
+    const k = new Match({ seed: 3, map: FACTORY, modeId: "koth", players: slots(4) });
+    const ch = new Match({ seed: 3, map: FOREST, modeId: "chaos", players: slots(4) });
+    check([c, k, ch].every((mm) => (mm.loot.cfg.weights.freeze ?? 0) > 0), "bonus présent dans le butin : Classique, Chaos et Domination");
+    check([c, k, ch].every((mm) => mm.players.every((p) => p.freezeCharges === 0 && p.slowTime === 0)), "personne ne commence gelé");
+    check(FREEZE.slow === 0.4 && FREEZE.duration === 2.5, `réglages : −${FREEZE.slow * 100} % pendant ${FREEZE.duration} s (configurables)`);
+  }
+  {
+    const m = open();
+    m.spawnBonus("freeze", 3, 3); place(m, 0, 3, 3); run(m, 0.5);
+    check(m.players[0].freezeCharges === 1, "ramasser le bonus donne une bombe gelante");
+    m.spawnBonus("freeze", 4, 3); place(m, 0, 4, 3); run(m, 0.5);
+    check(m.players[0].freezeCharges === 1, "une seule en réserve (pas de cumul)");
+    const b = plant(m, 5, 5)!;
+    check(!!b?.freeze && !b.elec && !b.big && b.range === 2 && m.players[0].freezeCharges === 0, "la bombe suivante est gelante (portée normale), réserve vidée");
+    untilBoom(m); run(m, 0.6);
+    const n = plant(m, 5, 5)!;
+    check(!!n && !n.freeze, "la bombe d'après redevient normale");
+  }
+  {
+    const m = open();
+    place(m, 1, 6, 6);
+    plant(m, 5, 5);
+    const ev = untilBoom(m);
+    check(!ev.some((e) => e.t === "frost" || e.t === "frozen") && m.players[1].slowTime === 0, "bombe normale : pas de gel");
+  }
+  {
+    const m = open(4);
+    m.players[0].freezeCharges = 1;
+    place(m, 1, 6, 6); place(m, 2, 7, 5); place(m, 3, 9, 7);
+    plant(m, 5, 5);
+    const ev = untilBoom(m);
+    check(ev.some((e) => e.t === "frost"), "explosion gelante : événement de souffle glacé");
+    check(m.players[1].alive && m.players[1].slowTime > FREEZE.duration - 0.1, `adversaire en diagonale : vivant et gelé (${m.players[1].slowTime.toFixed(2)} s)`);
+    check(!m.players[2].alive, "adversaire dans la croix : éliminé comme d'habitude (dégâts séparés)");
+    check(m.players[3].slowTime === 0, "adversaire hors de portée : rien");
+  }
+  {
+    // vitesse : −40 % pendant 2,5 s, vitesse de base jamais touchée, retour normal ensuite
+    const m = open();
+    const p = m.players[1];
+    place(m, 1, 10, 3);
+    const base = p.speed;
+    const normal = walk(m, 1, 0.5);
+    place(m, 1, 10, 3);
+    m.slow(p, 0, FREEZE.duration);
+    const slowed = walk(m, 1, 0.5);
+    const ratio = slowed / normal;
+    check(Math.abs(ratio - (1 - FREEZE.slow)) < 0.03, `gelé : vitesse × ${ratio.toFixed(2)} (attendu ${1 - FREEZE.slow})`);
+    check(p.speed === base, "la vitesse de base du joueur n'est pas modifiée pendant le gel");
+    let ticks = Math.round(0.5 / DT);
+    while (p.slowTime > 0 && ticks < 1000) { run(m, DT); ticks++; }
+    check(Math.abs(ticks * DT - FREEZE.duration) < 2 * DT, `le gel s'arrête tout seul (${(ticks * DT).toFixed(2)} s)`);
+    place(m, 1, 10, 3);
+    const after = walk(m, 1, 0.5);
+    check(Math.abs(after - normal) < 1e-6 && p.speed === base, "après le gel : exactement la vitesse d'origine");
+  }
+  {
+    // bonus de vitesse ramassé pendant le gel : il est bien gardé à la fin
+    const m = open();
+    const p = m.players[1];
+    place(m, 1, 10, 3);
+    m.slow(p, 0, FREEZE.duration);
+    m.spawnBonus("speed", 9, 3);
+    run(m, 0.5, cmdFor(1, { mx: -1 }));
+    const lvl = p.speedLevel;
+    while (p.slowTime > 0) run(m, DT);
+    check(lvl === 1 && p.speed === RULES.baseSpeed + RULES.speedPerLevel, "bonus Vitesse pris pendant le gel : conservé, vitesse correcte à la fin");
+  }
+  {
+    // Chaos « tout le monde court plus vite » + gel : les deux s'appliquent, rien de définitif
+    const m = open();
+    const p = m.players[1];
+    place(m, 1, 10, 3);
+    const normal = walk(m, 1, 0.5);
+    place(m, 1, 10, 3);
+    m.speedMul = 1.6;
+    m.slow(p, 0, FREEZE.duration);
+    const both = walk(m, 1, 0.5);
+    m.speedMul = 1;
+    check(Math.abs(both / normal - 1.6 * (1 - FREEZE.slow)) < 0.05 && p.speed === RULES.baseSpeed, `Chaos (×1,6) + gel : × ${(both / normal).toFixed(2)}, vitesse de base intacte`);
+  }
+  {
+    // plusieurs explosions gelantes : jamais de prolongation
+    const m = open();
+    const p = m.players[1];
+    place(m, 1, 6, 6);
+    m.players[0].freezeCharges = 1;
+    plant(m, 5, 5);
+    m.players[2].freezeCharges = 1;
+    place(m, 2, 5, 7); bombBy(m, 2); place(m, 2, 1, 9);
+    const ev = untilBoom(m);
+    check(ev.filter((e) => e.t === "frost").length === 2 && ev.filter((e) => e.t === "frozen" && e.player === 1).length === 1 && p.slowTime <= FREEZE.duration, "2 souffles en même temps : gelé une seule fois, durée ≤ 2,5 s");
+    run(m, 1);
+    const left = p.slowTime;
+    m.players[0].freezeCharges = 1; m.players[0].bombCooldown = 0;
+    const b = plant(m, 7, 5)!; b.fuse = DT;
+    run(m, 2 * DT);
+    check(p.slowTime < left, "nouveau souffle pendant le gel : la durée n'est pas prolongée");
+    const q = open(); const v = q.players[1]; place(q, 1, 6, 6);
+    let longest = 0, cur = 0, free = 0;
+    for (let i = 0; i < 60 * 15; i++) {
+      if (i % 30 === 0) { q.players[0].freezeCharges = 1; q.players[0].bombCooldown = 0; q.players[0].activeBombs = 0; const bb = plant(q, 7, 5); if (bb) bb.fuse = DT; }
+      run(q, DT);
+      if (v.slowTime > 0) { cur++; longest = Math.max(longest, cur); } else { cur = 0; free++; }
+    }
+    check(v.alive && longest > 0 && longest * DT <= FREEZE.duration + 1e-9 && free * DT >= 2, `souffles toutes les 0,5 s pendant 15 s : jamais plus de ${FREEZE.duration} s d'affilée (${(longest * DT).toFixed(2)} s), ${(free * DT).toFixed(1)} s à vitesse normale`);
+    check(v.speed === RULES.baseSpeed, "après 15 s de souffles : vitesse de base intacte");
+  }
+  {
+    const m = open();
+    const g = m.grid;
+    g.tiles[g.idx(6, 5)] = TILE.WALL; g.tiles[g.idx(5, 6)] = TILE.BLOCK;
+    place(m, 1, 6, 6);
+    m.players[0].freezeCharges = 1;
+    plant(m, 5, 5); untilBoom(m);
+    check(m.players[1].slowTime === 0, "derrière un mur et une caisse : pas de gel");
+  }
+  {
+    const m = open();
+    m.players[0].freezeCharges = 1;
+    plant(m, 5, 5, [6, 6]);
+    place(m, 1, 4, 4); m.players[1].shieldTime = 2;
+    const ev = untilBoom(m);
+    check(m.players[0].alive && m.players[0].slowTime > 0, "le poseur trop près de sa bombe gelante est ralenti aussi");
+    check(m.players[1].slowTime === 0 && ev.some((e) => e.t === "shieldBlocked" && e.player === 1), "bouclier actif : le gel est bloqué");
+  }
+  {
+    // élimination, fin de manche
+    const m = open();
+    const p = m.players[1];
+    p.freezeCharges = 1; m.slow(p, 0, FREEZE.duration);
+    m.kill(p, -1);
+    check(p.freezeCharges === 0 && p.slowTime === 0 && p.slowImmune === 0 && p.speed === RULES.baseSpeed, "éliminé : gel et réserve effacés, vitesse d'origine");
+    const e = open(2);
+    e.slow(e.players[0], 1, FREEZE.duration);
+    e.kill(e.players[1], -1);
+    run(e, 4);
+    check(e.phase === "over" || e.phase === "ending", "manche terminée pendant un gel : la partie se termine normalement");
+    const n = new Match({ seed: 5, map: FOREST, modeId: "classic", players: slots(2) });
+    check(n.players.every((q) => q.slowTime === 0 && q.freezeCharges === 0 && q.speed === RULES.baseSpeed), "manche suivante : personne gelé, vitesses d'origine");
+  }
+  // ---- Domination 2v2
+  const mk = (seed = 41) => {
+    const m = new Match({ seed, map: FACTORY, modeId: "koth", players: slots(4) });
+    m.phase = "playing";
+    m.hill!.moveIn = 1e9; m.hill!.throwSpawnIn = 1e9; m.hill!.bigSpawnIn = 1e9; m.hill!.elecSpawnIn = 1e9; m.hill!.freezeSpawnIn = 1e9;
+    place(m, 0, 1, 1); place(m, 1, 13, 1); place(m, 2, 1, 11); place(m, 3, 13, 11);
+    return m;
+  };
+  {
+    const m = mk();
+    const mate = m.players.filter((p) => p.id !== 0 && m.sameTeam(0, p.id))[0];
+    const foe = m.players.filter((p) => m.isFoe(m.players[0], p))[0];
+    m.players[0].freezeCharges = 1;
+    place(m, mate.id, 7, 5); place(m, foe.id, 5, 7);
+    plant(m, 6, 6);
+    untilBoom(m);
+    check(mate.slowTime === 0 && foe.alive && foe.slowTime > 0, "Domination : coéquipier épargné, adversaire gelé");
+  }
+  {
+    // tous les bonus sur la même bombe : lancée, grosse, électrique et gelante
+    const m = mk();
+    const p = m.players[0];
+    p.freezeCharges = 1; p.elecCharges = 1; p.bigCharges = 1; p.throwCharges = 1;
+    place(m, 0, 2, 6); p.faceX = 1; p.faceY = 0;
+    run(m, DT, cmdFor(0, { throw: true }));
+    const b = [...m.bombs.values()][0];
+    check(!!b?.flight && b.freeze === true && b.elec === true && b.big === true && p.freezeCharges === 0, "gelante + électrique + grosse + lancée : tout se combine");
+    place(m, 0, 2, 8);
+    const foe = m.players.filter((o) => m.isFoe(p, o))[0];
+    place(m, foe.id, 6, 7);
+    const ev = untilBoom(m);
+    check(ev.some((e) => e.t === "frost") && ev.some((e) => e.t === "shock") && foe.alive && foe.slowTime > 0 && foe.stunTime > 0, "les deux effets s'appliquent (paralysé puis ralenti)");
+    while (foe.stunTime > 0) run(m, DT);
+    const moved = walk(m, foe.id, 0.3);
+    check(moved > 0, "après la paralysie, il avance (encore ralenti)");
+  }
+  {
+    const m = mk();
+    const p = m.players[0];
+    p.freezeCharges = 1; m.slow(p, 1, FREEZE.duration);
+    m.kill(p, 1);
+    run(m, HILL_RULES.respawnDelay + 0.3);
+    check(p.alive && p.freezeCharges === 0 && p.slowTime === 0 && p.speed === RULES.baseSpeed, "Domination : réapparition sans gel, vitesse d'origine");
+  }
+  {
+    let appeared = 0;
+    const spots = new Set<string>();
+    for (let seed = 1; seed <= 12; seed++) {
+      const m = new Match({ seed, map: FACTORY, modeId: "koth", players: slots(4) });
+      m.phase = "playing"; m.hill!.moveIn = 1e9;
+      run(m, HILL_RULES.freezeFirst + 0.2);
+      const b = [...m.bonuses.values()].find((x) => x.type === "freeze");
+      if (b && !m.grid.blocksMove(b.tx, b.ty)) { appeared++; spots.add(`${b.tx},${b.ty}`); }
+    }
+    check(appeared >= 10 && spots.size >= 5, `Domination : le bonus apparaît dès le début (${appeared}/12 à ${HILL_RULES.freezeFirst} s), à des endroits variés (${spots.size})`);
+  }
+  {
+    // en ligne
+    const m = mk();
+    m.players[0].freezeCharges = 1;
+    plant(m, 6, 6);
+    m.slow(m.players[1], 0, 1.7);
+    place(m, 1, 11, 6);
+    const snap = JSON.parse(JSON.stringify(encodeSnapshot(m, [0, 0, 0, 0], [])));
+    const c = new Match({ seed: 41, map: FACTORY, modeId: "koth", players: slots(4) });
+    applySnapshot(c, snap);
+    const b = [...c.bombs.values()][0];
+    const q = c.players[1];
+    const x0 = q.x;
+    for (let i = 0; i < 20; i++) c.moveWithInput(q, { mx: -1, my: 0, bomb: false, ability: false });
+    const d = x0 - q.x;
+    check(!!b?.freeze && Math.abs(q.slowTime - 1.7) < 1e-6 && Math.abs(d - 20 * DT * q.speed * (1 - FREEZE.slow)) < 0.02, "en ligne : bombe gelante et gel recopiés, déplacement prédit ralenti");
+  }
+  {
+    for (const [modeId, map] of [["classic", FOREST], ["koth", FACTORY]] as const) {
+      let stuck = 0, ended = 0, frozen = 0, longest = 0, badSpeed = 0;
+      for (let seed = 1; seed <= 6; seed++) {
+        const m = new Match({ seed: seed * 61, map, modeId, players: Array.from({ length: 4 }, (_, i) => ({ name: "B" + i, characterId: "pip", isBot: true, difficulty: "hard" as Difficulty })) });
+        const brains = m.players.map((p) => new BotBrain(p.id, "hard", seed));
+        const cur = [0, 0, 0, 0];
+        let g = 0;
+        while (m.phase !== "over" && g++ < 60 * 200) {
+          if (g % 300 === 0) for (const p of m.players) if (p.alive) p.freezeCharges = 1;
+          m.step(brains.map((b) => b.update(m, DT)));
+          frozen += m.events.filter((e) => e.t === "frozen").length;
+          for (const p of m.players) {
+            cur[p.id] = p.slowTime > 0 ? cur[p.id] + 1 : 0;
+            longest = Math.max(longest, cur[p.id]);
+            if (p.alive && m.grid.blocksMove(Math.floor(p.x), Math.floor(p.y))) stuck++;
+            if (Math.abs(p.speed - (RULES.baseSpeed + p.speedLevel * RULES.speedPerLevel)) > 1e-9) badSpeed++;
+          }
+        }
+        if (m.phase === "over") ended++;
+      }
+      check(ended === 6 && stuck === 0 && frozen > 0 && longest * DT <= FREEZE.duration + DT + 1e-9 && badSpeed === 0, `bots (${modeId}) : 6 parties terminées, ${frozen} gels, jamais plus de ${(longest * DT).toFixed(2)} s, vitesses de base jamais modifiées, personne coincé`);
     }
   }
 }

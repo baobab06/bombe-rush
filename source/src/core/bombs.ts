@@ -72,6 +72,28 @@ export const SHOCK = {
   immunity: 0.75,
 } as const;
 
+/**
+ * BOMBE GELANTE — réglages. À l'explosion (dégâts habituels, inchangés),
+ * un souffle glacé couvre la croix de l'explosion + les cases à `radius`
+ * pas au plus (il contourne les coins, s'arrête aux murs et aux caisses).
+ * Les joueurs touchés (sauf coéquipiers du poseur et joueurs sous bouclier)
+ * sont ralentis : vitesse × (1 − slow) pendant `duration` secondes.
+ * La vitesse de base n'est jamais modifiée (le ralentissement est appliqué
+ * au moment du déplacement), donc elle revient d'elle-même à la fin.
+ *  - pas de cumul ni de prolongation : déjà gelé = rien de plus ;
+ *  - après un gel, `immunity` secondes de protection (pas de gel sans fin).
+ */
+export const FREEZE = {
+  /** réduction de vitesse (0,4 = −40 %) */
+  slow: 0.4,
+  /** durée du ralentissement (s) */
+  duration: 2.5,
+  /** portée du souffle glacé autour du centre (pas) */
+  radius: 2,
+  /** protection contre un nouveau gel juste après (s) */
+  immunity: 1.0,
+} as const;
+
 /** Portée d'une grosse bombe à partir de la portée normale du joueur. */
 export function bigRange(range: number): number {
   return Math.min(BIG.maxRange, Math.max(range + BIG.minExtra, Math.round(range * BIG.rangeMul)));
