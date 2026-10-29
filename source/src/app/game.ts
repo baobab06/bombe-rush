@@ -303,7 +303,7 @@ export class GameScreen {
     this.renderer.draw(m, frozen ? 0 : dt, this.prev, frozen ? 1 : Math.min(1, this.acc / DT));
     if (!this.demo && !this.finished) {
       const me = m.players[s.localPlayer];
-      this.controls.draw(this.renderer.ctx, me.shieldCharges, me.shieldTime, me.maxBombs - me.activeBombs, me.maxBombs, me.alive ? me.throwCharges : 0, me.alive ? me.bigCharges : 0, me.alive ? me.elecCharges : 0, me.alive ? me.stunTime : 0, me.alive ? me.freezeCharges : 0);
+      this.controls.draw(this.renderer.ctx, me.shieldCharges, me.shieldTime, me.maxBombs - me.activeBombs, me.maxBombs, me.alive ? me.throwCharges : 0, me.alive ? me.bigCharges : 0, me.alive ? me.elecCharges : 0, me.alive ? me.stunTime : 0, me.alive ? me.freezeCharges : 0, me.alive ? me.toxicCharges : 0);
     }
   }
 
@@ -478,6 +478,15 @@ export class GameScreen {
           break;
         case "shock":
           audio.play("zap", near(e.x + 0.5, e.y + 0.5));
+          break;
+        case "gas":
+          audio.play("gas", near(e.x + 0.5, e.y + 0.5));
+          break;
+        case "poisoned":
+          if (e.player === me.id) {
+            audio.play("cough", 1);
+            haptics.pulse(25 + e.dose * 15);
+          }
           break;
         case "frost":
           audio.play("freeze", near(e.x + 0.5, e.y + 0.5));

@@ -31,6 +31,8 @@ export type Sfx =
   | "tab"
   | "zap"
   | "freeze"
+  | "gas"
+  | "cough"
   | "stunned";
 
 type Track = "menu" | "game" | null;
@@ -216,6 +218,15 @@ class AudioEngine {
         // souffle glacé : souffle filtré + petits tintements cristallins
         this.burst(t, 0.45, 0.35 * v, "bandpass", 3500, 7000);
         [2093, 2637, 3136].forEach((f, i) => this.osc("sine", f, f * 1.01, t + 0.04 + i * 0.05, 0.22, 0.09 * v));
+        break;
+      case "gas":
+        // nuage qui s'échappe : long sifflement sourd
+        this.burst(t, 0.9, 0.3 * v, "lowpass", 900, 300);
+        this.burst(t + 0.05, 0.6, 0.12 * v, "bandpass", 2500, 1200);
+        break;
+      case "cough":
+        this.burst(t, 0.08, 0.25 * v, "bandpass", 700, 400);
+        this.burst(t + 0.12, 0.07, 0.2 * v, "bandpass", 650, 380);
         break;
       case "stunned":
         for (let i = 0; i < 4; i++) this.osc("square", 1200 - i * 150, 900 - i * 150, t + i * 0.06, 0.05, 0.08 * v);

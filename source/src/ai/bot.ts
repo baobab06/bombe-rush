@@ -386,7 +386,7 @@ export class BotBrain {
     const tx = Math.floor(p.x);
     const ty = Math.floor(p.y);
     if (!sloppy) {
-      const danger = computeDanger(m, { tx, ty, fuse: m.bombRules.fuse * m.fuseMul, range: m.nextBombRange(p) });
+      const danger = computeDanger(m, { tx, ty, fuse: m.bombRules.fuse * m.fuseMul, range: m.nextBombRange(p), toxic: p.toxicCharges > 0 });
       const escape = this.findSafe(m, p, danger, this.prof.margin + 0.15, true);
       if (!escape) return false;
       let room = 0;

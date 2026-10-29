@@ -88,6 +88,16 @@ export const BONUSES: Record<string, BonusDef> = {
       return true;
     },
   },
+  toxic: {
+    id: "toxic",
+    label: "Bombe toxique",
+    description: "Ta prochaine bombe laisse un nuage toxique pendant 3 s.",
+    apply(p) {
+      if (p.toxicCharges >= 1) return false;
+      p.toxicCharges = 1;
+      return true;
+    },
+  },
   shield: {
     id: "shield",
     label: "Bouclier",

@@ -95,6 +95,14 @@ export interface PlayerState {
   slowTime: number;
   /** > 0 : vient d'être gelé, ne peut pas l'être de nouveau tout de suite */
   slowImmune: number;
+  /** capacité « bombe toxique » (0 ou 1) : la prochaine bombe laisse un nuage toxique */
+  toxicCharges: number;
+  /** doses de gaz reçues (à TOXIC.lethalDoses : éliminé) */
+  toxDose: number;
+  /** temps avant la prochaine dose possible dans le nuage (s) */
+  toxTick: number;
+  /** temps passé hors du nuage depuis la dernière dose perdue (s) */
+  toxRecover: number;
   shieldCharges: number;
   shieldTime: number; // > 0 : bouclier actif
   deathTime: number; // temps de match à la mort
@@ -125,6 +133,17 @@ export interface BombState {
   elec?: boolean;
   /** bombe gelante (bonus) : souffle glacé ralentissant à l'explosion */
   freeze?: boolean;
+  /** bombe toxique (bonus) : laisse un nuage toxique sur les cases touchées */
+  toxic?: boolean;
+}
+
+/** Nuage toxique : effet temporaire indépendant de la grille (le sol n'est pas modifié). */
+export interface ToxicZone {
+  id: number;
+  owner: number;
+  cells: number[];
+  timeLeft: number;
+  duration: number;
 }
 
 export interface BonusState {
@@ -151,6 +170,9 @@ export type SimEvent =
   /** souffle glacé d'une bombe gelante : cases touchées (indices de grille) */
   | { t: "frost"; x: number; y: number; owner: number; cells: number[] }
   | { t: "frozen"; player: number; by: number; dur: number }
+  /** nuage toxique posé / dose reçue */
+  | { t: "gas"; x: number; y: number; owner: number; cells: number[] }
+  | { t: "poisoned"; player: number; dose: number }
   | { t: "bonusSpawn"; x: number; y: number; type: string }
   | { t: "bonusPicked"; x: number; y: number; type: string; player: number }
   | { t: "bonusBurned"; x: number; y: number }

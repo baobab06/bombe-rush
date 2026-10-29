@@ -261,6 +261,13 @@ var FREEZE = {
   radius: 2,
   immunity: 1
 };
+var TOXIC = {
+  duration: 3,
+  doseEvery: 0.5,
+  lethalDoses: 3,
+  recoverEvery: 1,
+  maxZones: 8
+};
 function bigRange(range) {
   return Math.min(BIG.maxRange, Math.max(range + BIG.minExtra, Math.round(range * BIG.rangeMul)));
 }
@@ -269,9 +276,9 @@ var BOMB_WARN = Math.max(...Object.values(BOMB_KINDS).map((k) => k.warn));
 // src/core/loot.ts
 var LOOT = {
   dropChance: 0.42,
-  weights: { bomb: 34, flame: 30, speed: 18, shield: 18, big: 10, elec: 10, freeze: 10 },
+  weights: { bomb: 34, flame: 30, speed: 18, shield: 18, big: 10, elec: 10, freeze: 10, toxic: 10 },
   maxOnBoard: 6,
-  maxPerMatch: { bomb: 14, flame: 12, speed: 6, shield: 5, big: 4, elec: 4, freeze: 4 },
+  maxPerMatch: { bomb: 14, flame: 12, speed: 6, shield: 5, big: 4, elec: 4, freeze: 4, toxic: 4 },
   quadrantLead: 3,
   boostExtraOnBoard: 6
 };
@@ -738,7 +745,9 @@ var HILL_RULES = {
   elecFirst: 5,
   elecEvery: 20,
   freezeFirst: 6,
-  freezeEvery: 20
+  freezeEvery: 20,
+  toxicFirst: 7,
+  toxicEvery: 20
 };
 
 class HillState {
@@ -752,6 +761,7 @@ class HillState {
   bigSpawnIn = HILL_RULES.bigFirst;
   elecSpawnIn = HILL_RULES.elecFirst;
   freezeSpawnIn = HILL_RULES.freezeFirst;
+  toxicSpawnIn = HILL_RULES.toxicFirst;
   respawnIn;
   holder = -1;
   contested = false;
@@ -994,6 +1004,11 @@ class HillState {
       this.freezeSpawnIn = HILL_RULES.freezeEvery;
       this.spawnSpecialBonus("freeze");
     }
+    this.toxicSpawnIn -= DT;
+    if (this.toxicSpawnIn <= 0) {
+      this.toxicSpawnIn = HILL_RULES.toxicEvery;
+      this.spawnSpecialBonus("toxic");
+    }
     const n = m.players.length;
     for (let k = 0;k < n; k++) {
       const p = m.players[(k + m.tick) % n];
@@ -1020,7 +1035,7 @@ class HillState {
         return false;
       if (Math.abs(x - cx) + Math.abs(y - cy) < 2)
         return false;
-      if (g.fire[g.idx(x, y)] > 0)
+      if (g.fire[g.idx(x, y)] > 0 || m.gasAt(g.idx(x, y)))
         return false;
       return m.players.every((p) => !p.alive || Math.abs(Math.floor(p.x) - x) + Math.abs(Math.floor(p.y) - y) >= 2);
     });
@@ -1052,7 +1067,7 @@ class HillState {
     let bestScore = -Infinity;
     for (let y = 1;y < g.h - 1; y++)
       for (let x = 1;x < g.w - 1; x++) {
-        if (!m.isFreeCell(x, y, true) || g.fire[g.idx(x, y)] > 0)
+        if (!m.isFreeCell(x, y, true) || g.fire[g.idx(x, y)] > 0 || m.gasAt(g.idx(x, y)))
           continue;
         if (this.inBlast(x, y))
           continue;
@@ -1096,6 +1111,10 @@ class HillState {
     p.freezeCharges = 0;
     p.slowTime = 0;
     p.slowImmune = 0;
+    p.toxicCharges = 0;
+    p.toxDose = 0;
+    p.toxTick = 0;
+    p.toxRecover = 0;
     p.range = m.bombRules.startRange;
     p.bombCooldown = 0;
     p.activeBombs = Math.min(p.activeBombs, p.maxBombs);
@@ -1145,7 +1164,7 @@ var MODES = [
     emoji: "\uD83D\uDC51",
     suddenDeath: false,
     bombRules: { fuse: 2.5, warn: 0.8, startRange: 2, startBombs: 1, fireDuration: 0.4, cooldown: 0.5 },
-    loot: { weights: { throw: 14 }, maxPerMatch: { throw: 4, big: 5, elec: 5, freeze: 5 } },
+    loot: { weights: { throw: 14 }, maxPerMatch: { throw: 4, big: 5, elec: 5, freeze: 5, toxic: 5 } },
     onStart(m) {
       if (m.players.length >= 2)
         m.setTeams();
@@ -1516,7 +1535,7 @@ function computeDanger(m, extra) {
   const end = new Float32Array(n).fill(-Infinity);
   const list = [];
   for (const b of m.bombs.values())
-    list.push({ tx: b.tx, ty: b.ty, fuse: b.fuse, range: b.range });
+    list.push({ tx: b.tx, ty: b.ty, fuse: b.fuse, range: b.range, toxic: b.toxic });
   if (extra)
     list.push(extra);
   const bombCells = new Set(list.map((b) => g.idx(b.tx, b.ty)));
@@ -1546,7 +1565,7 @@ function computeDanger(m, extra) {
     for (const c of blasts[a]) {
       if (t[a] < start[c])
         start[c] = t[a];
-      const e = t[a] + m.bombRules.fireDuration;
+      const e = t[a] + (list[a].toxic ? Math.max(m.bombRules.fireDuration, TOXIC.duration) : m.bombRules.fireDuration);
       if (e > end[c])
         end[c] = e;
     }
@@ -1555,6 +1574,12 @@ function computeDanger(m, extra) {
     if (g.fire[i] > 0) {
       start[i] = 0;
       end[i] = Math.max(end[i], g.fire[i]);
+    }
+  }
+  for (const z of m.toxicZones) {
+    for (const i of z.cells) {
+      start[i] = 0;
+      end[i] = Math.max(end[i], z.timeLeft);
     }
   }
   for (const [x, y, left] of [...m.pendingDrops, ...m.upcomingDrops(6)]) {
@@ -1928,7 +1953,7 @@ class BotBrain {
     const tx = Math.floor(p.x);
     const ty = Math.floor(p.y);
     if (!sloppy) {
-      const danger = computeDanger(m, { tx, ty, fuse: m.bombRules.fuse * m.fuseMul, range: m.nextBombRange(p) });
+      const danger = computeDanger(m, { tx, ty, fuse: m.bombRules.fuse * m.fuseMul, range: m.nextBombRange(p), toxic: p.toxicCharges > 0 });
       const escape = this.findSafe(m, p, danger, this.prof.margin + 0.15, true);
       if (!escape)
         return false;
@@ -2135,6 +2160,17 @@ var BONUSES = {
       if (p.freezeCharges >= 1)
         return false;
       p.freezeCharges = 1;
+      return true;
+    }
+  },
+  toxic: {
+    id: "toxic",
+    label: "Bombe toxique",
+    description: "Ta prochaine bombe laisse un nuage toxique pendant 3 s.",
+    apply(p) {
+      if (p.toxicCharges >= 1)
+        return false;
+      p.toxicCharges = 1;
       return true;
     }
   },
@@ -2625,6 +2661,7 @@ class Match {
   pendingDrops = [];
   endTimer = 0;
   nextId = 1;
+  toxicZones = [];
   speedMul = 1;
   bonusBoost = false;
   loot;
@@ -2686,6 +2723,10 @@ class Match {
         freezeCharges: 0,
         slowTime: 0,
         slowImmune: 0,
+        toxicCharges: 0,
+        toxDose: 0,
+        toxTick: 0,
+        toxRecover: 0,
         shieldCharges: 0,
         shieldTime: 0,
         deathTime: -1,
@@ -2765,6 +2806,7 @@ class Match {
     this.updateBombPassability();
     this.updateBombs();
     this.updateFire();
+    this.updateToxic();
     this.updateBonuses();
     this.checkPickups();
     this.checkDeaths();
@@ -2889,6 +2931,9 @@ class Match {
     const freeze = p.freezeCharges > 0;
     if (freeze)
       p.freezeCharges = 0;
+    const toxic = p.toxicCharges > 0;
+    if (toxic)
+      p.toxicCharges = 0;
     const bomb = {
       id: this.nextId++,
       ownerId: p.id,
@@ -2906,6 +2951,8 @@ class Match {
       bomb.elec = true;
     if (freeze)
       bomb.freeze = true;
+    if (toxic)
+      bomb.toxic = true;
     this.bombs.set(bomb.id, bomb);
     p.activeBombs++;
     p.bombCooldown = this.bombRules.cooldown;
@@ -3051,6 +3098,7 @@ class Match {
         owner.activeBombs = Math.max(0, owner.activeBombs - 1);
       const shockZone = b.elec ? this.shockCells(b.tx, b.ty, b.range) : null;
       const frostZone = b.freeze ? this.shockCells(b.tx, b.ty, b.range, FREEZE.radius) : null;
+      const gasZone = b.toxic ? this.blastCells(b.tx, b.ty, b.range) : null;
       let cells = 1;
       this.setFire(b.tx, b.ty, FIRE.CENTER, b.ownerId);
       for (const [dx, dy, bit] of DIRS) {
@@ -3099,6 +3147,8 @@ class Match {
         this.discharge(b, shockZone);
       if (frostZone)
         this.frostBlast(b, frostZone);
+      if (gasZone)
+        this.addToxicZone(b, gasZone);
       this.events.push(b.big ? { t: "explode", x: b.tx, y: b.ty, owner: b.ownerId, cells, chain, big: true } : { t: "explode", x: b.tx, y: b.ty, owner: b.ownerId, cells, chain });
     }
   }
@@ -3170,6 +3220,70 @@ class Match {
   slow(p, by, dur) {
     p.slowTime = Math.min(FREEZE.duration, Math.max(0, dur));
     this.events.push({ t: "frozen", player: p.id, by, dur: p.slowTime });
+  }
+  addToxicZone(b, cells) {
+    const g = this.grid;
+    const list = cells.filter((i) => g.tiles[i] !== TILE.WALL);
+    this.toxicZones.push({ id: this.nextId++, owner: b.ownerId, cells: list, timeLeft: TOXIC.duration, duration: TOXIC.duration });
+    while (this.toxicZones.length > TOXIC.maxZones)
+      this.toxicZones.shift();
+    this.events.push({ t: "gas", x: b.tx, y: b.ty, owner: b.ownerId, cells: list });
+  }
+  hostileGasAt(p, i) {
+    for (let k = this.toxicZones.length - 1;k >= 0; k--) {
+      const z = this.toxicZones[k];
+      if (z.cells.includes(i) && !this.sameTeam(p.id, z.owner))
+        return z.owner;
+    }
+    return null;
+  }
+  gasAt(i) {
+    return this.toxicZones.some((z) => z.cells.includes(i));
+  }
+  updateToxic() {
+    for (const z of this.toxicZones)
+      z.timeLeft -= DT;
+    if (this.toxicZones.some((z) => z.timeLeft <= 0))
+      this.toxicZones = this.toxicZones.filter((z) => z.timeLeft > 0);
+    const g = this.grid;
+    for (const p of this.players) {
+      if (!p.alive)
+        continue;
+      const owner = this.toxicZones.length ? this.hostileGasAt(p, g.idx(Math.floor(p.x), Math.floor(p.y))) : null;
+      if (owner !== null) {
+        p.toxRecover = 0;
+        if (p.shieldTime > 0)
+          continue;
+        if (p.toxTick > 0) {
+          p.toxTick = Math.max(0, p.toxTick - DT);
+          continue;
+        }
+        p.toxDose++;
+        p.toxTick = TOXIC.doseEvery;
+        this.events.push({ t: "poisoned", player: p.id, dose: p.toxDose });
+        if (p.toxDose >= TOXIC.lethalDoses)
+          this.kill(p, owner);
+      } else {
+        if (p.toxTick > 0)
+          p.toxTick = Math.max(0, p.toxTick - DT);
+        if (p.toxDose > 0) {
+          p.toxRecover += DT;
+          if (p.toxRecover >= TOXIC.recoverEvery) {
+            p.toxDose--;
+            p.toxRecover = 0;
+          }
+        } else
+          p.toxRecover = 0;
+      }
+    }
+  }
+  clearToxic() {
+    this.toxicZones = [];
+    for (const p of this.players) {
+      p.toxDose = 0;
+      p.toxTick = 0;
+      p.toxRecover = 0;
+    }
   }
   stun(p, by, dur) {
     p.stunTime = Math.min(SHOCK.stun, Math.max(0, dur));
@@ -3289,6 +3403,10 @@ class Match {
     p.freezeCharges = 0;
     p.slowTime = 0;
     p.slowImmune = 0;
+    p.toxicCharges = 0;
+    p.toxDose = 0;
+    p.toxTick = 0;
+    p.toxRecover = 0;
     p.stats.survivalTime = this.time;
     if (killer >= 0 && killer !== p.id)
       this.players[killer].stats.kills++;
@@ -3504,6 +3622,7 @@ class Match {
     if (this.phase === "playing") {
       const done = this.hill ? this.hill.reached || this.timeLeft <= 0 : this.aliveCount <= 1 || this.timeLeft <= 0;
       if (done) {
+        this.clearToxic();
         this.phase = "ending";
         this.endTimer = RULES.endDelay;
       }
@@ -3542,6 +3661,7 @@ class Match {
   }
   finish() {
     this.phase = "over";
+    this.clearToxic();
     const alive = this.players.filter((p) => p.alive);
     for (const p of alive)
       p.stats.survivalTime = this.time;
@@ -3573,7 +3693,8 @@ function encodeSnapshot(m, acks, events) {
     tiles: Array.from(g.tiles).join(""),
     terrain: Array.from(g.terrain).join(""),
     fire,
-    bombs: [...m.bombs.values()].map((b) => [b.id, b.ownerId, b.tx, b.ty, r2(b.fuse), b.range, b.passable, b.fuseTotal, b.flight ? [b.flight.fromX, b.flight.fromY, r2(b.flight.t), r2(b.flight.dur)] : null, b.big ? 1 : 0, b.elec ? 1 : 0, b.freeze ? 1 : 0]),
+    bombs: [...m.bombs.values()].map((b) => [b.id, b.ownerId, b.tx, b.ty, r2(b.fuse), b.range, b.passable, b.fuseTotal, b.flight ? [b.flight.fromX, b.flight.fromY, r2(b.flight.t), r2(b.flight.dur)] : null, b.big ? 1 : 0, b.elec ? 1 : 0, b.freeze ? 1 : 0, b.toxic ? 1 : 0]),
+    toxic: m.toxicZones.map((z) => [z.id, z.owner, z.cells, r2(z.timeLeft), z.duration]),
     bonuses: [...m.bonuses.values()].map((b) => [b.id, b.type, b.tx, b.ty, r2(b.invuln), r2(b.age)]),
     pending: m.pendingDrops.map(([x, y, l]) => [x, y, r2(l)]),
     hill: m.hill ? { scores: m.hill.scores.map(r2), respawn: m.hill.respawnIn.map(r2), holder: m.hill.holder, contested: m.hill.contested, site: m.hill.site, next: m.hill.next, moveIn: r2(m.hill.moveIn) } : null,

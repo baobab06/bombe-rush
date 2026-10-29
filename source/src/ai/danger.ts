@@ -1,6 +1,7 @@
 import type { Match } from "../core/match";
 import { DIRS } from "../core/grid";
 import { RULES } from "../core/rules";
+import { TOXIC } from "../core/bombs";
 import { TILE } from "../core/types";
 
 export interface VirtualBomb {
@@ -8,6 +9,8 @@ export interface VirtualBomb {
   ty: number;
   fuse: number;
   range: number;
+  /** bombe toxique : le nuage reste dangereux après l'explosion */
+  toxic?: boolean;
 }
 
 /**
@@ -52,7 +55,7 @@ export function computeDanger(m: Match, extra?: VirtualBomb): DangerMap {
   const end = new Float32Array(n).fill(-Infinity);
 
   const list: VirtualBomb[] = [];
-  for (const b of m.bombs.values()) list.push({ tx: b.tx, ty: b.ty, fuse: b.fuse, range: b.range });
+  for (const b of m.bombs.values()) list.push({ tx: b.tx, ty: b.ty, fuse: b.fuse, range: b.range, toxic: b.toxic });
   if (extra) list.push(extra);
 
   const bombCells = new Set<number>(list.map((b) => g.idx(b.tx, b.ty)));
@@ -85,7 +88,7 @@ export function computeDanger(m: Match, extra?: VirtualBomb): DangerMap {
   for (let a = 0; a < list.length; a++) {
     for (const c of blasts[a]) {
       if (t[a] < start[c]) start[c] = t[a];
-      const e = t[a] + m.bombRules.fireDuration;
+      const e = t[a] + (list[a].toxic ? Math.max(m.bombRules.fireDuration, TOXIC.duration) : m.bombRules.fireDuration);
       if (e > end[c]) end[c] = e;
     }
   }
@@ -94,6 +97,13 @@ export function computeDanger(m: Match, extra?: VirtualBomb): DangerMap {
     if (g.fire[i] > 0) {
       start[i] = 0;
       end[i] = Math.max(end[i], g.fire[i]);
+    }
+  }
+  // nuages toxiques en cours (on les évite comme du feu tant qu'ils durent)
+  for (const z of m.toxicZones) {
+    for (const i of z.cells) {
+      start[i] = 0;
+      end[i] = Math.max(end[i], z.timeLeft);
     }
   }
   // murs de mort subite imminents

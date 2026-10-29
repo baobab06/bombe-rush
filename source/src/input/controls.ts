@@ -254,7 +254,7 @@ export class Controls {
   }
 
   // ---------------------------------------------------------------- dessin
-  draw(ctx: CanvasRenderingContext2D, shieldCharges: number, shieldActive: number, bombsLeft: number, maxBombs: number, throwCharges = 0, bigCharges = 0, elecCharges = 0, stunTime = 0, freezeCharges = 0) {
+  draw(ctx: CanvasRenderingContext2D, shieldCharges: number, shieldActive: number, bombsLeft: number, maxBombs: number, throwCharges = 0, bigCharges = 0, elecCharges = 0, stunTime = 0, freezeCharges = 0, toxicCharges = 0) {
     const L = this.layout;
     const now = performance.now();
     // la capacité vient d'apparaître / de disparaître
@@ -300,6 +300,7 @@ export class Controls {
     const big = bigCharges > 0;
     const elec = elecCharges > 0;
     const frz = freezeCharges > 0;
+    const tox = toxicCharges > 0;
     if (big) {
       const pulse = 0.5 + 0.5 * Math.sin(now / 160);
       ctx.save();
@@ -315,7 +316,8 @@ export class Controls {
     const bp = this.bombPointer !== null || now - this.bombPressT < 120;
     if (elec) this.drawElecHalo(ctx, L.bomb, now);
     if (frz) this.drawFrostHalo(ctx, L.bomb, now);
-    this.button(ctx, L.bomb, big ? "#ff3d4f" : elec ? "#2f8dff" : frz ? "#5fd3f0" : "#ff6a2b", big ? "#a3101f" : elec ? "#1546a8" : frz ? "#1f7f9e" : "#b8380c", bp, bombsLeft > 0 && stunTime <= 0, (x, y, r) => {
+    if (tox) this.drawToxicHalo(ctx, L.bomb, now);
+    this.button(ctx, L.bomb, big ? "#ff3d4f" : elec ? "#2f8dff" : frz ? "#5fd3f0" : tox ? "#6fd13a" : "#ff6a2b", big ? "#a3101f" : elec ? "#1546a8" : frz ? "#1f7f9e" : tox ? "#3b7a1a" : "#b8380c", bp, bombsLeft > 0 && stunTime <= 0, (x, y, r) => {
       ctx.fillStyle = "#1b1c33";
       ctx.beginPath();
       ctx.arc(x - r * 0.06, y + r * 0.08, r * (big ? 0.5 : 0.42), 0, Math.PI * 2);
@@ -336,6 +338,7 @@ export class Controls {
     this.badge(ctx, L.bomb.x + L.bomb.r * 0.62, L.bomb.y - L.bomb.r * 0.86, `${bombsLeft}/${maxBombs}`, "#1b1c33");
     if (big) this.badge(ctx, L.bomb.x - L.bomb.r * 0.7, L.bomb.y - L.bomb.r * 0.86, "XL", "#d61f33");
     if (elec) this.badge(ctx, L.bomb.x - L.bomb.r * 0.95, L.bomb.y + (big ? -L.bomb.r * 0.2 : -L.bomb.r * 0.86), "⚡", "#1546a8");
+    if (tox) this.badge(ctx, L.bomb.x + L.bomb.r * 0.95, L.bomb.y + L.bomb.r * 0.1, "☣", "#3b7a1a");
     if (frz) this.badge(ctx, L.bomb.x - L.bomb.r * 0.95, L.bomb.y + L.bomb.r * (elec ? 0.45 : big ? -0.2 : -0.86), "❄", "#1f7f9e");
     if (stunTime > 0) {
       // paralysé : jauge bleue autour du bouton bombe (les commandes reviennent à la fin)
@@ -519,6 +522,30 @@ export class Controls {
         ctx.lineTo(x + Math.cos(b) * 5, y + Math.sin(b) * 5);
         ctx.stroke();
       }
+    }
+    ctx.restore();
+  }
+
+  /** Bombe toxique prête : halo vert et bulles violettes qui montent autour du bouton bombe. */
+  private drawToxicHalo(ctx: CanvasRenderingContext2D, c: Circle, now: number) {
+    ctx.save();
+    const halo = ctx.createRadialGradient(c.x, c.y, c.r * 0.8, c.x, c.y, c.r * 1.45);
+    halo.addColorStop(0, "rgba(120,220,70,0.5)");
+    halo.addColorStop(1, "rgba(120,220,70,0)");
+    ctx.fillStyle = halo;
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, c.r * 1.5, 0, Math.PI * 2);
+    ctx.fill();
+    for (let k = 0; k < 5; k++) {
+      const ph = ((now / 1600 + k / 5) % 1);
+      const a = -Math.PI / 2 + (k - 2) * 0.55;
+      const x = c.x + Math.cos(a) * c.r * (1.05 + ph * 0.3);
+      const y = c.y + Math.sin(a) * c.r * (1.05 + ph * 0.3);
+      ctx.globalAlpha = 1 - ph;
+      ctx.fillStyle = k % 2 ? "#b36bff" : "#8fe85a";
+      ctx.beginPath();
+      ctx.arc(x, y, 3 + ph * 3, 0, Math.PI * 2);
+      ctx.fill();
     }
     ctx.restore();
   }

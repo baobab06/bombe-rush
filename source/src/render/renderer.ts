@@ -5,7 +5,7 @@ import { abilityBurst, emitAura, emitTrail, speedLines } from "./charfx";
 import { getBoom, getEmote } from "../core/cosmetics";
 import { EMOTE_DURATION, drawEmoteBubble } from "./emote";
 import { RULES, TEAM_COLORS } from "../core/rules";
-import { BIG, FREEZE, SHOCK, THROW } from "../core/bombs";
+import { BIG, FREEZE, SHOCK, THROW, TOXIC } from "../core/bombs";
 import { TERRAIN, TILE, type SimEvent } from "../core/types";
 import { Particles } from "./particles";
 import {
@@ -35,6 +35,7 @@ const BONUS_TEXT: Record<string, string> = {
   big: "GROSSE BOMBE !",
   elec: "BOMBE ÉLECTRIQUE !",
   freeze: "BOMBE GELANTE !",
+  toxic: "BOMBE TOXIQUE !",
 };
 
 interface Dying {
@@ -203,6 +204,25 @@ export class Renderer {
             const x = i % gw;
             const y = (i - x) / gw;
             P.spawn("twinkle", x + 0.5 + (Math.random() - 0.5) * 0.7, y + 0.5 + (Math.random() - 0.5) * 0.7, { z: 0.3 + Math.random() * 0.6, vz: -0.2, life: 0.9, size: 0.09, color: Math.random() < 0.5 ? "#ffffff" : "#bff0ff" });
+          }
+          break;
+        }
+        case "gas": {
+          P.spawn("ring", e.x + 0.5, e.y + 0.5, { life: 0.5, size: 1.1, color: "#8fe85a" });
+          const gw = m.grid.w;
+          for (const i of e.cells) {
+            const x = i % gw;
+            const y = (i - x) / gw;
+            for (let k = 0; k < 2; k++)
+              P.spawn("smoke", x + 0.5 + (Math.random() - 0.5) * 0.6, y + 0.5 + (Math.random() - 0.5) * 0.6, { life: 0.9, size: 0.28, color: k ? "#9a5ae0" : "#8fe85a" });
+          }
+          break;
+        }
+        case "poisoned": {
+          const pp = m.players[e.player];
+          if (pp) {
+            for (let k = 0; k < 4; k++) P.spawn("twinkle", pp.x + (Math.random() - 0.5) * 0.5, pp.y - 0.3, { z: 0.3, vz: 0.8, life: 0.6, size: 0.08, color: k % 2 ? "#9a5ae0" : "#8fe85a" });
+            if (e.player === this.localPlayer && e.dose === 1) P.text(pp.x, pp.y - 0.9, "GAZ TOXIQUE !", "#8fe85a");
           }
           break;
         }
@@ -454,6 +474,7 @@ export class Renderer {
     drawBomb(ctx, 0, 0, s, 1, t, 1, 9, m.bombRules.warn, owner?.boomId ? getBoom(owner.boomId).bomb : undefined);
     if (b.elec) this.drawElecBomb(ctx, 0, 0, s, t);
     if (b.freeze) this.drawFrostBomb(ctx, 0, 0, s, t);
+    if (b.toxic) this.drawToxicBomb(ctx, 0, 0, s, t);
     ctx.restore();
   }
 
@@ -654,6 +675,9 @@ export class Renderer {
     this.particles.drawMarks(ctx, s);
     this.ambient(m, dt);
 
+    // nuages toxiques : sous les bombes, les bonus et les joueurs (tout reste visible) ; le sol n'est jamais modifié
+    if (m.toxicZones.length) this.drawToxic(m);
+
     const ch = m.chaos;
     // Speed chaos : traînées de poussière derrière les joueurs qui courent
     if (m.speedMul > 1 && Math.random() < 0.6) {
@@ -738,6 +762,7 @@ export class Renderer {
             } else drawBomb(ctx, X + s / 2, Y + s / 2, s, b.fuse / b.fuseTotal, t, t - this.bombBorn.get(b.id)!, b.fuse, m.bombRules.warn, owner?.boomId ? getBoom(owner.boomId).bomb : undefined);
             if (b.elec) this.drawElecBomb(ctx, X + s / 2, Y + s / 2, s * (b.big ? BIG.scale : 1), t);
             if (b.freeze) this.drawFrostBomb(ctx, X + s / 2, Y + s / 2, s * (b.big ? BIG.scale : 1), t);
+            if (b.toxic) this.drawToxicBomb(ctx, X + s / 2, Y + s / 2, s * (b.big ? BIG.scale : 1), t);
           }
         }
       }
@@ -1078,8 +1103,88 @@ export class Renderer {
       celebrate: won,
     }, this.art.ink);
     if (p.shieldTime > 0) drawShield(ctx, cx, cy - s * 0.12, s, t, p.shieldTime);
+    if (p.alive && p.toxDose > 0) this.drawPoisoned(ctx, cx, cy, s, t, p.toxDose);
     if (p.alive && p.slowTime > 0) this.drawFrozen(ctx, cx, cy, s, t, p.slowTime);
     if (p.alive && p.stunTime > 0) this.drawStunned(ctx, cx, cy, s, t, p.stunTime);
+  }
+
+  /** Nuages toxiques : nappe verte/violette animée, qui apparaît et s'efface en douceur. */
+  private drawToxic(m: Match) {
+    const ctx = this.ctx;
+    const s = this.s;
+    const g = m.grid;
+    const t = this.time;
+    // une case couverte par plusieurs nuages n'est dessinée qu'une fois (avec le plus long restant)
+    const cover = new Map<number, number>();
+    for (const z of m.toxicZones) {
+      const fadeIn = Math.min(1, (z.duration - z.timeLeft) / 0.25);
+      const fadeOut = Math.min(1, z.timeLeft / 0.6);
+      const a = Math.max(0, Math.min(fadeIn, fadeOut));
+      for (const i of z.cells) cover.set(i, Math.max(cover.get(i) ?? 0, a));
+    }
+    ctx.save();
+    for (const [i, a] of cover) {
+      if (a <= 0) continue;
+      const x = i % g.w;
+      const y = (i - x) / g.w;
+      const X = x * s;
+      const Y = y * s;
+      // nappe de fond
+      ctx.globalAlpha = 0.32 * a;
+      ctx.fillStyle = "#5bbf2a";
+      ctx.fillRect(X + 1, Y + 1, s - 2, s - 2);
+      // volutes qui ondulent (vert + violet)
+      for (let k = 0; k < 3; k++) {
+        const ph = t * (0.9 + k * 0.3) + i * 1.7 + k * 2.1;
+        const px = X + s * (0.5 + 0.22 * Math.cos(ph));
+        const py = Y + s * (0.5 + 0.18 * Math.sin(ph * 1.3));
+        const r = s * (0.3 + 0.06 * Math.sin(ph * 2));
+        const grd = ctx.createRadialGradient(px, py, 0, px, py, r);
+        const col = k === 1 ? "154,90,224" : "143,232,90";
+        grd.addColorStop(0, `rgba(${col},${0.55 * a})`);
+        grd.addColorStop(1, `rgba(${col},0)`);
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = grd;
+        ctx.beginPath();
+        ctx.arc(px, py, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      // petites bulles qui montent
+      const bp = (t * 0.8 + ((i * 37) % 10) / 10) % 1;
+      ctx.globalAlpha = (1 - bp) * 0.8 * a;
+      ctx.fillStyle = "#d7ffb0";
+      ctx.beginPath();
+      ctx.arc(X + s * (0.25 + ((i * 13) % 5) * 0.12), Y + s * (0.8 - bp * 0.6), s * 0.04, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  /** Joueur intoxiqué : teinte verte légère, bulles et jauge de doses au-dessus de la tête. */
+  private drawPoisoned(ctx: CanvasRenderingContext2D, cx: number, cy: number, s: number, t: number, dose: number) {
+    ctx.save();
+    const vg = ctx.createRadialGradient(cx, cy - s * 0.15, s * 0.05, cx, cy - s * 0.15, s * 0.48);
+    vg.addColorStop(0, `rgba(143,232,90,${0.18 + dose * 0.08})`);
+    vg.addColorStop(1, "rgba(143,232,90,0)");
+    ctx.fillStyle = vg;
+    ctx.beginPath();
+    ctx.arc(cx, cy - s * 0.15, s * 0.48, 0, Math.PI * 2);
+    ctx.fill();
+    // jauge : une pastille par dose (rouge à la dernière avant l'élimination)
+    const n = TOXIC.lethalDoses;
+    const w = s * 0.13;
+    const y = cy - s * 0.92;
+    for (let k = 0; k < n; k++) {
+      const x = cx + (k - (n - 1) / 2) * w * 1.25;
+      ctx.fillStyle = k < dose ? (dose >= n - 1 ? "#ff4a4a" : "#8fe85a") : "rgba(20,20,30,0.55)";
+      ctx.strokeStyle = "#1b1b2e";
+      ctx.lineWidth = Math.max(1, s * 0.025);
+      ctx.beginPath();
+      ctx.arc(x, y + (k < dose ? Math.sin(t * 10 + k) * s * 0.01 : 0), w / 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   /** Flocon simple (3 traits) — centre (x, y), rayon r. */
@@ -1091,6 +1196,35 @@ export class Renderer {
       ctx.lineTo(x + Math.cos(b) * r, y + Math.sin(b) * r);
       ctx.stroke();
     }
+  }
+
+  /** Bombe toxique : reflet vert, symbole ☣ et petite fumée verte/violette qui s'échappe. */
+  private drawToxicBomb(ctx: CanvasRenderingContext2D, cx: number, cy: number, s: number, t: number) {
+    ctx.save();
+    const g = ctx.createRadialGradient(cx, cy, s * 0.12, cx, cy, s * 0.5);
+    g.addColorStop(0, "rgba(143,232,90,0)");
+    g.addColorStop(0.65, "rgba(143,232,90,0.3)");
+    g.addColorStop(1, "rgba(143,232,90,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(cx, cy, s * 0.5, 0, Math.PI * 2);
+    ctx.fill();
+    // bande verte
+    ctx.strokeStyle = "#7dd63f";
+    ctx.lineWidth = Math.max(1.5, s * 0.05);
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + s * 0.04, s * 0.3, s * 0.09, 0, 0.1, Math.PI - 0.1);
+    ctx.stroke();
+    // volutes qui s'échappent de la mèche
+    for (let k = 0; k < 3; k++) {
+      const ph = (t * 0.9 + k / 3) % 1;
+      ctx.globalAlpha = (1 - ph) * 0.7;
+      ctx.fillStyle = k % 2 ? "#9a5ae0" : "#8fe85a";
+      ctx.beginPath();
+      ctx.arc(cx + s * (0.12 + Math.sin(ph * 6 + k) * 0.06), cy - s * (0.3 + ph * 0.35), s * (0.05 + ph * 0.06), 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
   }
 
   /** Bombe gelante : reflet glacé, givre sur le dessus et petit flocon. */

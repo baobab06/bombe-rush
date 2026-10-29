@@ -463,6 +463,7 @@ export const BONUS_COLORS: Record<string, [string, string]> = {
   big: ["#ff4257", "#a3101f"],
   elec: ["#3fa9ff", "#1546a8"],
   freeze: ["#7fe0f7", "#2a8fb0"],
+  toxic: ["#7dd63f", "#5b2a8c"],
 };
 
 export function drawBonusIcon(ctx: Ctx, cx: number, cy: number, s: number, type: string) {
@@ -530,6 +531,40 @@ export function drawBonusIcon(ctx: Ctx, cx: number, cy: number, s: number, type:
         ctx.beginPath();
         ctx.moveTo(cx - s * 0.36, cy - s * 0.08 + k * s * 0.12);
         ctx.lineTo(cx - s * 0.26, cy - s * 0.08 + k * s * 0.12);
+        ctx.stroke();
+      }
+      break;
+    }
+    case "toxic": {
+      // petit nuage vert et violet + bulles
+      const puffs: [number, number, number, string][] = [
+        [-0.13, 0.06, 0.15, "#9a5ae0"],
+        [0.12, 0.07, 0.14, "#9a5ae0"],
+        [0, -0.04, 0.18, "#b6f06a"],
+        [-0.16, -0.06, 0.1, "#b6f06a"],
+        [0.17, -0.05, 0.1, "#b6f06a"],
+      ];
+      for (const [dx, dy, r, col] of puffs) {
+        ctx.fillStyle = col;
+        ctx.beginPath();
+        ctx.arc(cx + dx * s, cy + dy * s, r * s, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = "#ffffff";
+      for (const [dx, dy, r] of [[-0.05, -0.25, 0.04], [0.09, -0.3, 0.03], [0.02, -0.36, 0.022]]) {
+        ctx.beginPath();
+        ctx.arc(cx + dx * s, cy + dy * s, r * s, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      // yeux du nuage (×) : « dangereux »
+      ctx.strokeStyle = "#2b1442";
+      ctx.lineWidth = Math.max(1, s * 0.035);
+      for (const ex of [-0.06, 0.06]) {
+        ctx.beginPath();
+        ctx.moveTo(cx + (ex - 0.03) * s, cy - 0.05 * s);
+        ctx.lineTo(cx + (ex + 0.03) * s, cy + 0.01 * s);
+        ctx.moveTo(cx + (ex + 0.03) * s, cy - 0.05 * s);
+        ctx.lineTo(cx + (ex - 0.03) * s, cy + 0.01 * s);
         ctx.stroke();
       }
       break;

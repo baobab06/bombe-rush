@@ -44,6 +44,9 @@ export const HILL_RULES = {
   /** bonus « bombe gelante » : première apparition, puis intervalle (s) */
   freezeFirst: 6,
   freezeEvery: 20,
+  /** bonus « bombe toxique » : première apparition, puis intervalle (s) */
+  toxicFirst: 7,
+  toxicEvery: 20,
 } as const;
 
 interface Site {
@@ -71,6 +74,8 @@ export class HillState {
   elecSpawnIn: number = HILL_RULES.elecFirst;
   /** secondes avant la prochaine apparition d'un bonus « bombe gelante » */
   freezeSpawnIn: number = HILL_RULES.freezeFirst;
+  /** secondes avant la prochaine apparition d'un bonus « bombe toxique » */
+  toxicSpawnIn: number = HILL_RULES.toxicFirst;
   /** temps restant avant la réapparition de chaque joueur (≤ 0 = rien en attente) */
   readonly respawnIn: number[];
   /** joueur qui marque en ce moment (-1 = personne) */
@@ -323,6 +328,11 @@ export class HillState {
       this.freezeSpawnIn = HILL_RULES.freezeEvery;
       this.spawnSpecialBonus("freeze");
     }
+    this.toxicSpawnIn -= DT;
+    if (this.toxicSpawnIn <= 0) {
+      this.toxicSpawnIn = HILL_RULES.toxicEvery;
+      this.spawnSpecialBonus("toxic");
+    }
     // réapparitions
     // ordre tournant : à réapparition simultanée, personne ne choisit toujours sa case en premier
     const n = m.players.length;
@@ -353,7 +363,7 @@ export class HillState {
     const cells = m.randomFreeCells(400).filter(([x, y]) => {
       if (g.idx(x, y) === last) return false;
       if (Math.abs(x - cx) + Math.abs(y - cy) < 2) return false;
-      if (g.fire[g.idx(x, y)] > 0) return false;
+      if (g.fire[g.idx(x, y)] > 0 || m.gasAt(g.idx(x, y))) return false;
       return m.players.every((p) => !p.alive || Math.abs(Math.floor(p.x) - x) + Math.abs(Math.floor(p.y) - y) >= 2);
     });
     const c = cells[0];
@@ -390,7 +400,7 @@ export class HillState {
     let bestScore = -Infinity;
     for (let y = 1; y < g.h - 1; y++)
       for (let x = 1; x < g.w - 1; x++) {
-        if (!m.isFreeCell(x, y, true) || g.fire[g.idx(x, y)] > 0) continue;
+        if (!m.isFreeCell(x, y, true) || g.fire[g.idx(x, y)] > 0 || m.gasAt(g.idx(x, y))) continue;
         if (this.inBlast(x, y)) continue;
         const hill = Math.abs(x - this.center[0]) + Math.abs(y - this.center[1]);
         if (hill < HILL_RULES.respawnHillGap) continue;
@@ -432,6 +442,10 @@ export class HillState {
     p.freezeCharges = 0;
     p.slowTime = 0;
     p.slowImmune = 0;
+    p.toxicCharges = 0;
+    p.toxDose = 0;
+    p.toxTick = 0;
+    p.toxRecover = 0;
     p.range = m.bombRules.startRange;
     p.bombCooldown = 0;
     p.activeBombs = Math.min(p.activeBombs, p.maxBombs);

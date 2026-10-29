@@ -94,6 +94,33 @@ export const FREEZE = {
   immunity: 1.0,
 } as const;
 
+/**
+ * BOMBE TOXIQUE — réglages. À l'explosion (dégâts habituels, inchangés),
+ * un nuage toxique reste sur les cases touchées par l'explosion pendant
+ * `duration` secondes, comme un effet indépendant (il ne modifie pas le sol).
+ *
+ * Le jeu n'a pas de points de vie (un coup = éliminé) : le gaz agit donc par
+ * DOSES. Un adversaire dans le nuage prend 1 dose en entrant puis 1 toutes
+ * les `doseEvery` s (jamais à chaque image) ; à `lethalDoses` doses il est
+ * éliminé. Hors du nuage, il perd 1 dose toutes les `recoverEvery` s.
+ * → traverser vite une case : survivable ; rester dedans ≈ 1 s : éliminé.
+ *  - chaque nuage a sa propre durée : un nuage qui en chevauche un autre ne
+ *    prolonge rien ; au plus `maxZones` nuages (le plus ancien disparaît) ;
+ *  - plusieurs nuages superposés ne donnent jamais plus d'une dose à la fois.
+ */
+export const TOXIC = {
+  /** durée d'un nuage (s) */
+  duration: 3,
+  /** une dose toutes les N secondes passées dans le nuage */
+  doseEvery: 0.5,
+  /** doses qui éliminent */
+  lethalDoses: 3,
+  /** hors du nuage : une dose en moins toutes les N secondes */
+  recoverEvery: 1,
+  /** nuages actifs au maximum sur la carte */
+  maxZones: 8,
+} as const;
+
 /** Portée d'une grosse bombe à partir de la portée normale du joueur. */
 export function bigRange(range: number): number {
   return Math.min(BIG.maxRange, Math.max(range + BIG.minExtra, Math.round(range * BIG.rangeMul)));

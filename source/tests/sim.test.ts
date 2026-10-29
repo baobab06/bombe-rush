@@ -607,6 +607,7 @@ console.log("Bombe à lancer (Domination)");
     m.hill!.bigSpawnIn = 1e9;
     m.hill!.elecSpawnIn = 1e9;
     m.hill!.freezeSpawnIn = 1e9;
+    m.hill!.toxicSpawnIn = 1e9;
     place(m, 0, 1, 1); place(m, 1, 13, 1); place(m, 2, 1, 11); place(m, 3, 13, 11);
     return m;
   };
@@ -915,6 +916,7 @@ console.log("Grosse bombe");
     m.hill!.bigSpawnIn = 1e9;
     m.hill!.elecSpawnIn = 1e9;
     m.hill!.freezeSpawnIn = 1e9;
+    m.hill!.toxicSpawnIn = 1e9;
     place(m, 0, 1, 1); place(m, 1, 13, 1); place(m, 2, 1, 11); place(m, 3, 13, 11);
     return m;
   };
@@ -1222,7 +1224,7 @@ console.log("Bombe électrique");
   const mk = (seed = 41) => {
     const m = new Match({ seed, map: FACTORY, modeId: "koth", players: slots(4) });
     m.phase = "playing";
-    m.hill!.moveIn = 1e9; m.hill!.throwSpawnIn = 1e9; m.hill!.bigSpawnIn = 1e9; m.hill!.elecSpawnIn = 1e9; m.hill!.freezeSpawnIn = 1e9;
+    m.hill!.moveIn = 1e9; m.hill!.throwSpawnIn = 1e9; m.hill!.bigSpawnIn = 1e9; m.hill!.elecSpawnIn = 1e9; m.hill!.freezeSpawnIn = 1e9; m.hill!.toxicSpawnIn = 1e9;
     place(m, 0, 1, 1); place(m, 1, 13, 1); place(m, 2, 1, 11); place(m, 3, 13, 11);
     return m;
   };
@@ -1494,7 +1496,7 @@ console.log("Bombe gelante");
   const mk = (seed = 41) => {
     const m = new Match({ seed, map: FACTORY, modeId: "koth", players: slots(4) });
     m.phase = "playing";
-    m.hill!.moveIn = 1e9; m.hill!.throwSpawnIn = 1e9; m.hill!.bigSpawnIn = 1e9; m.hill!.elecSpawnIn = 1e9; m.hill!.freezeSpawnIn = 1e9;
+    m.hill!.moveIn = 1e9; m.hill!.throwSpawnIn = 1e9; m.hill!.bigSpawnIn = 1e9; m.hill!.elecSpawnIn = 1e9; m.hill!.freezeSpawnIn = 1e9; m.hill!.toxicSpawnIn = 1e9;
     place(m, 0, 1, 1); place(m, 1, 13, 1); place(m, 2, 1, 11); place(m, 3, 13, 11);
     return m;
   };
@@ -1585,6 +1587,258 @@ console.log("Bombe gelante");
         if (m.phase === "over") ended++;
       }
       check(ended === 6 && stuck === 0 && frozen > 0 && longest * DT <= FREEZE.duration + DT + 1e-9 && badSpeed === 0, `bots (${modeId}) : 6 parties terminées, ${frozen} gels, jamais plus de ${(longest * DT).toFixed(2)} s, vitesses de base jamais modifiées, personne coincé`);
+    }
+  }
+}
+
+console.log("Bombe toxique");
+{
+  const { FACTORY } = await import("../src/maps/factory");
+  const { TOXIC } = await import("../src/core/bombs");
+  const { HILL_RULES } = await import("../src/core/hill");
+  const { encodeSnapshot, applySnapshot } = await import("../src/net/snapshot");
+  const slots = (n: number) => Array.from({ length: n }, (_, i) => ({ name: "P" + i, characterId: "pip", isBot: false, difficulty: "normal" as Difficulty }));
+  const open = (n = 3) => {
+    const m = emptyMatch(n);
+    const g = m.grid;
+    for (let y = 1; y < g.h - 1; y++) for (let x = 1; x < g.w - 1; x++) { g.tiles[g.idx(x, y)] = TILE.FLOOR; g.terrain[g.idx(x, y)] = TERRAIN.NONE; }
+    place(m, 0, 1, 1); place(m, 1, 11, 9);
+    if (n > 2) place(m, 2, 1, 9);
+    return m;
+  };
+  const cmdFor = (id: number, c: Partial<InputCmd>) => (mm: Match) => mm.players.map((p) => (p.id === id ? { mx: 0, my: 0, bomb: false, ability: false, ...c } : NO_INPUT));
+  const bombBy = (m: Match, id: number) => run(m, DT, cmdFor(id, { bomb: true }));
+  const plant = (m: Match, x: number, y: number, park: [number, number] = [1, 1]) => {
+    place(m, 0, x, y); bombBy(m, 0); place(m, 0, park[0], park[1]);
+    return [...m.bombs.values()].find((b) => b.tx === x && b.ty === y);
+  };
+  const untilBoom = (m: Match) => {
+    const ev: { t: string; player?: number; dose?: number }[] = [];
+    for (let i = 0; i < 400 && m.bombs.size; i++) { m.step(idle(m)); ev.push(...m.events); }
+    return ev;
+  };
+  /** nuage toxique du joueur 0 centré en (5, 5) sur carte dégagée (croix de 2) — feu éteint */
+  const gasMatch = (n = 3) => {
+    const m = open(n);
+    m.players[0].toxicCharges = 1;
+    plant(m, 5, 5);
+    untilBoom(m);
+    run(m, m.bombRules.fireDuration + DT);
+    return m;
+  };
+  const evs = (m: Match, secs: number, inputs?: (mm: Match) => InputCmd[]) => {
+    const out: { t: string; player?: number; dose?: number }[] = [];
+    for (let i = 0; i < Math.round(secs / DT); i++) { m.step(inputs ? inputs(m) : idle(m)); out.push(...m.events); }
+    return out;
+  };
+  {
+    const c = new Match({ seed: 3, map: FOREST, modeId: "classic", players: slots(4) });
+    const k = new Match({ seed: 3, map: FACTORY, modeId: "koth", players: slots(4) });
+    const ch = new Match({ seed: 3, map: FOREST, modeId: "chaos", players: slots(4) });
+    check([c, k, ch].every((mm) => (mm.loot.cfg.weights.toxic ?? 0) > 0), "bonus présent dans le butin : Classique, Chaos et Domination");
+    check([c, k, ch].every((mm) => mm.players.every((p) => p.toxicCharges === 0 && p.toxDose === 0) && mm.toxicZones.length === 0), "personne ne commence toxique, aucun nuage");
+    check(TOXIC.duration === 3, `durée du nuage : ${TOXIC.duration} s (configurable), dose toutes les ${TOXIC.doseEvery} s, éliminé à ${TOXIC.lethalDoses} doses`);
+  }
+  {
+    const m = open();
+    m.spawnBonus("toxic", 3, 3); place(m, 0, 3, 3); run(m, 0.5);
+    check(m.players[0].toxicCharges === 1, "ramasser le bonus donne une bombe toxique");
+    m.spawnBonus("toxic", 4, 3); place(m, 0, 4, 3); run(m, 0.5);
+    check(m.players[0].toxicCharges === 1, "une seule en réserve (pas de cumul)");
+    const b = plant(m, 5, 5)!;
+    check(!!b?.toxic && b.range === 2 && !b.big && m.players[0].toxicCharges === 0, "la bombe suivante est toxique (portée normale), réserve vidée");
+    untilBoom(m); run(m, 3.5);
+    const n = plant(m, 5, 5)!;
+    check(!!n && !n.toxic, "la bombe d'après redevient normale");
+    untilBoom(m);
+    check(m.toxicZones.length === 0, "bombe normale : aucun nuage");
+  }
+  {
+    // nuage = cases touchées, durée limitée, sol inchangé
+    const m = open();
+    const g = m.grid;
+    g.tiles[g.idx(7, 5)] = TILE.WALL;
+    g.tiles[g.idx(5, 7)] = TILE.BLOCK;
+    const tiles0 = Array.from(g.tiles).map((v, i) => (i === g.idx(5, 7) ? TILE.FLOOR : v)).join("");
+    const terr0 = Array.from(g.terrain).join("");
+    m.players[0].toxicCharges = 1;
+    plant(m, 5, 5);
+    const ev = untilBoom(m);
+    const z = m.toxicZones[0];
+    const want = [g.idx(5, 5), g.idx(4, 5), g.idx(3, 5), g.idx(6, 5), g.idx(5, 4), g.idx(5, 3), g.idx(5, 6), g.idx(5, 7)].sort((a, b) => a - b);
+    check(!!z && ev.some((e) => e.t === "gas") && JSON.stringify([...z.cells].sort((a, b) => a - b)) === JSON.stringify(want), `nuage sur les cases touchées par l'explosion (${z?.cells.length} cases, pas dans le mur, s'arrête à la caisse)`);
+    let life = 0;
+    while (m.toxicZones.length && life < 1000) { run(m, DT); life++; }
+    check(Math.abs((life + 1) * DT - TOXIC.duration) <= 2 * DT, `le nuage disparaît tout seul (${((life + 1) * DT).toFixed(2)} s)`);
+    check(Array.from(g.tiles).join("") === tiles0 && Array.from(g.terrain).join("") === terr0, "le sol redevient normal (rien n'a été modifié dans la grille)");
+  }
+  {
+    // doses : 1 en entrant puis 1 toutes les 0,5 s ; éliminé à la 3e ; tué par le poseur
+    const m = gasMatch();
+    const p = m.players[1];
+    place(m, 1, 6, 5);
+    const ev = evs(m, 1.2);
+    const doses = ev.filter((e) => e.t === "poisoned" && e.player === 1);
+    const died = ev.findIndex((e) => e.t === "playerDied" && e.player === 1);
+    check(doses.length === 3 && doses.map((d) => d.dose).join(",") === "1,2,3", `dans le nuage : ${doses.length} doses (une toutes les ${TOXIC.doseEvery} s, jamais à chaque image)`);
+    check(!p.alive && died >= 0 && p.killedBy === 0 && m.players[0].stats.kills === 1, "3e dose : éliminé, l'élimination compte pour le poseur");
+    const after = evs(m, 1);
+    check(!after.some((e) => e.t === "poisoned" && e.player === 1), "un joueur éliminé ne prend plus aucune dose");
+  }
+  {
+    // traverser vite : survit, puis récupère
+    const m = gasMatch();
+    const p = m.players[1];
+    place(m, 1, 6, 6);
+    // remonte la colonne 6 vers le haut : traverse la case (6,5) du nuage
+    let maxDose = 0;
+    for (let i = 0; i < Math.round(0.7 / DT); i++) { run(m, DT, cmdFor(1, { my: -1 })); maxDose = Math.max(maxDose, p.toxDose); }
+    check(p.alive && maxDose >= 1 && maxDose < TOXIC.lethalDoses, `traverser une case de nuage en courant : survit (${maxDose} dose)`);
+    run(m, TOXIC.recoverEvery * TOXIC.lethalDoses + 0.2);
+    check(p.toxDose === 0, "hors du nuage, les doses disparaissent avec le temps");
+  }
+  {
+    // nuages qui se chevauchent : jamais 2 doses à la fois, jamais prolongés
+    const m = open();
+    m.players[0].toxicCharges = 1;
+    plant(m, 5, 5);
+    m.players[2].toxicCharges = 1;
+    place(m, 2, 6, 6); bombBy(m, 2); place(m, 2, 1, 9);
+    untilBoom(m);
+    run(m, m.bombRules.fireDuration + DT);
+    check(m.toxicZones.length === 2, "deux bombes toxiques : deux nuages indépendants");
+    const p = m.players[1];
+    p.shieldTime = 0;
+    place(m, 1, 6, 5); // case couverte par les deux nuages
+    const ev = evs(m, 0.6);
+    check(ev.filter((e) => e.t === "poisoned" && e.player === 1).length === 2, "case couverte par 2 nuages : toujours 1 dose toutes les 0,5 s (pas le double)");
+    place(m, 1, 11, 9);
+    const q = open(2);
+    for (let k = 0; k < 4; k++) {
+      q.players[0].toxicCharges = 1; q.players[0].bombCooldown = 0; q.players[0].activeBombs = 0;
+      const b = plant(q, 5, 5); if (b) b.fuse = DT;
+      run(q, 0.8);
+    }
+    const zs = q.toxicZones.map((z) => z.timeLeft);
+    check(zs.length >= 1 && zs.every((t) => t <= TOXIC.duration + 1e-9), `bombes toxiques répétées au même endroit : chaque nuage garde sa propre durée (≤ ${TOXIC.duration} s)`);
+    run(q, TOXIC.duration + 0.1);
+    check(q.toxicZones.length === 0, `${TOXIC.duration} s après la dernière : plus aucun nuage`);
+    const r = open(2);
+    let made = 0;
+    for (let k = 0; k < 12; k++) {
+      const b = { id: 9000 + k, ownerId: 0, tx: 2 + (k % 9), ty: 3 + Math.floor(k / 9) * 4, fuse: DT, fuseTotal: 1, range: 1, passable: [], toxic: true };
+      r.bombs.set(b.id, b);
+      r.detonate(b);
+      made++;
+    }
+    check(made === 12 && r.toxicZones.length === TOXIC.maxZones, `12 nuages créés d'un coup : seuls les ${TOXIC.maxZones} plus récents restent (${r.toxicZones.length})`);
+  }
+  {
+    // bouclier ; poseur non protégé
+    const m = gasMatch();
+    const p = m.players[1];
+    place(m, 1, 6, 5); p.shieldTime = 1;
+    const ev = evs(m, 0.9);
+    check(p.alive && p.toxDose === 0 && !ev.some((e) => e.t === "poisoned" && e.player === 1), "bouclier actif : aucune dose");
+    place(m, 0, 4, 5);
+    evs(m, 0.3);
+    check(m.players[0].toxDose >= 1, "le poseur qui reste dans son propre nuage prend des doses aussi");
+  }
+  {
+    // fin de manche : nuages nettoyés
+    const m = gasMatch(2);
+    check(m.toxicZones.length === 1, "nuage actif avant la fin de manche");
+    m.kill(m.players[1], 0);
+    run(m, DT);
+    check(m.toxicZones.length === 0 && m.players.every((p) => p.toxDose === 0), "fin de manche : tous les nuages et les doses sont effacés");
+    run(m, 5);
+    check(m.phase === "over" && m.toxicZones.length === 0, "partie terminée proprement, rien ne reste");
+  }
+  // ---- Domination 2v2
+  const mk = (seed = 41) => {
+    const m = new Match({ seed, map: FACTORY, modeId: "koth", players: slots(4) });
+    m.phase = "playing";
+    m.hill!.moveIn = 1e9; m.hill!.throwSpawnIn = 1e9; m.hill!.bigSpawnIn = 1e9; m.hill!.elecSpawnIn = 1e9; m.hill!.freezeSpawnIn = 1e9; m.hill!.toxicSpawnIn = 1e9;
+    place(m, 0, 1, 1); place(m, 1, 13, 1); place(m, 2, 1, 11); place(m, 3, 13, 11);
+    return m;
+  };
+  {
+    const m = mk();
+    const mate = m.players.filter((p) => p.id !== 0 && m.sameTeam(0, p.id))[0];
+    const foe = m.players.filter((p) => m.isFoe(m.players[0], p))[0];
+    m.players[0].toxicCharges = 1;
+    plant(m, 6, 6);
+    untilBoom(m);
+    run(m, m.bombRules.fireDuration + DT);
+    place(m, mate.id, 5, 6); place(m, foe.id, 7, 6);
+    const ev = evs(m, 0.6);
+    check(mate.toxDose === 0 && !ev.some((e) => e.t === "poisoned" && e.player === mate.id), "Domination : le coéquipier ne prend aucune dose");
+    check(foe.toxDose === 2, `Domination : l'adversaire prend des doses (${foe.toxDose})`);
+    run(m, 0.5);
+    check(!foe.alive, "Domination : l'adversaire resté dans le nuage est éliminé");
+    run(m, HILL_RULES.respawnDelay + 0.3);
+    const g = m.grid;
+    check(foe.alive && foe.toxDose === 0 && !m.gasAt(g.idx(Math.floor(foe.x), Math.floor(foe.y))), "réapparition sans doses, jamais dans un nuage");
+  }
+  {
+    // combinaison : lancée + grosse + toxique
+    const m = mk();
+    const p = m.players[0];
+    p.toxicCharges = 1; p.bigCharges = 1; p.throwCharges = 1;
+    place(m, 0, 2, 6); p.faceX = 1; p.faceY = 0;
+    run(m, DT, cmdFor(0, { throw: true }));
+    const b = [...m.bombs.values()][0];
+    check(!!b?.flight && b.toxic === true && b.big === true, "toxique + grosse + lancée : tout se combine");
+    place(m, 0, 2, 8);
+    untilBoom(m);
+    check(m.toxicZones.length === 1 && m.toxicZones[0].cells.length >= 10, `grosse bombe toxique : grand nuage (${m.toxicZones[0]?.cells.length} cases)`);
+  }
+  {
+    let appeared = 0;
+    for (let seed = 1; seed <= 12; seed++) {
+      const m = new Match({ seed, map: FACTORY, modeId: "koth", players: slots(4) });
+      m.phase = "playing"; m.hill!.moveIn = 1e9;
+      run(m, HILL_RULES.toxicFirst + 0.2);
+      if ([...m.bonuses.values()].some((x) => x.type === "toxic")) appeared++;
+    }
+    check(appeared >= 10, `Domination : le bonus apparaît dès le début (${appeared}/12 à ${HILL_RULES.toxicFirst} s)`);
+  }
+  {
+    // en ligne
+    const m = mk();
+    m.players[0].toxicCharges = 1;
+    plant(m, 6, 6);
+    untilBoom(m);
+    m.players[1].toxDose = 2;
+    const snap = JSON.parse(JSON.stringify(encodeSnapshot(m, [0, 0, 0, 0], [])));
+    const c = new Match({ seed: 41, map: FACTORY, modeId: "koth", players: slots(4) });
+    applySnapshot(c, snap);
+    check(c.toxicZones.length === 1 && c.toxicZones[0].cells.length === m.toxicZones[0].cells.length && c.players[1].toxDose === 2, "en ligne : nuages et doses recopiés");
+    const snap2 = JSON.parse(JSON.stringify(encodeSnapshot(new Match({ seed: 41, map: FACTORY, modeId: "koth", players: slots(4) }), [0, 0, 0, 0], [])));
+    applySnapshot(c, snap2);
+    check(c.toxicZones.length === 0, "en ligne : nuages effacés quand le serveur n'en a plus");
+  }
+  {
+    for (const [modeId, map] of [["classic", FOREST], ["koth", FACTORY]] as const) {
+      let stuck = 0, ended = 0, clouds = 0, gasDeaths = 0, deaths = 0, leftover = 0;
+      for (let seed = 1; seed <= 6; seed++) {
+        const m = new Match({ seed: seed * 71, map, modeId, players: Array.from({ length: 4 }, (_, i) => ({ name: "B" + i, characterId: "pip", isBot: true, difficulty: "hard" as Difficulty })) });
+        const brains = m.players.map((p) => new BotBrain(p.id, "hard", seed));
+        let g = 0;
+        while (m.phase !== "over" && g++ < 60 * 200) {
+          if (g % 300 === 0) for (const p of m.players) if (p.alive) p.toxicCharges = 1;
+          m.step(brains.map((b) => b.update(m, DT)));
+          const lastDose = new Set(m.events.filter((e) => e.t === "poisoned" && e.dose >= TOXIC.lethalDoses).map((e) => (e as { player: number }).player));
+          for (const e of m.events) {
+            if (e.t === "gas") clouds++;
+            if (e.t === "playerDied") { deaths++; if (lastDose.has(e.player)) gasDeaths++; }
+          }
+          for (const p of m.players) if (p.alive && m.grid.blocksMove(Math.floor(p.x), Math.floor(p.y))) stuck++;
+        }
+        if (m.phase === "over") ended++;
+        leftover += m.toxicZones.length;
+      }
+      check(ended === 6 && stuck === 0 && clouds > 0 && leftover === 0, `bots (${modeId}) : 6 parties terminées, ${clouds} nuages, ${gasDeaths}/${deaths} éliminations par le gaz, aucun nuage restant, personne coincé`);
     }
   }
 }

@@ -1,4 +1,4 @@
-import { FREEZE, SHOCK, THROW, bigRange, type BombRules } from "./bombs";
+import { FREEZE, SHOCK, THROW, TOXIC, bigRange, type BombRules } from "./bombs";
 import { BONUSES } from "./bonuses";
 import { DIRS, Grid } from "./grid";
 import { LOOT, LootTable } from "./loot";
@@ -18,6 +18,7 @@ import {
   type PlayerSlot,
   type PlayerState,
   type SimEvent,
+  type ToxicZone,
 } from "./types";
 import { generateArena } from "../maps/generator";
 import type { MapDef } from "../maps/types";
@@ -60,6 +61,8 @@ export class Match {
   private endTimer = 0;
   private nextId = 1;
   /** multiplicateur de vitesse global (mode Chaos) */
+  /** nuages toxiques actifs (bombe toxique) */
+  toxicZones: ToxicZone[] = [];
   speedMul = 1;
   /** mode Chaos : chaque bloc détruit lâche un bonus */
   bonusBoost = false;
@@ -135,6 +138,10 @@ export class Match {
         freezeCharges: 0,
         slowTime: 0,
         slowImmune: 0,
+        toxicCharges: 0,
+        toxDose: 0,
+        toxTick: 0,
+        toxRecover: 0,
         shieldCharges: 0,
         shieldTime: 0,
         deathTime: -1,
@@ -224,6 +231,7 @@ export class Match {
     this.updateBombPassability();
     this.updateBombs();
     this.updateFire();
+    this.updateToxic();
     this.updateBonuses();
     this.checkPickups();
     this.checkDeaths();
@@ -351,6 +359,8 @@ export class Match {
     if (elec) p.elecCharges = 0;
     const freeze = p.freezeCharges > 0;
     if (freeze) p.freezeCharges = 0;
+    const toxic = p.toxicCharges > 0;
+    if (toxic) p.toxicCharges = 0;
     const bomb: BombState = {
       id: this.nextId++,
       ownerId: p.id,
@@ -365,6 +375,7 @@ export class Match {
     if (big) bomb.big = true;
     if (elec) bomb.elec = true;
     if (freeze) bomb.freeze = true;
+    if (toxic) bomb.toxic = true;
     this.bombs.set(bomb.id, bomb);
     p.activeBombs++;
     p.bombCooldown = this.bombRules.cooldown;
@@ -524,6 +535,8 @@ export class Match {
       // zone de décharge calculée AVANT l'explosion (une caisse cassée par cette bombe arrête quand même la décharge)
       const shockZone = b.elec ? this.shockCells(b.tx, b.ty, b.range) : null;
       const frostZone = b.freeze ? this.shockCells(b.tx, b.ty, b.range, FREEZE.radius) : null;
+      // nuage toxique : exactement les cases touchées par l'explosion (calculées avant)
+      const gasZone = b.toxic ? this.blastCells(b.tx, b.ty, b.range) : null;
       let cells = 1;
       this.setFire(b.tx, b.ty, FIRE.CENTER, b.ownerId);
       for (const [dx, dy, bit] of DIRS) {
@@ -570,6 +583,7 @@ export class Match {
       }
       if (shockZone) this.discharge(b, shockZone);
       if (frostZone) this.frostBlast(b, frostZone);
+      if (gasZone) this.addToxicZone(b, gasZone);
       this.events.push(b.big ? { t: "explode", x: b.tx, y: b.ty, owner: b.ownerId, cells, chain, big: true } : { t: "explode", x: b.tx, y: b.ty, owner: b.ownerId, cells, chain });
     }
   }
@@ -652,6 +666,76 @@ export class Match {
   slow(p: PlayerState, by: number, dur: number): void {
     p.slowTime = Math.min(FREEZE.duration, Math.max(0, dur));
     this.events.push({ t: "frozen", player: p.id, by, dur: p.slowTime });
+  }
+
+  /** Pose un nuage toxique (effet indépendant, durée fixe, jamais prolongé). */
+  private addToxicZone(b: BombState, cells: number[]): void {
+    const g = this.grid;
+    // pas de gaz dans les murs (les caisses cassées par l'explosion redeviennent du sol)
+    const list = cells.filter((i) => g.tiles[i] !== TILE.WALL);
+    this.toxicZones.push({ id: this.nextId++, owner: b.ownerId, cells: list, timeLeft: TOXIC.duration, duration: TOXIC.duration });
+    while (this.toxicZones.length > TOXIC.maxZones) this.toxicZones.shift();
+    this.events.push({ t: "gas", x: b.tx, y: b.ty, owner: b.ownerId, cells: list });
+  }
+
+  /** Propriétaire d'un nuage hostile pour `p` sur la case `i` (le plus récent), ou null. */
+  hostileGasAt(p: { id: number }, i: number): number | null {
+    for (let k = this.toxicZones.length - 1; k >= 0; k--) {
+      const z = this.toxicZones[k];
+      if (z.cells.includes(i) && !this.sameTeam(p.id, z.owner)) return z.owner;
+    }
+    return null;
+  }
+
+  /** Une case est-elle sous un nuage toxique (peu importe l'équipe) ? */
+  gasAt(i: number): boolean {
+    return this.toxicZones.some((z) => z.cells.includes(i));
+  }
+
+  /**
+   * Nuages toxiques : durée, doses (fréquence limitée), élimination à la
+   * dose fatale, récupération hors du nuage. Les éliminés ne prennent rien.
+   */
+  private updateToxic(): void {
+    for (const z of this.toxicZones) z.timeLeft -= DT;
+    if (this.toxicZones.some((z) => z.timeLeft <= 0)) this.toxicZones = this.toxicZones.filter((z) => z.timeLeft > 0);
+    const g = this.grid;
+    for (const p of this.players) {
+      if (!p.alive) continue;
+      const owner = this.toxicZones.length ? this.hostileGasAt(p, g.idx(Math.floor(p.x), Math.floor(p.y))) : null;
+      if (owner !== null) {
+        p.toxRecover = 0;
+        if (p.shieldTime > 0) continue; // bouclier : pas de dose
+        if (p.toxTick > 0) {
+          p.toxTick = Math.max(0, p.toxTick - DT);
+          continue;
+        }
+        p.toxDose++;
+        p.toxTick = TOXIC.doseEvery;
+        this.events.push({ t: "poisoned", player: p.id, dose: p.toxDose });
+        if (p.toxDose >= TOXIC.lethalDoses) this.kill(p, owner);
+      } else {
+        // hors du nuage : la prochaine entrée redonne une dose, et on récupère doucement
+        if (p.toxTick > 0) p.toxTick = Math.max(0, p.toxTick - DT);
+        if (p.toxDose > 0) {
+          p.toxRecover += DT;
+          if (p.toxRecover >= TOXIC.recoverEvery) {
+            p.toxDose--;
+            p.toxRecover = 0;
+          }
+        } else p.toxRecover = 0;
+      }
+    }
+  }
+
+  /** Fin de manche : plus aucun nuage, plus de doses. */
+  clearToxic(): void {
+    this.toxicZones = [];
+    for (const p of this.players) {
+      p.toxDose = 0;
+      p.toxTick = 0;
+      p.toxRecover = 0;
+    }
   }
 
   /** Paralyse un joueur (durée bornée ; se termine toute seule dans updatePlayer). */
@@ -775,6 +859,10 @@ export class Match {
     p.freezeCharges = 0;
     p.slowTime = 0;
     p.slowImmune = 0;
+    p.toxicCharges = 0;
+    p.toxDose = 0;
+    p.toxTick = 0;
+    p.toxRecover = 0;
     p.stats.survivalTime = this.time;
     if (killer >= 0 && killer !== p.id) this.players[killer].stats.kills++;
     this.events.push({ t: "playerDied", player: p.id, killer, x: p.x, y: p.y });
@@ -984,6 +1072,7 @@ export class Match {
       // Roi de la colline : on réapparaît, la partie se joue aux points
       const done = this.hill ? this.hill.reached || this.timeLeft <= 0 : this.aliveCount <= 1 || this.timeLeft <= 0;
       if (done) {
+        this.clearToxic(); // fin de manche : on nettoie les nuages
         this.phase = "ending";
         this.endTimer = RULES.endDelay;
       }
@@ -1026,6 +1115,7 @@ export class Match {
 
   private finish(): void {
     this.phase = "over";
+    this.clearToxic();
     const alive = this.players.filter((p) => p.alive);
     for (const p of alive) p.stats.survivalTime = this.time;
     this.winnerId = this.hill ? this.hill.leader() : alive.length === 1 ? alive[0].id : -1;
