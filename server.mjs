@@ -725,11 +725,11 @@ var HILL_RULES = {
   respawnHillGap: 3,
   moveEvery: 10,
   moveWarn: 3,
-  throwFirst: 12,
+  throwFirst: 3,
   throwEvery: 16,
-  bigFirst: 22,
+  bigFirst: 4,
   bigEvery: 18,
-  elecFirst: 32,
+  elecFirst: 5,
   elecEvery: 20
 };
 

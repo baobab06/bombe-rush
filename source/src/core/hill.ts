@@ -33,13 +33,13 @@ export const HILL_RULES = {
   /** annonce (contour + compte à rebours) avant le déplacement */
   moveWarn: 3,
   /** bonus « bombe à lancer » : première apparition, puis intervalle (s) */
-  throwFirst: 12,
+  throwFirst: 3,
   throwEvery: 16,
   /** bonus « grosse bombe » : première apparition, puis intervalle (s) */
-  bigFirst: 22,
+  bigFirst: 4,
   bigEvery: 18,
   /** bonus « bombe électrique » : première apparition, puis intervalle (s) */
-  elecFirst: 32,
+  elecFirst: 5,
   elecEvery: 20,
 } as const;
 
