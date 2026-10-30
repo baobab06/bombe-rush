@@ -1505,9 +1505,9 @@ class App implements AppCtx {
       }
     }
     const pw = $("hudPowers");
-    const psig = h.powers.map((p) => p.value).join();
+    const psig = h.powers.map((p) => `${p.type}:${p.value}`).join();
     if (pw.dataset.sig !== psig) {
-      const old = (pw.dataset.sig ?? "").split(",");
+      const old = (pw.dataset.sig ?? "").split(",").map((v) => v.split(":")[1]);
       pw.dataset.sig = psig;
       pw.innerHTML = h.powers
         .map((p, i) => `<span class="pw${old[i] && old[i] !== String(p.value) ? " up" : ""}" title="${p.label}"><img src="${bonusIconURL(p.type)}" alt="" width="20" height="20" class="pwi">${p.value}<small>${p.label}</small></span>`)

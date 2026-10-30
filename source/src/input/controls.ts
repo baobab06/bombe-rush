@@ -16,6 +16,8 @@ export interface ControlsLayout {
   shield: Circle;
   /** bouton « lancer » (visible seulement avec la capacité) */
   throw: Circle;
+  /** bouton « BOUM » de la bombe télécommandée (visible seulement quand elle est posée) */
+  remote: Circle;
 }
 
 /**
@@ -30,7 +32,14 @@ export class Controls {
     bomb: { x: 700, y: 300, r: 50 },
     shield: { x: 600, y: 340, r: 36 },
     throw: { x: 720, y: 180, r: 36 },
+    remote: { x: 720, y: 100, r: 36 },
   };
+  /** une bombe télécommandée est posée : le bouton « BOUM » existe */
+  remoteReady = false;
+  private remotePointer: number | null = null;
+  private remoteEdge = false;
+  private remotePressT = 0;
+  private remoteSince = 0;
   /** le joueur a la capacité de lancer : le bouton existe (sinon ni dessiné ni cliquable) */
   throwReady = false;
   private throwPointer: number | null = null;
@@ -107,6 +116,7 @@ export class Controls {
       bomb: { x: bx, y: by, r: br },
       shield: { x: sx, y: sy, r: sr },
       throw: { x: tx, y: ty, r: tr },
+      remote: { x: tx, y: ty, r: tr },
     };
     if (this.joyPointer === null) this.resetJoy();
   }
@@ -134,6 +144,12 @@ export class Controls {
       this.bombPointer = e.pointerId;
       this.bombEdge = true;
       this.bombPressT = performance.now();
+      return;
+    }
+    if (this.remoteReady && this.hit(L.remote, x, y, 1.2)) {
+      this.remotePointer = e.pointerId;
+      this.remoteEdge = true;
+      this.remotePressT = performance.now();
       return;
     }
     if (this.throwReady && this.hit(L.throw, x, y, 1.2)) {
@@ -189,6 +205,7 @@ export class Controls {
     if (e.pointerId === this.bombPointer) this.bombPointer = null;
     if (e.pointerId === this.shieldPointer) this.shieldPointer = null;
     if (e.pointerId === this.throwPointer) this.throwPointer = null;
+    if (e.pointerId === this.remotePointer) this.remotePointer = null;
   };
 
   private keyDown = (e: KeyboardEvent) => {
@@ -209,6 +226,10 @@ export class Controls {
       this.throwEdge = true;
       this.throwPressT = performance.now();
     }
+    if ((k === "r" || k === "g") && this.remoteReady) {
+      this.remoteEdge = true;
+      this.remotePressT = performance.now();
+    }
     if (k === "shift" || k === "e" || k === "c") {
       this.shieldEdge = true;
       this.shieldPressT = performance.now();
@@ -222,8 +243,8 @@ export class Controls {
 
   releaseAll() {
     this.keys.clear();
-    this.joyPointer = this.bombPointer = this.shieldPointer = this.throwPointer = null;
-    this.bombEdge = this.shieldEdge = this.throwEdge = false;
+    this.joyPointer = this.bombPointer = this.shieldPointer = this.throwPointer = this.remotePointer = null;
+    this.bombEdge = this.shieldEdge = this.throwEdge = this.remoteEdge = false;
     this.resetJoy();
   }
 
@@ -247,6 +268,8 @@ export class Controls {
     }
     const cmd: InputCmd = { mx, my, bomb: this.bombEdge, ability: this.shieldEdge };
     if (this.throwEdge) cmd.throw = true;
+    if (this.remoteEdge) cmd.remote = true;
+    this.remoteEdge = false;
     this.bombEdge = false;
     this.shieldEdge = false;
     this.throwEdge = false;
@@ -254,7 +277,7 @@ export class Controls {
   }
 
   // ---------------------------------------------------------------- dessin
-  draw(ctx: CanvasRenderingContext2D, shieldCharges: number, shieldActive: number, bombsLeft: number, maxBombs: number, throwCharges = 0, bigCharges = 0, elecCharges = 0, stunTime = 0, freezeCharges = 0, toxicCharges = 0, chainCharges = 0) {
+  draw(ctx: CanvasRenderingContext2D, shieldCharges: number, shieldActive: number, bombsLeft: number, maxBombs: number, throwCharges = 0, bigCharges = 0, elecCharges = 0, stunTime = 0, freezeCharges = 0, toxicCharges = 0, chainCharges = 0, remoteCharges = 0, remoteOnMap = false) {
     const L = this.layout;
     const now = performance.now();
     // la capacité vient d'apparaître / de disparaître
@@ -262,6 +285,16 @@ export class Controls {
     if (canThrow && !this.throwReady) this.throwSince = now;
     this.throwReady = canThrow;
     if (!canThrow) this.throwPointer = null;
+    // bouton « BOUM » : seulement quand une bombe télécommandée est posée
+    if (remoteOnMap && !this.remoteReady) this.remoteSince = now;
+    this.remoteReady = remoteOnMap;
+    if (!remoteOnMap) this.remotePointer = null;
+    {
+      // emplacement : celui de « lancer », ou juste au-dessus s'il est déjà affiché
+      const t = L.throw;
+      const y = canThrow ? Math.max(t.r + 8, t.y - t.r * 2 - 30) : t.y;
+      L.remote = { x: t.x, y, r: t.r };
+    }
     // joystick
     const active = this.joyPointer !== null;
     ctx.save();
@@ -379,6 +412,8 @@ export class Controls {
       ctx.fill();
     });
     if (this.throwReady) this.drawThrow(ctx, now, bombsLeft > 0);
+    if (this.remoteReady) this.drawRemote(ctx, now, stunTime <= 0);
+    if (remoteCharges > 0) this.badge(ctx, L.bomb.x - L.bomb.r * 0.2, L.bomb.y + L.bomb.r * 0.95, "📡", "#a3101f");
     if (shieldActive > 0) {
       // jauge de durée restante
       ctx.strokeStyle = "#ffffff";
@@ -442,6 +477,57 @@ export class Controls {
     ctx.strokeText("LANCER", c.x, c.y + r + Math.max(10, r * 0.38));
     ctx.fillStyle = "#ffd23f";
     ctx.fillText("LANCER", c.x, c.y + r + Math.max(10, r * 0.38));
+    ctx.restore();
+  }
+
+  /** Bouton « BOUM » : rouge, antenne qui clignote. */
+  private drawRemote(ctx: CanvasRenderingContext2D, now: number, canUse: boolean) {
+    const c = this.layout.remote;
+    const age = (now - this.remoteSince) / 1000;
+    const pop = age < 0.35 ? 0.4 + 0.6 * Math.sin((age / 0.35) * Math.PI * 0.5) + Math.sin((age / 0.35) * Math.PI) * 0.15 : 1;
+    const r = c.r * pop;
+    const blink = Math.floor(now / 250) % 2 === 0;
+    ctx.save();
+    const g = ctx.createRadialGradient(c.x, c.y, r * 0.8, c.x, c.y, r * 1.6);
+    g.addColorStop(0, `rgba(255,60,60,${blink ? 0.6 : 0.35})`);
+    g.addColorStop(1, "rgba(255,60,60,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, r * 1.6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    const pressed = this.remotePointer !== null || now - this.remotePressT < 120;
+    this.button(ctx, { x: c.x, y: c.y, r }, "#ff3b3b", "#a3101f", pressed, canUse, (x, y, rr) => {
+      // télécommande : boîtier + antenne + voyant
+      ctx.fillStyle = "#1b1c33";
+      ctx.beginPath();
+      ctx.roundRect(x - rr * 0.28, y - rr * 0.15, rr * 0.56, rr * 0.62, rr * 0.1);
+      ctx.fill();
+      ctx.strokeStyle = "#1b1c33";
+      ctx.lineWidth = rr * 0.09;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(x + rr * 0.15, y - rr * 0.15);
+      ctx.lineTo(x + rr * 0.3, y - rr * 0.55);
+      ctx.stroke();
+      ctx.fillStyle = blink ? "#ffe45c" : "#ff8080";
+      ctx.beginPath();
+      ctx.arc(x + rr * 0.3, y - rr * 0.58, rr * 0.1, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#ff3b3b";
+      ctx.beginPath();
+      ctx.arc(x, y + rr * 0.15, rr * 0.13, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    ctx.save();
+    ctx.font = `900 ${Math.round(Math.max(11, r * 0.36))}px "Baloo 2", system-ui, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = "#1b1c33";
+    ctx.strokeText("BOUM", c.x, c.y + r + Math.max(10, r * 0.38));
+    ctx.fillStyle = "#ff8a8a";
+    ctx.fillText("BOUM", c.x, c.y + r + Math.max(10, r * 0.38));
     ctx.restore();
   }
 

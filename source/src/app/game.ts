@@ -13,6 +13,10 @@ import { LocalSession, type GameSession } from "../net/session";
 import { haptics } from "../platform/haptics";
 import { Renderer, type Rect } from "../render/renderer";
 import { BONUS_COLORS, LIFT } from "../render/sprites";
+import { SPECIALS, SPECIAL_RULES } from "../core/specials";
+
+/** Nom court des capacités dans le panneau de gauche. */
+const SHORT_LABEL: Record<string, string> = { throw: "lancer", big: "grosse", elec: "électrique", freeze: "gel", toxic: "toxique", chain: "chaîne", remote: "télécom." };
 import { viewport } from "../platform/viewport";
 
 export interface GameSetup {
@@ -303,7 +307,7 @@ export class GameScreen {
     this.renderer.draw(m, frozen ? 0 : dt, this.prev, frozen ? 1 : Math.min(1, this.acc / DT));
     if (!this.demo && !this.finished) {
       const me = m.players[s.localPlayer];
-      this.controls.draw(this.renderer.ctx, me.shieldCharges, me.shieldTime, me.maxBombs - me.activeBombs, me.maxBombs, me.alive ? me.throwCharges : 0, me.alive ? me.bigCharges : 0, me.alive ? me.elecCharges : 0, me.alive ? me.stunTime : 0, me.alive ? me.freezeCharges : 0, me.alive ? me.toxicCharges : 0, me.alive ? me.chainCharges : 0);
+      this.controls.draw(this.renderer.ctx, me.shieldCharges, me.shieldTime, me.maxBombs - me.activeBombs, me.maxBombs, me.alive ? me.throwCharges : 0, me.alive ? me.bigCharges : 0, me.alive ? me.elecCharges : 0, me.alive ? me.stunTime : 0, me.alive ? me.freezeCharges : 0, me.alive ? me.toxicCharges : 0, me.alive ? me.chainCharges : 0, me.alive ? me.remoteCharges : 0, me.alive && m.remoteBombsOf(me).length > 0);
     }
   }
 
@@ -482,6 +486,12 @@ export class GameScreen {
           break;
         case "chainLink":
           chainLinks++;
+          break;
+        case "bonusRefused":
+          if (e.player === me.id) audio.play("deny", 0.6);
+          break;
+        case "remoteDetonate":
+          if (e.player === me.id) haptics.pulse(30);
           break;
         case "gas":
           audio.play("gas", near(e.x + 0.5, e.y + 0.5));
@@ -683,6 +693,13 @@ export class GameScreen {
         { type: "bomb", color: BONUS_COLORS.bomb[0], label: "bombes", value: me.maxBombs },
         { type: "flame", color: BONUS_COLORS.flame[0], label: "portée", value: me.range },
         { type: "speed", color: BONUS_COLORS.speed[0], label: "vitesse", value: me.speedLevel + 1 },
+        // capacités en réserve (au plus SPECIAL_RULES.maxHeld) : on voit ce qu'on a
+        ...(me.alive ? SPECIALS.filter((sp) => me[sp.field] > 0) : []).map((sp, k) => ({
+          type: sp.id,
+          color: BONUS_COLORS[sp.id]?.[0] ?? "#fff",
+          label: SHORT_LABEL[sp.id] ?? sp.label,
+          value: `${k + 1}/${SPECIAL_RULES.maxHeld}`,
+        })),
       ],
     };
   }

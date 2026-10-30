@@ -37,6 +37,7 @@ const BONUS_TEXT: Record<string, string> = {
   freeze: "BOMBE GELANTE !",
   toxic: "BOMBE TOXIQUE !",
   chain: "RÉACTION EN CHAÎNE !",
+  remote: "TÉLÉCOMMANDE !",
 };
 
 interface Dying {
@@ -217,6 +218,17 @@ export class Renderer {
           }
           break;
         }
+        case "bonusRefused": {
+          // seulement pour soi : pourquoi le bonus reste par terre
+          if (e.player === this.localPlayer) {
+            const rp = m.players[e.player];
+            if (rp) P.text(rp.x, rp.y - 0.9, e.reason === "same" ? "DÉJÀ ÉQUIPÉ" : "RÉSERVE PLEINE", "#ffffff");
+          }
+          break;
+        }
+        case "remoteDetonate":
+          P.spawn("ring", e.x + 0.5, e.y + 0.5, { life: 0.25, size: 0.6, color: "#ff3b3b" });
+          break;
         case "chainLink": {
           this.links.push({ x: e.x, y: e.y, toX: e.toX, toY: e.toY, at: this.time, delay: Math.max(0.05, e.delay) });
           if (this.links.length > 40) this.links.shift(); // borne : jamais trop de traits à dessiner
@@ -492,6 +504,7 @@ export class Renderer {
     if (b.freeze) this.drawFrostBomb(ctx, 0, 0, s, t);
     if (b.toxic) this.drawToxicBomb(ctx, 0, 0, s, t);
     if (b.chainDepth === 0) this.drawChainBomb(ctx, 0, 0, s, t);
+    if (b.remote) this.drawRemoteBomb(ctx, 0, 0, s, t);
     ctx.restore();
   }
 
@@ -781,6 +794,7 @@ export class Renderer {
             if (b.freeze) this.drawFrostBomb(ctx, X + s / 2, Y + s / 2, s * (b.big ? BIG.scale : 1), t);
             if (b.toxic) this.drawToxicBomb(ctx, X + s / 2, Y + s / 2, s * (b.big ? BIG.scale : 1), t);
             if (b.chainDepth === 0) this.drawChainBomb(ctx, X + s / 2, Y + s / 2, s * (b.big ? BIG.scale : 1), t);
+            if (b.remote) this.drawRemoteBomb(ctx, X + s / 2, Y + s / 2, s * (b.big ? BIG.scale : 1), t);
           }
         }
       }
@@ -1216,6 +1230,30 @@ export class Renderer {
       ctx.lineTo(x + Math.cos(b) * r, y + Math.sin(b) * r);
       ctx.stroke();
     }
+  }
+
+  /** Bombe télécommandée : petite antenne et voyant rouge qui clignote. */
+  private drawRemoteBomb(ctx: CanvasRenderingContext2D, cx: number, cy: number, s: number, t: number) {
+    ctx.save();
+    ctx.strokeStyle = "#cfd3e0";
+    ctx.lineWidth = Math.max(1.2, s * 0.03);
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(cx - s * 0.12, cy - s * 0.2);
+    ctx.lineTo(cx - s * 0.22, cy - s * 0.48);
+    ctx.stroke();
+    const on = Math.floor(t * 4) % 2 === 0;
+    ctx.fillStyle = on ? "#ff3b3b" : "#7a1a1a";
+    ctx.beginPath();
+    ctx.arc(cx - s * 0.22, cy - s * 0.5, s * 0.055, 0, Math.PI * 2);
+    ctx.fill();
+    if (on) {
+      ctx.globalAlpha = 0.35;
+      ctx.beginPath();
+      ctx.arc(cx - s * 0.22, cy - s * 0.5, s * 0.12, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
   }
 
   /** Bombe « réaction en chaîne » : anneau doré et maillons qui tournent autour. */

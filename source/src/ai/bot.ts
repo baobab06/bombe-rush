@@ -78,6 +78,8 @@ export class BotBrain {
       cmd.ability = true;
       this.wantShield = false;
     }
+    // bombe télécommandée : on la fait sauter quand un adversaire est dedans et qu'on est à l'abri
+    if (this.shouldDetonate(m, p)) cmd.remote = true;
     // bombe à lancer : on se tourne vers la cible et on lance dans le même tick
     if (this.wantThrow) {
       const [dx, dy] = this.wantThrow;
@@ -125,6 +127,24 @@ export class BotBrain {
 
   /** Lancer prévu au prochain tick : direction (dx, dy). */
   private wantThrow: [number, number] | null = null;
+
+  /** Faire sauter sa bombe télécommandée maintenant ? (on n'est pas dedans ; un adversaire l'est, ou elle attend depuis longtemps) */
+  private shouldDetonate(m: Match, p: PlayerState): boolean {
+    const mine = m.remoteBombsOf(p);
+    if (!mine.length) return false;
+    const g = m.grid;
+    const me = g.idx(Math.floor(p.x), Math.floor(p.y));
+    let foeIn = false;
+    let old = false;
+    for (const b of mine) {
+      const cells = new Set(m.blastCells(b.tx, b.ty, b.range));
+      if (cells.has(me)) return false; // jamais sur soi
+      // un coéquipier dedans : on attend (pas de tir ami, mais on ne gâche pas la bombe)
+      for (const o of m.players) if (m.isFoe(p, o) && o.shieldTime <= 0 && cells.has(g.idx(Math.floor(o.x), Math.floor(o.y)))) foeIn = true;
+      if (b.fuseTotal - b.fuse > 2.5 + this.prof.margin * 2) old = true;
+    }
+    return foeIn || old;
+  }
 
   /**
    * Bombe à lancer : vise un adversaire touché par l'explosion à l'arrivée.

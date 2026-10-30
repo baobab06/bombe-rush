@@ -465,6 +465,7 @@ export const BONUS_COLORS: Record<string, [string, string]> = {
   freeze: ["#7fe0f7", "#2a8fb0"],
   toxic: ["#7dd63f", "#5b2a8c"],
   chain: ["#ffd23f", "#c78a00"],
+  remote: ["#ff5a5a", "#8c1020"],
 };
 
 export function drawBonusIcon(ctx: Ctx, cx: number, cy: number, s: number, type: string) {
@@ -532,6 +533,30 @@ export function drawBonusIcon(ctx: Ctx, cx: number, cy: number, s: number, type:
         ctx.beginPath();
         ctx.moveTo(cx - s * 0.36, cy - s * 0.08 + k * s * 0.12);
         ctx.lineTo(cx - s * 0.26, cy - s * 0.08 + k * s * 0.12);
+        ctx.stroke();
+      }
+      break;
+    }
+    case "remote": {
+      // télécommande avec antenne et ondes
+      ctx.fillStyle = "#23243d";
+      ctx.beginPath();
+      ctx.roundRect(cx - s * 0.13, cy - s * 0.05, s * 0.26, s * 0.32, s * 0.05);
+      ctx.fill();
+      ctx.fillStyle = "#ff3b3b";
+      ctx.beginPath();
+      ctx.arc(cx, cy + s * 0.08, s * 0.06, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = Math.max(1.2, s * 0.04);
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(cx + s * 0.06, cy - s * 0.05);
+      ctx.lineTo(cx + s * 0.12, cy - s * 0.24);
+      ctx.stroke();
+      for (const r of [0.08, 0.15]) {
+        ctx.beginPath();
+        ctx.arc(cx + s * 0.12, cy - s * 0.26, s * r, -Math.PI * 0.9, -Math.PI * 0.1);
         ctx.stroke();
       }
       break;

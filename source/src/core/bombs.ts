@@ -145,6 +145,20 @@ export const CHAIN = {
   maxLinks: 12,
 } as const;
 
+/**
+ * BOMBE TÉLÉCOMMANDÉE — réglages. La prochaine bombe posée (ou lancée) ne
+ * part pas toute seule : son poseur la fait sauter avec le bouton « BOUM ».
+ * Sécurité : elle saute d'elle-même après `maxFuse` s (jamais posée pour
+ * toujours) ; si son poseur est éliminé ou si la manche se termine, elle
+ * redevient une bombe normale (mèche habituelle).
+ */
+export const REMOTE = {
+  /** explosion automatique au bout de N secondes */
+  maxFuse: 8,
+  /** délai minimum entre la pose et la mise à feu (évite le double appui) */
+  armDelay: 0.2,
+} as const;
+
 /** Portée d'une grosse bombe à partir de la portée normale du joueur. */
 export function bigRange(range: number): number {
   return Math.min(BIG.maxRange, Math.max(range + BIG.minExtra, Math.round(range * BIG.rangeMul)));

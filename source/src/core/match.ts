@@ -1,4 +1,5 @@
-import { CHAIN, FREEZE, SHOCK, THROW, TOXIC, bigRange, type BombRules } from "./bombs";
+import { CHAIN, FREEZE, REMOTE, SHOCK, THROW, TOXIC, bigRange, type BombRules } from "./bombs";
+import { SpecialSpawner, clearAbilities, refuseReason } from "./specials";
 import { BONUSES } from "./bonuses";
 import { DIRS, Grid } from "./grid";
 import { LOOT, LootTable } from "./loot";
@@ -61,6 +62,10 @@ export class Match {
   private endTimer = 0;
   private nextId = 1;
   /** multiplicateur de vitesse global (mode Chaos) */
+  /** apparition des capacités de bombes (système commun, specials.ts) */
+  specials!: SpecialSpawner;
+  /** dernier bonus refusé par joueur (un seul message « déjà équipé » par bonus) */
+  private refused = new Map<number, number>();
   /** nuages toxiques actifs (bombe toxique) */
   toxicZones: ToxicZone[] = [];
   speedMul = 1;
@@ -140,6 +145,7 @@ export class Match {
         slowImmune: 0,
         toxicCharges: 0,
         chainCharges: 0,
+        remoteCharges: 0,
         toxDose: 0,
         toxTick: 0,
         toxRecover: 0,
@@ -163,6 +169,9 @@ export class Match {
       for (let x = 0; x < this.grid.w; x++)
         if (this.grid.terrainAt(x, y) === TERRAIN.VENT) this.vents.push([x, y, this.vents.length * RULES.ventStagger]);
     this.mode.onStart?.(this);
+    // capacités de bombes : apparitions réglées par le mode (specials.ts)
+    this.specials = new SpecialSpawner(this, this.mode.specials ?? {});
+    if (this.mode.specials === null) this.specials.disabled = true;
   }
 
   /** Met les joueurs en deux équipes (1-2-1-2…) et les place sur leurs départs d'équipe. */
@@ -234,6 +243,7 @@ export class Match {
     this.updateFire();
     this.updateToxic();
     this.updateBonuses();
+    this.specials.update();
     this.checkPickups();
     this.checkDeaths();
     this.updateSuddenDeath();
@@ -281,6 +291,7 @@ export class Match {
     this.moveWithInput(p, cmd);
     if (cmd.bomb) this.tryPlaceBomb(p);
     if (cmd.throw) this.tryThrowBomb(p);
+    if (cmd.remote) this.tryRemote(p);
     if (cmd.ability) this.tryShield(p);
   }
 
@@ -364,6 +375,8 @@ export class Match {
     if (toxic) p.toxicCharges = 0;
     const chain = p.chainCharges > 0;
     if (chain) p.chainCharges = 0;
+    const remote = p.remoteCharges > 0;
+    if (remote) p.remoteCharges = 0;
     const bomb: BombState = {
       id: this.nextId++,
       ownerId: p.id,
@@ -380,6 +393,10 @@ export class Match {
     if (freeze) bomb.freeze = true;
     if (toxic) bomb.toxic = true;
     if (chain) bomb.chainDepth = 0;
+    if (remote) {
+      bomb.remote = true;
+      bomb.fuse = bomb.fuseTotal = REMOTE.maxFuse; // sécurité : saute toute seule au bout de maxFuse s
+    }
     this.bombs.set(bomb.id, bomb);
     p.activeBombs++;
     p.bombCooldown = this.bombRules.cooldown;
@@ -437,6 +454,39 @@ export class Match {
     p.throwCharges = 0;
     this.events.push({ t: "bombThrown", x: px, y: py, toX: to[0], toY: to[1], owner: p.id });
     return true;
+  }
+
+  /** Bombes télécommandées au sol de ce joueur (en vol : pas encore). */
+  remoteBombsOf(p: PlayerState): BombState[] {
+    const out: BombState[] = [];
+    for (const b of this.bombs.values()) if (b.remote && b.ownerId === p.id && !b.flight) out.push(b);
+    return out;
+  }
+
+  /**
+   * « BOUM » : fait sauter les bombes télécommandées du joueur (via detonate,
+   * comme toutes les explosions). Rien si le joueur n'en a pas : impossible
+   * d'utiliser une capacité absente ou déjà consommée.
+   */
+  tryRemote(p: PlayerState): boolean {
+    if (!p.alive) return false;
+    const list = this.remoteBombsOf(p).filter((b) => b.fuseTotal - b.fuse >= REMOTE.armDelay - 1e-9);
+    if (!list.length) return false;
+    list.sort((a, b) => a.id - b.id);
+    for (const b of list) {
+      if (!this.bombs.has(b.id)) continue; // déjà partie dans la chaîne d'une autre
+      this.events.push({ t: "remoteDetonate", player: p.id, x: b.tx, y: b.ty });
+      this.detonate(b);
+    }
+    return true;
+  }
+
+  /** Une bombe télécommandée redevient normale (poseur éliminé, fin de manche). */
+  private defuseRemote(b: BombState): void {
+    if (!b.remote) return;
+    b.remote = false;
+    b.fuse = Math.min(b.fuse, this.bombRules.fuse * this.fuseMul);
+    b.fuseTotal = Math.max(b.fuse, 0.01);
   }
 
   tryShield(p: PlayerState): boolean {
@@ -792,6 +842,19 @@ export class Match {
     }
   }
 
+  /**
+   * Fin de manche : bonus restés sur la carte supprimés, capacités et effets
+   * de tous les joueurs effacés, nuages toxiques enlevés, bombes
+   * télécommandées redevenues normales. Plus aucune apparition.
+   */
+  endOfRoundCleanup(): void {
+    for (const b of [...this.bonuses.values()]) this.removeBonus(b);
+    for (const p of this.players) clearAbilities(p);
+    for (const b of this.bombs.values()) this.defuseRemote(b);
+    this.clearToxic();
+    this.specials.disabled = true;
+  }
+
   /** Fin de manche : plus aucun nuage, plus de doses. */
   clearToxic(): void {
     this.toxicZones = [];
@@ -829,7 +892,9 @@ export class Match {
     if (g.hiddenBonus[i]) this.loot.record(g.hiddenBonus[i]!, x, y);
     else g.hiddenBonus[i] = this.loot.roll(this.rng, x, y, this.bonuses.size, this.bonusBoost);
     const hidden = g.hiddenBonus[i];
-    if (hidden) {
+    // fin de manche : plus aucun bonus n'apparaît (même d'une caisse qui saute encore)
+    if (hidden && this.phase !== "playing") g.hiddenBonus[i] = null;
+    else if (hidden) {
       g.hiddenBonus[i] = null;
       const bonus: BonusState = {
         id: this.nextId++,
@@ -881,7 +946,24 @@ export class Match {
       if (id < 0) continue;
       const bonus = this.bonuses.get(id);
       if (!bonus || bonus.invuln > 0.2) continue;
-      BONUSES[bonus.type]?.apply(p);
+      const def = BONUSES[bonus.type];
+      if (!def) {
+        // type inconnu (ancienne version, donnée abîmée) : on l'enlève sans rien donner
+        this.removeBonus(bonus);
+        continue;
+      }
+      if (def.special) {
+        const why = refuseReason(p, bonus.type);
+        if (why) {
+          // capacité déjà là ou réserve pleine : le bonus RESTE sur la carte (rien de perdu ni remplacé)
+          if (this.refused.get(p.id) !== bonus.id) {
+            this.refused.set(p.id, bonus.id);
+            this.events.push({ t: "bonusRefused", player: p.id, type: bonus.type, reason: why, x: tx, y: ty });
+          }
+          continue;
+        }
+      }
+      def.apply(p);
       p.stats.bonusesPicked++;
       this.removeBonus(bonus);
       this.events.push({ t: "bonusPicked", x: tx, y: ty, type: bonus.type, player: p.id });
@@ -915,19 +997,10 @@ export class Match {
     p.moving = false;
     p.deathTime = this.time;
     p.killedBy = killer;
-    p.throwCharges = 0; // la capacité de lancer est perdue à l'élimination
-    p.bigCharges = 0; // la grosse bombe non utilisée aussi
-    p.elecCharges = 0;
-    p.stunTime = 0;
-    p.stunImmune = 0;
-    p.freezeCharges = 0;
-    p.slowTime = 0;
-    p.slowImmune = 0;
-    p.toxicCharges = 0;
-    p.chainCharges = 0;
-    p.toxDose = 0;
-    p.toxTick = 0;
-    p.toxRecover = 0;
+    // capacités non utilisées et effets subis : effacés (système commun)
+    clearAbilities(p);
+    // ses bombes télécommandées redeviennent des bombes normales
+    for (const b of this.bombs.values()) if (b.remote && b.ownerId === p.id) this.defuseRemote(b);
     p.stats.survivalTime = this.time;
     if (killer >= 0 && killer !== p.id) this.players[killer].stats.kills++;
     this.events.push({ t: "playerDied", player: p.id, killer, x: p.x, y: p.y });
@@ -1137,7 +1210,7 @@ export class Match {
       // Roi de la colline : on réapparaît, la partie se joue aux points
       const done = this.hill ? this.hill.reached || this.timeLeft <= 0 : this.aliveCount <= 1 || this.timeLeft <= 0;
       if (done) {
-        this.clearToxic(); // fin de manche : on nettoie les nuages
+        this.endOfRoundCleanup();
         this.phase = "ending";
         this.endTimer = RULES.endDelay;
       }
@@ -1180,7 +1253,7 @@ export class Match {
 
   private finish(): void {
     this.phase = "over";
-    this.clearToxic();
+    this.endOfRoundCleanup();
     const alive = this.players.filter((p) => p.alive);
     for (const p of alive) p.stats.survivalTime = this.time;
     this.winnerId = this.hill ? this.hill.leader() : alive.length === 1 ? alive[0].id : -1;

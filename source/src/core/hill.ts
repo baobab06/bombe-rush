@@ -16,6 +16,7 @@
  * calculent la même chose ; l'état est aussi recopié dans les instantanés.
  */
 import type { Match } from "./match";
+import { clearAbilities } from "./specials";
 import { DT, RULES } from "./rules";
 import { TILE, type PlayerState } from "./types";
 
@@ -32,24 +33,6 @@ export const HILL_RULES = {
   moveEvery: 10,
   /** annonce (contour + compte à rebours) avant le déplacement */
   moveWarn: 3,
-  /** bonus « bombe à lancer » : première apparition, puis intervalle (s) */
-  throwFirst: 3,
-  throwEvery: 16,
-  /** bonus « grosse bombe » : première apparition, puis intervalle (s) */
-  bigFirst: 4,
-  bigEvery: 18,
-  /** bonus « bombe électrique » : première apparition, puis intervalle (s) */
-  elecFirst: 5,
-  elecEvery: 20,
-  /** bonus « bombe gelante » : première apparition, puis intervalle (s) */
-  freezeFirst: 6,
-  freezeEvery: 20,
-  /** bonus « bombe toxique » : première apparition, puis intervalle (s) */
-  toxicFirst: 7,
-  toxicEvery: 20,
-  /** bonus « réaction en chaîne » : première apparition, puis intervalle (s) */
-  chainFirst: 8,
-  chainEvery: 20,
 } as const;
 
 interface Site {
@@ -69,18 +52,6 @@ export class HillState {
   moveIn: number = HILL_RULES.moveEvery;
   /** points de chaque joueur (secondes passées seul sur la colline) */
   readonly scores: number[];
-  /** secondes avant la prochaine apparition d'un bonus « bombe à lancer » */
-  throwSpawnIn: number = HILL_RULES.throwFirst;
-  /** secondes avant la prochaine apparition d'un bonus « grosse bombe » */
-  bigSpawnIn: number = HILL_RULES.bigFirst;
-  /** secondes avant la prochaine apparition d'un bonus « bombe électrique » */
-  elecSpawnIn: number = HILL_RULES.elecFirst;
-  /** secondes avant la prochaine apparition d'un bonus « bombe gelante » */
-  freezeSpawnIn: number = HILL_RULES.freezeFirst;
-  /** secondes avant la prochaine apparition d'un bonus « bombe toxique » */
-  toxicSpawnIn: number = HILL_RULES.toxicFirst;
-  /** secondes avant la prochaine apparition d'un bonus « réaction en chaîne » */
-  chainSpawnIn: number = HILL_RULES.chainFirst;
   /** temps restant avant la réapparition de chaque joueur (≤ 0 = rien en attente) */
   readonly respawnIn: number[];
   /** joueur qui marque en ce moment (-1 = personne) */
@@ -313,36 +284,6 @@ export class HillState {
         m.events.push({ t: "hillMoved", x: this.center[0], y: this.center[1] });
       }
     }
-    this.throwSpawnIn -= DT;
-    if (this.throwSpawnIn <= 0) {
-      this.throwSpawnIn = HILL_RULES.throwEvery;
-      this.spawnSpecialBonus("throw");
-    }
-    this.bigSpawnIn -= DT;
-    if (this.bigSpawnIn <= 0) {
-      this.bigSpawnIn = HILL_RULES.bigEvery;
-      this.spawnSpecialBonus("big");
-    }
-    this.elecSpawnIn -= DT;
-    if (this.elecSpawnIn <= 0) {
-      this.elecSpawnIn = HILL_RULES.elecEvery;
-      this.spawnSpecialBonus("elec");
-    }
-    this.freezeSpawnIn -= DT;
-    if (this.freezeSpawnIn <= 0) {
-      this.freezeSpawnIn = HILL_RULES.freezeEvery;
-      this.spawnSpecialBonus("freeze");
-    }
-    this.toxicSpawnIn -= DT;
-    if (this.toxicSpawnIn <= 0) {
-      this.toxicSpawnIn = HILL_RULES.toxicEvery;
-      this.spawnSpecialBonus("toxic");
-    }
-    this.chainSpawnIn -= DT;
-    if (this.chainSpawnIn <= 0) {
-      this.chainSpawnIn = HILL_RULES.chainEvery;
-      this.spawnSpecialBonus("chain");
-    }
     // réapparitions
     // ordre tournant : à réapparition simultanée, personne ne choisit toujours sa case en premier
     const n = m.players.length;
@@ -351,36 +292,6 @@ export class HillState {
       if (p.alive || this.respawnIn[p.id] <= 0) continue;
       this.respawnIn[p.id] -= DT;
       if (this.respawnIn[p.id] <= 0) this.respawn(p);
-    }
-  }
-
-  /**
-   * Bonus spéciaux (« bombe à lancer », « grosse bombe ») : ils apparaissent
-   * régulièrement sur une case libre tirée au sort (rng de la partie : même
-   * endroit pour tous en ligne, mais jamais deux fois de suite le même),
-   * loin de la zone et des joueurs. Un seul de chaque type à la fois sur la
-   * carte, dans la limite du quota de la partie.
-   */
-  private lastSpecialCell: Record<string, number> = {};
-  private spawnSpecialBonus(type: string): void {
-    const m = this.m;
-    if ([...m.bonuses.values()].some((b) => b.type === type)) return;
-    const max = m.loot.cfg.maxPerMatch[type];
-    if (max !== undefined && (m.loot.perType[type] ?? 0) >= max) return;
-    const g = m.grid;
-    const [cx, cy] = this.center;
-    const last = this.lastSpecialCell[type] ?? -1;
-    const cells = m.randomFreeCells(400).filter(([x, y]) => {
-      if (g.idx(x, y) === last) return false;
-      if (Math.abs(x - cx) + Math.abs(y - cy) < 2) return false;
-      if (g.fire[g.idx(x, y)] > 0 || m.gasAt(g.idx(x, y))) return false;
-      return m.players.every((p) => !p.alive || Math.abs(Math.floor(p.x) - x) + Math.abs(Math.floor(p.y) - y) >= 2);
-    });
-    const c = cells[0];
-    if (!c) return;
-    if (m.spawnBonus(type, c[0], c[1])) {
-      m.loot.record(type, c[0], c[1]);
-      this.lastSpecialCell[type] = g.idx(c[0], c[1]);
     }
   }
 
@@ -444,19 +355,7 @@ export class HillState {
     p.speed = RULES.baseSpeed;
     p.speedLevel = 0;
     p.maxBombs = m.bombRules.startBombs;
-    p.throwCharges = 0;
-    p.bigCharges = 0;
-    p.elecCharges = 0;
-    p.stunTime = 0;
-    p.stunImmune = 0;
-    p.freezeCharges = 0;
-    p.slowTime = 0;
-    p.slowImmune = 0;
-    p.toxicCharges = 0;
-    p.chainCharges = 0;
-    p.toxDose = 0;
-    p.toxTick = 0;
-    p.toxRecover = 0;
+    clearAbilities(p); // capacités et effets subis : remis à zéro (système commun)
     p.range = m.bombRules.startRange;
     p.bombCooldown = 0;
     p.activeBombs = Math.min(p.activeBombs, p.maxBombs);

@@ -603,12 +603,7 @@ console.log("Bombe à lancer (Domination)");
     const m = new Match({ seed, map: FACTORY, modeId: "koth", players: slots4() });
     m.phase = "playing";
     m.hill!.moveIn = 1e9;
-    m.hill!.throwSpawnIn = 1e9; // pas d'apparition automatique pendant ces tests
-    m.hill!.bigSpawnIn = 1e9;
-    m.hill!.elecSpawnIn = 1e9;
-    m.hill!.freezeSpawnIn = 1e9;
-    m.hill!.toxicSpawnIn = 1e9;
-    m.hill!.chainSpawnIn = 1e9;
+    m.specials.disabled = true; // pas d\'apparition automatique de capacités pendant ces tests
     place(m, 0, 1, 1); place(m, 1, 13, 1); place(m, 2, 1, 11); place(m, 3, 13, 11);
     return m;
   };
@@ -618,7 +613,7 @@ console.log("Bombe à lancer (Domination)");
     // le bonus n'existe qu'en Domination
     const c = new Match({ seed: 3, map: FOREST, modeId: "classic", players: slots4() });
     const k = new Match({ seed: 3, map: FACTORY, modeId: "koth", players: slots4() });
-    check(!("throw" in c.loot.cfg.weights) && (k.loot.cfg.weights.throw ?? 0) > 0, "bonus « bombe à lancer » : seulement dans le butin de la Domination");
+    check(!("throw" in c.loot.cfg.weights) && (c.specials.cfg.weights.throw ?? 0) > 0 && (k.specials.cfg.weights.throw ?? 0) > 0, "bombe à lancer : plus dans les caisses, gérée par le système de capacités (tous les modes)");
     check(c.players.every((p) => p.throwCharges === 0) && k.players.every((p) => p.throwCharges === 0), "personne ne commence avec la capacité");
   }
   {
@@ -748,28 +743,6 @@ console.log("Bombe à lancer (Domination)");
     check(m.players[2].deathTime < 0 && m.players[1].deathTime >= 0, "bombe lancée : coéquipier épargné, adversaire touché");
   }
   {
-    // apparition régulière du bonus : sur une case libre, jamais sur la zone, endroits variés
-    const spots = new Set<string>();
-    let bad = 0, appeared = 0;
-    for (let seed = 1; seed <= 12; seed++) {
-      const m = new Match({ seed, map: FACTORY, modeId: "koth", players: slots4() });
-      m.phase = "playing";
-      m.hill!.moveIn = 1e9;
-      run(m, HILL_RULES.throwFirst + 0.2);
-      const b = [...m.bonuses.values()].find((x) => x.type === "throw");
-      if (!b) continue;
-      appeared++;
-      spots.add(`${b.tx},${b.ty}`);
-      const [cx, cy] = m.hill!.center;
-      if (m.grid.blocksMove(b.tx, b.ty) || (b.tx === cx && b.ty === cy)) bad++;
-    }
-    check(appeared >= 10 && bad === 0 && spots.size >= 6, `le bonus apparaît régulièrement (${appeared}/12), sur des cases libres, à des endroits variés (${spots.size} endroits)`);
-    const c = new Match({ seed: 5, map: FOREST, modeId: "classic", players: slots4() });
-    c.phase = "playing";
-    run(c, 20);
-    check(![...c.bonuses.values()].some((x) => x.type === "throw"), "Classique : jamais de bonus « bombe à lancer »");
-  }
-  {
     // en ligne : la bombe en vol est transmise telle quelle
     const m = mk();
     m.players[0].throwCharges = 1;
@@ -835,7 +808,7 @@ console.log("Grosse bombe");
     const c = new Match({ seed: 3, map: FOREST, modeId: "classic", players: slots(4) });
     const k = new Match({ seed: 3, map: FACTORY, modeId: "koth", players: slots(4) });
     const ch = new Match({ seed: 3, map: FOREST, modeId: "chaos", players: slots(4) });
-    check((c.loot.cfg.weights.big ?? 0) > 0 && (k.loot.cfg.weights.big ?? 0) > 0 && (ch.loot.cfg.weights.big ?? 0) > 0, "bonus présent dans le butin : Classique, Chaos et Domination");
+    check((c.specials.cfg.weights.big ?? 0) > 0 && (k.specials.cfg.weights.big ?? 0) > 0 && (ch.specials.cfg.weights.big ?? 0) > 0, "capacité gérée par le système commun : Classique, Chaos et Domination");
     check([c, k, ch].every((mm) => mm.players.every((p) => p.bigCharges === 0)), "personne ne commence avec une grosse bombe");
   }
   {
@@ -913,12 +886,7 @@ console.log("Grosse bombe");
     const m = new Match({ seed, map: FACTORY, modeId: "koth", players: slots(4) });
     m.phase = "playing";
     m.hill!.moveIn = 1e9;
-    m.hill!.throwSpawnIn = 1e9;
-    m.hill!.bigSpawnIn = 1e9;
-    m.hill!.elecSpawnIn = 1e9;
-    m.hill!.freezeSpawnIn = 1e9;
-    m.hill!.toxicSpawnIn = 1e9;
-    m.hill!.chainSpawnIn = 1e9;
+    m.specials.disabled = true; // pas d\'apparition automatique de capacités pendant ces tests
     place(m, 0, 1, 1); place(m, 1, 13, 1); place(m, 2, 1, 11); place(m, 3, 13, 11);
     return m;
   };
@@ -962,32 +930,6 @@ console.log("Grosse bombe");
     m.kill(p, 1);
     run(m, HILL_RULES.respawnDelay + 0.3);
     check(p.alive && p.bigCharges === 0, "Domination : réapparition sans grosse bombe");
-  }
-  {
-    // apparition régulière en Domination : case libre, hors zone, endroits variés
-    const spots = new Set<string>();
-    let bad = 0, appeared = 0;
-    for (let seed = 1; seed <= 12; seed++) {
-      const m = new Match({ seed, map: FACTORY, modeId: "koth", players: slots(4) });
-      m.phase = "playing";
-      m.hill!.moveIn = 1e9;
-      run(m, HILL_RULES.bigFirst + 0.2);
-      const b = [...m.bonuses.values()].find((x) => x.type === "big");
-      if (!b) continue;
-      appeared++;
-      spots.add(`${b.tx},${b.ty}`);
-      const [cx, cy] = m.hill!.center;
-      if (m.grid.blocksMove(b.tx, b.ty) || (b.tx === cx && b.ty === cy)) bad++;
-    }
-    check(appeared >= 10 && bad === 0 && spots.size >= 6, `Domination : le bonus apparaît régulièrement (${appeared}/12), sur des cases libres, à des endroits variés (${spots.size} endroits)`);
-  }
-  {
-    // butin des caisses (Classique) : tiré de temps en temps, dans le quota
-    const t = new LootTable(15, 13, [[1, 1], [13, 11]]);
-    const rng = new Rng(7);
-    let n = 0;
-    for (let i = 0; i < 400; i++) { const r = t.roll(rng, 1 + (i % 13), 1 + (i % 11), 0); if (r === "big") n++; }
-    check(n >= 1 && n <= LOOT.maxPerMatch.big, `Classique : la grosse bombe sort parfois des caisses (${n}, quota ${LOOT.maxPerMatch.big})`);
   }
   {
     // en ligne : la grosse bombe est transmise
@@ -1056,7 +998,7 @@ console.log("Bombe électrique");
     const c = new Match({ seed: 3, map: FOREST, modeId: "classic", players: slots(4) });
     const k = new Match({ seed: 3, map: FACTORY, modeId: "koth", players: slots(4) });
     const ch = new Match({ seed: 3, map: FOREST, modeId: "chaos", players: slots(4) });
-    check([c, k, ch].every((mm) => (mm.loot.cfg.weights.elec ?? 0) > 0), "bonus présent dans le butin : Classique, Chaos et Domination");
+    check([c, k, ch].every((mm) => (mm.specials.cfg.weights.elec ?? 0) > 0), "capacité gérée par le système commun : Classique, Chaos et Domination");
     check([c, k, ch].every((mm) => mm.players.every((p) => p.elecCharges === 0 && p.stunTime === 0)), "personne ne commence électrique ni paralysé");
     check(SHOCK.stun >= 0.8 && SHOCK.stun <= 1.2, `durée de paralysie réglable (${SHOCK.stun} s)`);
   }
@@ -1226,7 +1168,7 @@ console.log("Bombe électrique");
   const mk = (seed = 41) => {
     const m = new Match({ seed, map: FACTORY, modeId: "koth", players: slots(4) });
     m.phase = "playing";
-    m.hill!.moveIn = 1e9; m.hill!.throwSpawnIn = 1e9; m.hill!.bigSpawnIn = 1e9; m.hill!.elecSpawnIn = 1e9; m.hill!.freezeSpawnIn = 1e9; m.hill!.toxicSpawnIn = 1e9; m.hill!.chainSpawnIn = 1e9;
+    m.hill!.moveIn = 1e9; m.specials.disabled = true;
     place(m, 0, 1, 1); place(m, 1, 13, 1); place(m, 2, 1, 11); place(m, 3, 13, 11);
     return m;
   };
@@ -1263,20 +1205,6 @@ console.log("Bombe électrique");
     m.kill(p, 1);
     run(m, HILL_RULES.respawnDelay + 0.3);
     check(p.alive && p.elecCharges === 0 && p.stunTime === 0 && p.stunImmune === 0, "Domination : réapparition sans bombe électrique ni paralysie");
-  }
-  {
-    const spots = new Set<string>();
-    let appeared = 0, bad = 0;
-    for (let seed = 1; seed <= 12; seed++) {
-      const m = new Match({ seed, map: FACTORY, modeId: "koth", players: slots(4) });
-      m.phase = "playing"; m.hill!.moveIn = 1e9;
-      run(m, HILL_RULES.elecFirst + 0.2);
-      const b = [...m.bonuses.values()].find((x) => x.type === "elec");
-      if (!b) continue;
-      appeared++; spots.add(`${b.tx},${b.ty}`);
-      if (m.grid.blocksMove(b.tx, b.ty)) bad++;
-    }
-    check(appeared >= 9 && bad === 0 && spots.size >= 5, `Domination : le bonus apparaît régulièrement (${appeared}/12), à des endroits variés (${spots.size})`);
   }
   {
     // en ligne : bombe électrique + paralysie transmises ; la prédiction ne fait pas bouger un joueur paralysé
@@ -1355,7 +1283,7 @@ console.log("Bombe gelante");
     const c = new Match({ seed: 3, map: FOREST, modeId: "classic", players: slots(4) });
     const k = new Match({ seed: 3, map: FACTORY, modeId: "koth", players: slots(4) });
     const ch = new Match({ seed: 3, map: FOREST, modeId: "chaos", players: slots(4) });
-    check([c, k, ch].every((mm) => (mm.loot.cfg.weights.freeze ?? 0) > 0), "bonus présent dans le butin : Classique, Chaos et Domination");
+    check([c, k, ch].every((mm) => (mm.specials.cfg.weights.freeze ?? 0) > 0), "capacité gérée par le système commun : Classique, Chaos et Domination");
     check([c, k, ch].every((mm) => mm.players.every((p) => p.freezeCharges === 0 && p.slowTime === 0)), "personne ne commence gelé");
     check(FREEZE.slow === 0.4 && FREEZE.duration === 2.5, `réglages : −${FREEZE.slow * 100} % pendant ${FREEZE.duration} s (configurables)`);
   }
@@ -1498,7 +1426,7 @@ console.log("Bombe gelante");
   const mk = (seed = 41) => {
     const m = new Match({ seed, map: FACTORY, modeId: "koth", players: slots(4) });
     m.phase = "playing";
-    m.hill!.moveIn = 1e9; m.hill!.throwSpawnIn = 1e9; m.hill!.bigSpawnIn = 1e9; m.hill!.elecSpawnIn = 1e9; m.hill!.freezeSpawnIn = 1e9; m.hill!.toxicSpawnIn = 1e9; m.hill!.chainSpawnIn = 1e9;
+    m.hill!.moveIn = 1e9; m.specials.disabled = true;
     place(m, 0, 1, 1); place(m, 1, 13, 1); place(m, 2, 1, 11); place(m, 3, 13, 11);
     return m;
   };
@@ -1537,18 +1465,6 @@ console.log("Bombe gelante");
     m.kill(p, 1);
     run(m, HILL_RULES.respawnDelay + 0.3);
     check(p.alive && p.freezeCharges === 0 && p.slowTime === 0 && p.speed === RULES.baseSpeed, "Domination : réapparition sans gel, vitesse d'origine");
-  }
-  {
-    let appeared = 0;
-    const spots = new Set<string>();
-    for (let seed = 1; seed <= 12; seed++) {
-      const m = new Match({ seed, map: FACTORY, modeId: "koth", players: slots(4) });
-      m.phase = "playing"; m.hill!.moveIn = 1e9;
-      run(m, HILL_RULES.freezeFirst + 0.2);
-      const b = [...m.bonuses.values()].find((x) => x.type === "freeze");
-      if (b && !m.grid.blocksMove(b.tx, b.ty)) { appeared++; spots.add(`${b.tx},${b.ty}`); }
-    }
-    check(appeared >= 10 && spots.size >= 5, `Domination : le bonus apparaît dès le début (${appeared}/12 à ${HILL_RULES.freezeFirst} s), à des endroits variés (${spots.size})`);
   }
   {
     // en ligne
@@ -1637,7 +1553,7 @@ console.log("Bombe toxique");
     const c = new Match({ seed: 3, map: FOREST, modeId: "classic", players: slots(4) });
     const k = new Match({ seed: 3, map: FACTORY, modeId: "koth", players: slots(4) });
     const ch = new Match({ seed: 3, map: FOREST, modeId: "chaos", players: slots(4) });
-    check([c, k, ch].every((mm) => (mm.loot.cfg.weights.toxic ?? 0) > 0), "bonus présent dans le butin : Classique, Chaos et Domination");
+    check([c, k, ch].every((mm) => (mm.specials.cfg.weights.toxic ?? 0) > 0), "capacité gérée par le système commun : Classique, Chaos et Domination");
     check([c, k, ch].every((mm) => mm.players.every((p) => p.toxicCharges === 0 && p.toxDose === 0) && mm.toxicZones.length === 0), "personne ne commence toxique, aucun nuage");
     check(TOXIC.duration === 3, `durée du nuage : ${TOXIC.duration} s (configurable), dose toutes les ${TOXIC.doseEvery} s, éliminé à ${TOXIC.lethalDoses} doses`);
   }
@@ -1760,7 +1676,7 @@ console.log("Bombe toxique");
   const mk = (seed = 41) => {
     const m = new Match({ seed, map: FACTORY, modeId: "koth", players: slots(4) });
     m.phase = "playing";
-    m.hill!.moveIn = 1e9; m.hill!.throwSpawnIn = 1e9; m.hill!.bigSpawnIn = 1e9; m.hill!.elecSpawnIn = 1e9; m.hill!.freezeSpawnIn = 1e9; m.hill!.toxicSpawnIn = 1e9; m.hill!.chainSpawnIn = 1e9;
+    m.hill!.moveIn = 1e9; m.specials.disabled = true;
     place(m, 0, 1, 1); place(m, 1, 13, 1); place(m, 2, 1, 11); place(m, 3, 13, 11);
     return m;
   };
@@ -1794,16 +1710,6 @@ console.log("Bombe toxique");
     place(m, 0, 2, 8);
     untilBoom(m);
     check(m.toxicZones.length === 1 && m.toxicZones[0].cells.length >= 10, `grosse bombe toxique : grand nuage (${m.toxicZones[0]?.cells.length} cases)`);
-  }
-  {
-    let appeared = 0;
-    for (let seed = 1; seed <= 12; seed++) {
-      const m = new Match({ seed, map: FACTORY, modeId: "koth", players: slots(4) });
-      m.phase = "playing"; m.hill!.moveIn = 1e9;
-      run(m, HILL_RULES.toxicFirst + 0.2);
-      if ([...m.bonuses.values()].some((x) => x.type === "toxic")) appeared++;
-    }
-    check(appeared >= 10, `Domination : le bonus apparaît dès le début (${appeared}/12 à ${HILL_RULES.toxicFirst} s)`);
   }
   {
     // en ligne
@@ -1890,7 +1796,7 @@ console.log("Bombe à réaction en chaîne");
     const c = new Match({ seed: 3, map: FOREST, modeId: "classic", players: slots(4) });
     const k = new Match({ seed: 3, map: FACTORY, modeId: "koth", players: slots(4) });
     const ch = new Match({ seed: 3, map: FOREST, modeId: "chaos", players: slots(4) });
-    check([c, k, ch].every((mm) => (mm.loot.cfg.weights.chain ?? 0) > 0), "bonus présent dans le butin : Classique, Chaos et Domination");
+    check([c, k, ch].every((mm) => (mm.specials.cfg.weights.chain ?? 0) > 0), "capacité gérée par le système commun : Classique, Chaos et Domination");
     check([c, k, ch].every((mm) => mm.players.every((p) => p.chainCharges === 0)), "personne ne commence avec");
   }
   {
@@ -2006,7 +1912,7 @@ console.log("Bombe à réaction en chaîne");
     // Domination 2v2 : équipes respectées, éliminations attribuées au propriétaire de chaque bombe
     const m = new Match({ seed: 41, map: FACTORY, modeId: "koth", players: slots(4) });
     m.phase = "playing";
-    m.hill!.moveIn = 1e9; m.hill!.throwSpawnIn = 1e9; m.hill!.bigSpawnIn = 1e9; m.hill!.elecSpawnIn = 1e9; m.hill!.freezeSpawnIn = 1e9; m.hill!.toxicSpawnIn = 1e9; m.hill!.chainSpawnIn = 1e9;
+    m.hill!.moveIn = 1e9; m.specials.disabled = true;
     const mate = m.players.filter((p) => p.id !== 0 && m.sameTeam(0, p.id))[0];
     const foes = m.players.filter((p) => m.isFoe(m.players[0], p));
     place(m, 0, 1, 1); place(m, mate.id, 6, 4); place(m, foes[0].id, 9, 7); place(m, foes[1].id, 13, 11);
@@ -2030,16 +1936,6 @@ console.log("Bombe à réaction en chaîne");
     check(d.start[g.idx(14, 11)] < 0.7, `bots : la case autour d'une bombe qui sera déclenchée est vue comme dangereuse tôt (${d.start[g.idx(14, 11)].toFixed(2)} s au lieu de 3 s)`);
   }
   {
-    let appeared = 0;
-    for (let seed = 1; seed <= 12; seed++) {
-      const m = new Match({ seed, map: FACTORY, modeId: "koth", players: slots(4) });
-      m.phase = "playing"; m.hill!.moveIn = 1e9;
-      run(m, HILL_RULES.chainFirst + 0.2);
-      if ([...m.bonuses.values()].some((x) => x.type === "chain")) appeared++;
-    }
-    check(appeared >= 10, `Domination : le bonus apparaît dès le début (${appeared}/12 à ${HILL_RULES.chainFirst} s)`);
-  }
-  {
     for (const [modeId, map] of [["classic", FOREST], ["koth", FACTORY]] as const) {
       let stuck = 0, ended = 0, links = 0, doubles = 0;
       for (let seed = 1; seed <= 6; seed++) {
@@ -2058,6 +1954,287 @@ console.log("Bombe à réaction en chaîne");
         if (m.phase === "over") ended++;
       }
       check(ended === 6 && stuck === 0 && doubles === 0, `bots (${modeId}) : 6 parties terminées, ${links} déclenchements en chaîne, aucune explosion en double, personne coincé`);
+    }
+  }
+}
+
+console.log("Système commun des capacités");
+{
+  const { FACTORY } = await import("../src/maps/factory");
+  const { SPECIALS, SPECIAL_RULES, SPECIAL_BY_ID } = await import("../src/core/specials");
+  const { REMOTE } = await import("../src/core/bombs");
+  const { HILL_RULES } = await import("../src/core/hill");
+  const { encodeSnapshot, applySnapshot } = await import("../src/net/snapshot");
+  const { DIRS } = await import("../src/core/grid");
+  const slots = (n: number) => Array.from({ length: n }, (_, i) => ({ name: "P" + i, characterId: "pip", isBot: false, difficulty: "normal" as Difficulty }));
+  const bots = (n: number) => Array.from({ length: n }, (_, i) => ({ name: "B" + i, characterId: "pip", isBot: true, difficulty: "hard" as Difficulty }));
+  const cmdFor = (id: number, c: Partial<InputCmd>) => (mm: Match) => mm.players.map((p) => (p.id === id ? { mx: 0, my: 0, bomb: false, ability: false, ...c } : NO_INPUT));
+  const walk = (m: Match, sx: number, sy: number) => {
+    const g = m.grid;
+    const d = new Map<number, number>([[g.idx(sx, sy), 0]]);
+    const q = [g.idx(sx, sy)];
+    for (let h = 0; h < q.length; h++) {
+      const c = q[h]; const x = c % g.w; const y = (c - x) / g.w;
+      for (const [dx, dy] of DIRS) {
+        const n = g.idx(x + dx, y + dy);
+        if (g.tile(x + dx, y + dy) === TILE.WALL || g.isHazard(x + dx, y + dy) || d.has(n)) continue;
+        d.set(n, d.get(c)! + 1); q.push(n);
+      }
+    }
+    return d;
+  };
+  check(SPECIALS.length === 7 && ["throw", "big", "elec", "freeze", "toxic", "chain", "remote"].every((id) => SPECIAL_BY_ID[id]), "7 capacités gérées par un seul système (lancer, grosse, électrique, gelante, toxique, chaîne, télécommandée)");
+  check(SPECIALS.every((sp) => !(sp.id in LOOT.weights)), "les capacités ne sortent plus des caisses (bonus classiques seulement)");
+  {
+    // apparitions : fréquence, cases autorisées, jamais sous/près d'un joueur, limite simultanée, aléatoire (pas garanti)
+    for (const [modeId, map] of [["classic", FOREST], ["chaos", FOREST], ["koth", FACTORY]] as const) {
+      let spawns = 0, bad = 0, near = 0, overMax = 0, unfair = 0, checks = 0;
+      const per: Record<string, number> = {};
+      let repeats = 0, last = "";
+      const T = 120;
+      for (let seed = 1; seed <= 10; seed++) {
+        const m = new Match({ seed: seed * 13, map, modeId, players: slots(4) });
+        m.phase = "playing";
+        if (m.hill) m.hill.moveIn = 1e9;
+        if (m.chaos) m.chaos.nextAt = 1e9;
+        // Classique / Chaos : les caisses couvrent toute la carte au départ ; on les enlève pour mesurer le rythme
+        if (modeId !== "koth") for (let k = 0; k < m.grid.tiles.length; k++) if (m.grid.tiles[k] === TILE.BLOCK) m.grid.tiles[k] = TILE.FLOOR;
+        const cfg = m.specials.cfg;
+        let prevNext = m.specials.nextIn;
+        for (let i = 0; i < Math.round(T / DT); i++) {
+          const before = m.specials.log.length;
+          m.step(idle(m));
+          if (m.specials.nextIn > prevNext + 1e-6) checks++;
+          prevNext = m.specials.nextIn;
+          if (m.specials.onBoard() > cfg.maxOnBoard) overMax++;
+          for (const e of m.specials.log.slice(before)) {
+            spawns++;
+            per[e.type] = (per[e.type] ?? 0) + 1;
+            if (e.type === last) repeats++;
+            last = e.type;
+            const g = m.grid;
+            const i2 = g.idx(e.x, e.y);
+            if (g.blocksMove(e.x, e.y) || g.bombAt[i2] >= 0 || g.fire[i2] > 0 || m.hill?.cellSet.has(i2)) bad++;
+            if (m.players.some((p) => p.alive && Math.abs(Math.floor(p.x) - e.x) + Math.abs(Math.floor(p.y) - e.y) < cfg.minPlayerDist)) near++;
+            // accès : deux joueurs (deux équipes) peuvent y aller
+            const ds = m.players.filter((p) => p.alive).map((p) => walk(m, Math.floor(p.x), Math.floor(p.y)).get(i2) ?? Infinity);
+            if (m.teams) {
+              const a = Math.min(...m.players.filter((p) => m.teams![p.id] === 0).map((p, k) => ds[p.id]));
+              const b = Math.min(...m.players.filter((p) => m.teams![p.id] === 1).map((p) => ds[p.id]));
+              if (!isFinite(a) || !isFinite(b)) unfair++;
+            } else if (ds.filter(isFinite).length < 2) unfair++;
+          }
+          // on « ramasse » : le bonus spécial disparaît (sinon la limite simultanée bloque tout)
+          if (i % 120 === 60) for (const b of [...m.bonuses.values()]) if (SPECIAL_BY_ID[b.type]) (m as unknown as { removeBonus(b: unknown): void }).removeBonus(b);
+        }
+        for (const [id, n] of Object.entries(m.specials.spawned)) if (n > (cfg.maxPerMatch[id] ?? Infinity)) overMax++;
+      }
+      const m0 = new Match({ seed: 1, map, modeId, players: slots(4) });
+      const cfg = m0.specials.cfg;
+      const perMin = (spawns / 10) / (T / 60);
+      const counts = Object.values(per);
+      check(bad === 0 && near === 0 && unfair === 0, `${modeId} : ${spawns} apparitions, jamais dans un mur/obstacle/feu/zone, jamais à moins de ${cfg.minPlayerDist} cases d'un joueur, toujours accessibles à 2 joueurs / aux 2 équipes`);
+      check(overMax === 0, `${modeId} : jamais plus de ${cfg.maxOnBoard} capacité(s) visible(s) en même temps, quotas par partie respectés`);
+      check(spawns < checks + 10 * cfg.opening && perMin >= 2 && perMin <= 6.5, `${modeId} : ≈ ${perMin.toFixed(1)} apparitions / minute (vérification toutes les ${cfg.interval[0]}-${cfg.interval[1]} s, chance ${cfg.chance * 100} %, ${checks} vérifications)`);
+      check(counts.length >= 6 && Math.max(...counts) <= 2.5 * Math.min(...counts) && repeats / spawns < 0.15, `${modeId} : aucun type ne domine (${Object.entries(per).map(([k, v]) => `${k} ${v}`).join(", ")}), répétitions ${(100 * repeats / spawns).toFixed(0)} %`);
+    }
+  }
+  {
+    // Domination : capacités dès les premières secondes
+    let early = 0;
+    for (let seed = 1; seed <= 12; seed++) {
+      const m = new Match({ seed, map: FACTORY, modeId: "koth", players: slots(4) });
+      m.phase = "playing"; m.hill!.moveIn = 1e9;
+      run(m, 5.2);
+      if (m.specials.log.length >= 2) early++;
+    }
+    check(early === 12, `Domination : 2 capacités apparaissent dès les premières secondes (${early}/12 parties à 5 s)`);
+    const solo = new Match({ seed: 3, map: FACTORY, modeId: "koth", players: slots(2) });
+    solo.phase = "playing"; solo.hill!.moveIn = 1e9;
+    solo.kill(solo.players[1], 0);
+    solo.hill!.respawnIn[1] = 1e9;
+    run(solo, 30);
+    check(solo.specials.log.length === 0, "moins de 2 joueurs en vie : aucune apparition");
+  }
+  {
+    // règles de détention : même capacité → reste sur la carte ; réserve pleine → reste ; message une seule fois
+    const m = emptyMatch(2);
+    m.specials.disabled = true;
+    const p = m.players[0];
+    p.bigCharges = 1;
+    m.spawnBonus("big", 3, 1);
+    place(m, 0, 3, 1);
+    const ev: { t: string; reason?: string }[] = [];
+    for (let i = 0; i < 40; i++) { m.step(idle(m)); ev.push(...m.events); }
+    const refused = ev.filter((e) => e.t === "bonusRefused");
+    check(p.bigCharges === 1 && [...m.bonuses.values()].some((b) => b.type === "big") && refused.length === 1 && refused[0].reason === "same", "déjà la même capacité : le bonus reste sur la carte, message « déjà équipé » une seule fois");
+    p.elecCharges = 1;
+    m.spawnBonus("freeze", 5, 1);
+    place(m, 0, 5, 1);
+    const ev2: { t: string; reason?: string }[] = [];
+    for (let i = 0; i < 40; i++) { m.step(idle(m)); ev2.push(...m.events); }
+    check(SPECIAL_RULES.maxHeld === 2 && p.freezeCharges === 0 && [...m.bonuses.values()].some((b) => b.type === "freeze") && ev2.some((e) => e.t === "bonusRefused" && e.reason === "full"), `réserve pleine (${SPECIAL_RULES.maxHeld} capacités) : le bonus reste, message « réserve pleine »`);
+    // on utilise ses capacités (pose d'une bombe) → on peut ramasser celui qui attendait
+    place(m, 0, 7, 1);
+    run(m, DT, cmdFor(0, { bomb: true }));
+    check(p.bigCharges === 0 && p.elecCharges === 0, "la bombe posée utilise les capacités en réserve (consommées)");
+    place(m, 0, 5, 1);
+    run(m, 0.3);
+    check(p.freezeCharges === 1, "réserve libérée : le bonus qui attendait se ramasse");
+    // personne ne perd un bonus « inutile » : l'autre joueur peut le prendre
+    m.players[1].bigCharges = 0;
+    place(m, 1, 3, 1);
+    run(m, 0.3);
+    check(m.players[1].bigCharges === 1, "le bonus resté sur la carte reste accessible aux autres joueurs");
+    // type inconnu : enlevé sans effet
+    m.spawnBonus("pasunbonus", 9, 1);
+    place(m, 1, 9, 1);
+    run(m, 0.3);
+    check(![...m.bonuses.values()].some((b) => b.type === "pasunbonus"), "bonus inconnu : enlevé, aucun effet");
+  }
+  {
+    // fin de manche : bonus supprimés, capacités et effets effacés, plus aucune apparition
+    const m = emptyMatch(2);
+    m.spawnBonus("big", 3, 1); m.spawnBonus("bomb", 5, 1);
+    const p = m.players[0];
+    p.throwCharges = 1; p.remoteCharges = 1; p.slowTime = 1; p.toxDose = 2;
+    m.kill(m.players[1], 0);
+    run(m, DT);
+    check(m.bonuses.size === 0 && SPECIALS.every((sp) => p[sp.field] === 0) && p.slowTime === 0 && p.toxDose === 0, "fin de manche : bonus de la carte supprimés, capacités et effets effacés");
+    const n0 = m.specials.log.length;
+    m.specials.nextIn = 0;
+    run(m, 4);
+    check(m.specials.log.length === n0 && m.bonuses.size === 0 && m.phase === "over", "après la fin : aucune nouvelle apparition, la partie se termine");
+  }
+  {
+    // élimination / réapparition : tout est remis à zéro par la même fonction
+    const m = new Match({ seed: 41, map: FACTORY, modeId: "koth", players: slots(4) });
+    m.phase = "playing"; m.hill!.moveIn = 1e9; m.specials.disabled = true;
+    const p = m.players[0];
+    for (const sp of SPECIALS) p[sp.field] = 1;
+    p.stunTime = 0.5; p.slowTime = 1;
+    m.kill(p, 1);
+    check(SPECIALS.every((sp) => p[sp.field] === 0) && p.stunTime === 0 && p.slowTime === 0, "éliminé : toutes les capacités et tous les effets effacés");
+    run(m, HILL_RULES.respawnDelay + 0.3);
+    check(p.alive && SPECIALS.every((sp) => p[sp.field] === 0), "réapparition : sans capacité");
+  }
+  // ---- bombe télécommandée
+  const open = () => {
+    const m = emptyMatch(2);
+    m.specials.disabled = true;
+    const g = m.grid;
+    for (let y = 1; y < g.h - 1; y++) for (let x = 1; x < g.w - 1; x++) { g.tiles[g.idx(x, y)] = TILE.FLOOR; g.terrain[g.idx(x, y)] = TERRAIN.NONE; }
+    place(m, 0, 1, 1); place(m, 1, 11, 9);
+    return m;
+  };
+  {
+    const m = open();
+    const p = m.players[0];
+    m.spawnBonus("remote", 3, 1); place(m, 0, 3, 1); run(m, 0.5);
+    check(p.remoteCharges === 1, "télécommandée : ramassage");
+    place(m, 0, 5, 5);
+    run(m, DT, cmdFor(0, { bomb: true, remote: true }));
+    const b = [...m.bombs.values()][0];
+    check(!!b?.remote && p.remoteCharges === 0 && Math.abs(b.fuse - (REMOTE.maxFuse - DT)) < 1e-6 && m.bombs.size === 1, "la bombe posée est télécommandée (et un appui immédiat ne la fait pas sauter)");
+    place(m, 0, 1, 1);
+    run(m, 3);
+    check(m.bombs.has(b.id), "elle ne saute pas toute seule à la mèche normale");
+    const ev: string[] = [];
+    run(m, DT, cmdFor(0, { remote: true }));
+    ev.push(...m.events.map((e) => e.t));
+    check(!m.bombs.has(b.id) && ev.filter((t) => t === "explode").length === 1 && ev.includes("remoteDetonate"), "BOUM : elle saute tout de suite, une seule fois");
+    run(m, 0.5);
+    run(m, DT, cmdFor(0, { remote: true }));
+    check(!m.events.some((e) => e.t === "explode" || e.t === "remoteDetonate"), "capacité consommée : un nouvel appui ne fait rien");
+    run(m, DT, cmdFor(1, { remote: true }));
+    check(!m.events.some((e) => e.t === "remoteDetonate"), "sans bombe télécommandée : appui ignoré (capacité inexistante)");
+  }
+  {
+    // sécurité : saute seule au bout de maxFuse ; poseur éliminé → redevient normale ; paralysé → ne peut pas
+    const m = open();
+    const p = m.players[0];
+    p.remoteCharges = 1;
+    place(m, 0, 5, 5); run(m, DT, cmdFor(0, { bomb: true })); place(m, 0, 1, 1);
+    let t = 0;
+    while (m.bombs.size && t < 20 * 60) { run(m, DT); t++; }
+    check(Math.abs(t * DT - REMOTE.maxFuse) < 3 * DT, `jamais posée pour toujours : saute seule au bout de ${(t * DT).toFixed(1)} s`);
+    const n = open();
+    const q = n.players[0];
+    q.remoteCharges = 1;
+    place(n, 0, 5, 5); run(n, DT, cmdFor(0, { bomb: true })); place(n, 0, 1, 1);
+    const b = [...n.bombs.values()][0];
+    run(n, 0.5);
+    n.stun(q, 1, 1);
+    run(n, DT, cmdFor(0, { remote: true }));
+    check(n.bombs.has(b.id), "paralysé : impossible de faire sauter sa bombe");
+    n.kill(q, -1);
+    check(!b.remote && b.fuse <= n.bombRules.fuse + 1e-9, "poseur éliminé : la bombe redevient normale (mèche habituelle)");
+  }
+  {
+    // lancée : pas pendant le vol ; déclenchée par une réaction en chaîne
+    const m = new Match({ seed: 41, map: FACTORY, modeId: "koth", players: slots(4) });
+    m.phase = "playing"; m.hill!.moveIn = 1e9; m.specials.disabled = true;
+    const p = m.players[0];
+    place(m, 0, 2, 6); p.faceX = 1; p.faceY = 0;
+    p.remoteCharges = 1; p.throwCharges = 1;
+    run(m, DT, cmdFor(0, { throw: true }));
+    const b = [...m.bombs.values()][0];
+    run(m, DT, cmdFor(0, { remote: true }));
+    check(!!b?.flight && b.remote === true && m.bombs.has(b.id), "lancée : en vol, le BOUM ne fait rien");
+    run(m, 0.8);
+    place(m, 0, 2, 8);
+    run(m, DT, cmdFor(0, { remote: true }));
+    check(!m.bombs.has(b.id), "après l'atterrissage, BOUM la fait sauter");
+    const c = open();
+    c.players[1].remoteCharges = 1;
+    place(c, 1, 7, 7); run(c, DT, cmdFor(1, { bomb: true })); place(c, 1, 11, 9);
+    const r = [...c.bombs.values()][0];
+    c.players[0].chainCharges = 1;
+    place(c, 0, 5, 6); run(c, DT, cmdFor(0, { bomb: true })); place(c, 0, 1, 1);
+    for (let i = 0; i < 300 && c.bombs.size; i++) c.step(idle(c));
+    check(!c.bombs.has(r.id), "réaction en chaîne : déclenche aussi une bombe télécommandée");
+  }
+  {
+    // Domination : équipes + en ligne
+    const m = new Match({ seed: 41, map: FACTORY, modeId: "koth", players: slots(4) });
+    m.phase = "playing"; m.hill!.moveIn = 1e9; m.specials.disabled = true;
+    const mate = m.players.filter((p) => p.id !== 0 && m.sameTeam(0, p.id))[0];
+    const foe = m.players.filter((p) => m.isFoe(m.players[0], p))[0];
+    m.players[0].remoteCharges = 1;
+    place(m, 0, 6, 6); run(m, DT, cmdFor(0, { bomb: true })); place(m, 0, 1, 1);
+    place(m, mate.id, 7, 6); place(m, foe.id, 5, 6);
+    const snap = JSON.parse(JSON.stringify(encodeSnapshot(m, [0, 0, 0, 0], [])));
+    const c = new Match({ seed: 41, map: FACTORY, modeId: "koth", players: slots(4) });
+    applySnapshot(c, snap);
+    check([...c.bombs.values()][0]?.remote === true, "en ligne : bombe télécommandée recopiée");
+    run(m, 0.3);
+    run(m, DT, cmdFor(0, { remote: true }));
+    run(m, 0.1);
+    check(mate.deathTime < 0 && foe.deathTime >= 0 && foe.killedBy === 0, "Domination : BOUM élimine l'adversaire, épargne le coéquipier");
+  }
+  {
+    // tous les modes avec le système complet + bots : les parties vont au bout
+    for (const [modeId, map] of [["classic", FOREST], ["chaos", FOREST], ["koth", FACTORY]] as const) {
+      let ended = 0, stuck = 0, spawned = 0, picked = 0, booms = 0, refused = 0, leftover = 0;
+      for (let seed = 1; seed <= 6; seed++) {
+        const m = new Match({ seed: seed * 97, map, modeId, players: bots(4) });
+        const brains = m.players.map((p) => new BotBrain(p.id, "hard", seed));
+        let g = 0;
+        while (m.phase !== "over" && g++ < 60 * 200) {
+          if (g % 400 === 0) for (const p of m.players) if (p.alive && !p.remoteCharges) p.remoteCharges = 1;
+          m.step(brains.map((b) => b.update(m, DT)));
+          for (const e of m.events) {
+            if (e.t === "bonusPicked" && SPECIAL_BY_ID[e.type]) picked++;
+            if (e.t === "remoteDetonate") booms++;
+            if (e.t === "bonusRefused") refused++;
+          }
+          for (const p of m.players) if (p.alive && m.grid.blocksMove(Math.floor(p.x), Math.floor(p.y))) stuck++;
+        }
+        if (m.phase === "over") ended++;
+        spawned += m.specials.log.length;
+        leftover += m.bonuses.size;
+      }
+      check(ended === 6 && stuck === 0 && spawned > 0 && leftover === 0, `${modeId} (bots) : 6 parties terminées, ${spawned} capacités apparues, ${picked} ramassées, ${booms} BOUM, ${refused} refus, aucun bonus restant à la fin, personne coincé`);
     }
   }
 }

@@ -24,6 +24,8 @@ export interface InputCmd {
   ability: boolean; // appui (front montant)
   /** lancer la prochaine bombe (front montant) ; absent = non */
   throw?: boolean;
+  /** faire sauter sa bombe télécommandée (front montant) ; absent = non */
+  remote?: boolean;
 }
 export const NO_INPUT: InputCmd = { mx: 0, my: 0, bomb: false, ability: false };
 
@@ -99,6 +101,8 @@ export interface PlayerState {
   toxicCharges: number;
   /** capacité « réaction en chaîne » (0 ou 1) : la prochaine bombe déclenche les bombes proches */
   chainCharges: number;
+  /** capacité « bombe télécommandée » (0 ou 1) : la prochaine bombe saute sur commande */
+  remoteCharges: number;
   /** doses de gaz reçues (à TOXIC.lethalDoses : éliminé) */
   toxDose: number;
   /** temps avant la prochaine dose possible dans le nuage (s) */
@@ -144,6 +148,8 @@ export interface BombState {
   chainDepth?: number;
   /** déjà déclenchée par une réaction en chaîne (ne sera plus jamais re-déclenchée) */
   chainArmed?: boolean;
+  /** bombe télécommandée : saute quand son poseur appuie sur « BOUM » (ou au bout de REMOTE.maxFuse s) */
+  remote?: boolean;
 }
 
 /** Nuage toxique : effet temporaire indépendant de la grille (le sol n'est pas modifié). */
@@ -183,6 +189,9 @@ export type SimEvent =
   | { t: "gas"; x: number; y: number; owner: number; cells: number[] }
   | { t: "poisoned"; player: number; dose: number }
   /** réaction en chaîne : la bombe en (x, y) déclenche celle en (toX, toY) dans `delay` s */
+  /** bonus spécial non ramassé : le joueur a déjà cette capacité (same) ou sa réserve est pleine (full) */
+  | { t: "bonusRefused"; player: number; type: string; reason: "same" | "full"; x: number; y: number }
+  | { t: "remoteDetonate"; player: number; x: number; y: number }
   | { t: "chainLink"; x: number; y: number; toX: number; toY: number; delay: number }
   | { t: "bonusSpawn"; x: number; y: number; type: string }
   | { t: "bonusPicked"; x: number; y: number; type: string; player: number }

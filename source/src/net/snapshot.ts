@@ -23,7 +23,7 @@ export interface Snapshot {
   /** [idx, temps restant, forme, propriétaire] */
   fire: [number, number, number, number][];
   /** [..., vol : [deX, deY, t, durée] si la bombe est lancée et encore en l'air] */
-  bombs: [number, number, number, number, number, number, number[], number, ([number, number, number, number] | null)?, number?, number?, number?, number?, number?][];
+  bombs: [number, number, number, number, number, number, number[], number, ([number, number, number, number] | null)?, number?, number?, number?, number?, number?, number?][];
   /** nuages toxiques : [id, propriétaire, cases, temps restant, durée] (absent = anciens serveurs) */
   toxic?: [number, number, number[], number, number][];
   bonuses: [number, string, number, number, number, number][];
@@ -53,7 +53,7 @@ export function encodeSnapshot(m: Match, acks: number[], events: SimEvent[]): Sn
     tiles: Array.from(g.tiles).join(""),
     terrain: Array.from(g.terrain).join(""),
     fire,
-    bombs: [...m.bombs.values()].map((b) => [b.id, b.ownerId, b.tx, b.ty, r2(b.fuse), b.range, b.passable, b.fuseTotal, b.flight ? [b.flight.fromX, b.flight.fromY, r2(b.flight.t), r2(b.flight.dur)] : null, b.big ? 1 : 0, b.elec ? 1 : 0, b.freeze ? 1 : 0, b.toxic ? 1 : 0, b.chainDepth ?? -1]),
+    bombs: [...m.bombs.values()].map((b) => [b.id, b.ownerId, b.tx, b.ty, r2(b.fuse), b.range, b.passable, b.fuseTotal, b.flight ? [b.flight.fromX, b.flight.fromY, r2(b.flight.t), r2(b.flight.dur)] : null, b.big ? 1 : 0, b.elec ? 1 : 0, b.freeze ? 1 : 0, b.toxic ? 1 : 0, b.chainDepth ?? -1, b.remote ? 1 : 0]),
     toxic: m.toxicZones.map((z) => [z.id, z.owner, z.cells, r2(z.timeLeft), z.duration]),
     bonuses: [...m.bonuses.values()].map((b) => [b.id, b.type, b.tx, b.ty, r2(b.invuln), r2(b.age)]),
     pending: m.pendingDrops.map(([x, y, l]) => [x, y, r2(l)]),
@@ -107,7 +107,7 @@ export function applySnapshot(m: Match, s: Snapshot, keep = -1): void {
   }
   m.toxicZones = (s.toxic ?? []).map(([id, owner, cells, timeLeft, duration]) => ({ id, owner, cells, timeLeft, duration }));
   m.bombs.clear();
-  for (const [id, ownerId, tx, ty, fuse, range, passable, fuseTotal, fl, big, elec, freeze, toxic, chain] of s.bombs) {
+  for (const [id, ownerId, tx, ty, fuse, range, passable, fuseTotal, fl, big, elec, freeze, toxic, chain, remote] of s.bombs) {
     const flight = fl ? { fromX: fl[0], fromY: fl[1], t: fl[2], dur: fl[3] } : undefined;
     const b: import("../core/types").BombState = { id, ownerId, tx, ty, fuse, fuseTotal, range, passable, flight };
     if (big) b.big = true;
@@ -115,6 +115,7 @@ export function applySnapshot(m: Match, s: Snapshot, keep = -1): void {
     if (freeze) b.freeze = true;
     if (toxic) b.toxic = true;
     if (chain !== undefined && chain >= 0) b.chainDepth = chain;
+    if (remote) b.remote = true;
     m.bombs.set(id, b);
     // bombe en l'air : pas encore sur la grille
     if (!flight) g.bombAt[g.idx(tx, ty)] = id;

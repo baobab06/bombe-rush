@@ -2,6 +2,9 @@ import type { Match } from "../core/match";
 import { DIRS } from "../core/grid";
 import { RULES } from "../core/rules";
 import { CHAIN, TOXIC } from "../core/bombs";
+
+/** Une bombe télécommandée peut sauter à tout moment : on la traite comme une bombe sur le point d'exploser. */
+const REMOTE_THREAT = 0.6;
 import { TILE } from "../core/types";
 
 export interface VirtualBomb {
@@ -57,7 +60,7 @@ export function computeDanger(m: Match, extra?: VirtualBomb): DangerMap {
   const end = new Float32Array(n).fill(-Infinity);
 
   const list: VirtualBomb[] = [];
-  for (const b of m.bombs.values()) list.push({ tx: b.tx, ty: b.ty, fuse: b.fuse, range: b.range, toxic: b.toxic, chain: b.chainDepth !== undefined && b.chainDepth < CHAIN.maxDepth && !b.flight });
+  for (const b of m.bombs.values()) list.push({ tx: b.tx, ty: b.ty, fuse: b.remote ? Math.min(b.fuse, REMOTE_THREAT) : b.fuse, range: b.range, toxic: b.toxic, chain: b.chainDepth !== undefined && b.chainDepth < CHAIN.maxDepth && !b.flight });
   if (extra) list.push(extra);
 
   const bombCells = new Set<number>(list.map((b) => g.idx(b.tx, b.ty)));

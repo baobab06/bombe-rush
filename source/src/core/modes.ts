@@ -2,6 +2,7 @@ import type { Match } from "./match";
 import type { BombRules } from "./bombs";
 import { ChaosDirector } from "./chaos";
 import { HillState } from "./hill";
+import type { SpecialSpawnConfig } from "./specials";
 
 /**
  * Modes de jeu : des crochets appelés par la simulation.
@@ -21,6 +22,12 @@ export interface ModeDef {
   bombRules?: Partial<BombRules>;
   /** butin propre au mode : poids et quotas ajoutés à ceux du jeu (core/loot.ts) */
   loot?: { weights: Record<string, number>; maxPerMatch: Record<string, number> };
+  /**
+   * Capacités de bombes (bombe à lancer, grosse, électrique…) : réglages
+   * d'apparition propres au mode, par-dessus SPECIAL_SPAWN (specials.ts).
+   * null = aucune capacité dans ce mode.
+   */
+  specials?: Partial<SpecialSpawnConfig> | null;
   onStart?(m: Match): void;
   onTick?(m: Match, dt: number): void;
 }
@@ -32,6 +39,8 @@ export const MODES: ModeDef[] = [
     emoji: "🎮",
     tagline: "Le dernier debout gagne.",
     available: true,
+    // une capacité de temps en temps, une seule visible à la fois
+    specials: { firstAt: 12, interval: [10, 15], chance: 0.6, maxOnBoard: 1 },
   },
   {
     id: "chaos",
@@ -39,6 +48,8 @@ export const MODES: ModeDef[] = [
     emoji: "💀",
     tagline: "Pluie de bombes, tempêtes, explosions géantes…",
     available: true,
+    // le Chaos en donne un peu plus souvent
+    specials: { firstAt: 8, interval: [10, 14], chance: 0.75, maxOnBoard: 2 },
     onStart(m) {
       m.chaos = new ChaosDirector(m);
     },
@@ -55,8 +66,16 @@ export const MODES: ModeDef[] = [
     suddenDeath: false,
     // 2 contre 2 : bombes plus lisibles (mèche 2,5 s, portée 2, explosion brève)
     bombRules: { fuse: 2.5, warn: 0.8, startRange: 2, startBombs: 1, fireDuration: 0.4, cooldown: 0.5 },
-    // bombe à lancer : seulement en Domination (dans les caisses + apparitions régulières, voir hill.ts)
-    loot: { weights: { throw: 14 }, maxPerMatch: { throw: 4, big: 5, elec: 5, freeze: 5, toxic: 5, chain: 5 } },
+    // capacités dès les premières secondes (2 apparitions d'ouverture), puis toutes les 10-15 s
+    specials: {
+      firstAt: 3,
+      opening: 2,
+      openingEvery: 2,
+      interval: [10, 15],
+      chance: 0.8,
+      maxOnBoard: 2,
+      maxPerMatch: { throw: 5, big: 5, elec: 5, freeze: 5, toxic: 5, chain: 5, remote: 5 },
+    },
     onStart(m) {
       // équipes rouges / bleues dès qu'il y a au moins 2 joueurs
       if (m.players.length >= 2) m.setTeams();
