@@ -36,6 +36,7 @@ const BONUS_TEXT: Record<string, string> = {
   elec: "BOMBE ÉLECTRIQUE !",
   freeze: "BOMBE GELANTE !",
   toxic: "BOMBE TOXIQUE !",
+  chain: "RÉACTION EN CHAÎNE !",
 };
 
 interface Dying {
@@ -85,6 +86,8 @@ export class Renderer {
   private shocks: { x: number; y: number; cells: number[]; at: number }[] = [];
   /** souffles glacés en cours d'affichage */
   private frosts: { x: number; y: number; cells: number[]; at: number }[] = [];
+  /** réaction en chaîne : étincelles qui voyagent d'une bombe à l'autre */
+  private links: { x: number; y: number; toX: number; toY: number; at: number; delay: number }[] = [];
   private landed = new Map<number, number>();
   private boomAt = -10;
   private pfx = new Map<number, PlayerFx>();
@@ -105,6 +108,7 @@ export class Renderer {
     this.breaking = [];
     this.shocks = [];
     this.frosts = [];
+    this.links = [];
     this.landed.clear();
     this.pfx.clear();
     this.shake = 0;
@@ -150,6 +154,8 @@ export class Renderer {
   // ------------------------------------------------------------ événements
   onEvents(m: Match, events: SimEvent[]) {
     const P = this.particles;
+    // grosses réactions en chaîne : au-delà de quelques explosions dans la même image, effets allégés
+    let fullBooms = 0;
     for (const e of events) {
       switch (e.t) {
         case "bombPlaced": {
@@ -164,7 +170,11 @@ export class Renderer {
           break;
         }
         case "explode":
-          P.explosion(e.x + 0.5, e.y + 0.5, m.players[e.owner]?.boomId);
+          if (fullBooms++ < 4) P.explosion(e.x + 0.5, e.y + 0.5, m.players[e.owner]?.boomId);
+          else {
+            P.spawn("ring", e.x + 0.5, e.y + 0.5, { life: 0.4, size: 0.6, color: "#ffd23f" });
+            P.spawn("glow", e.x + 0.5, e.y + 0.5, { z: 0.2, life: 0.2, size: 0.5, color: "#fff2b0" });
+          }
           if (e.big) {
             // grosse bombe : onde de choc large, étincelles en plus, secousse plus forte (flash limité pour garder le jeu lisible)
             P.spawn("ring", e.x + 0.5, e.y + 0.5, { life: 0.45, size: 1.6, color: "#ffb347" });
@@ -205,6 +215,12 @@ export class Renderer {
             const y = (i - x) / gw;
             P.spawn("twinkle", x + 0.5 + (Math.random() - 0.5) * 0.7, y + 0.5 + (Math.random() - 0.5) * 0.7, { z: 0.3 + Math.random() * 0.6, vz: -0.2, life: 0.9, size: 0.09, color: Math.random() < 0.5 ? "#ffffff" : "#bff0ff" });
           }
+          break;
+        }
+        case "chainLink": {
+          this.links.push({ x: e.x, y: e.y, toX: e.toX, toY: e.toY, at: this.time, delay: Math.max(0.05, e.delay) });
+          if (this.links.length > 40) this.links.shift(); // borne : jamais trop de traits à dessiner
+          P.spawn("ring", e.toX + 0.5, e.toY + 0.5, { life: Math.max(0.12, e.delay), size: 0.35, color: "#ffd23f" });
           break;
         }
         case "gas": {
@@ -475,6 +491,7 @@ export class Renderer {
     if (b.elec) this.drawElecBomb(ctx, 0, 0, s, t);
     if (b.freeze) this.drawFrostBomb(ctx, 0, 0, s, t);
     if (b.toxic) this.drawToxicBomb(ctx, 0, 0, s, t);
+    if (b.chainDepth === 0) this.drawChainBomb(ctx, 0, 0, s, t);
     ctx.restore();
   }
 
@@ -763,6 +780,7 @@ export class Renderer {
             if (b.elec) this.drawElecBomb(ctx, X + s / 2, Y + s / 2, s * (b.big ? BIG.scale : 1), t);
             if (b.freeze) this.drawFrostBomb(ctx, X + s / 2, Y + s / 2, s * (b.big ? BIG.scale : 1), t);
             if (b.toxic) this.drawToxicBomb(ctx, X + s / 2, Y + s / 2, s * (b.big ? BIG.scale : 1), t);
+            if (b.chainDepth === 0) this.drawChainBomb(ctx, X + s / 2, Y + s / 2, s * (b.big ? BIG.scale : 1), t);
           }
         }
       }
@@ -802,6 +820,8 @@ export class Renderer {
     if (this.shocks.length) this.drawShocks(m);
     // bombes gelantes : givre sur les cases touchées, qui fond doucement
     if (this.frosts.length) this.drawFrosts(m);
+    // réaction en chaîne : étincelles entre les bombes
+    if (this.links.length) this.drawLinks();
 
     // mode Chaos : zones annoncées (rayures rouges qui pulsent)
     if (ch?.pending) {
@@ -1196,6 +1216,74 @@ export class Renderer {
       ctx.lineTo(x + Math.cos(b) * r, y + Math.sin(b) * r);
       ctx.stroke();
     }
+  }
+
+  /** Bombe « réaction en chaîne » : anneau doré et maillons qui tournent autour. */
+  private drawChainBomb(ctx: CanvasRenderingContext2D, cx: number, cy: number, s: number, t: number) {
+    ctx.save();
+    ctx.strokeStyle = "#ffd23f";
+    ctx.lineWidth = Math.max(1.5, s * 0.045);
+    ctx.setLineDash([s * 0.07, s * 0.05]);
+    ctx.lineDashOffset = -t * s * 0.6;
+    ctx.beginPath();
+    ctx.arc(cx, cy, s * 0.44, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // trois maillons
+    ctx.lineWidth = Math.max(1.2, s * 0.035);
+    for (let k = 0; k < 3; k++) {
+      const a = t * 2.2 + (k * Math.PI * 2) / 3;
+      const x = cx + Math.cos(a) * s * 0.44;
+      const y = cy + Math.sin(a) * s * 0.44;
+      ctx.fillStyle = "#3a2a00";
+      ctx.beginPath();
+      ctx.ellipse(x, y, s * 0.075, s * 0.045, a + Math.PI / 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  /** Étincelle qui court d'une bombe à la suivante pendant le délai de la cascade, puis s'efface. */
+  private drawLinks() {
+    const ctx = this.ctx;
+    const s = this.s;
+    this.links = this.links.filter((l) => this.time - l.at < l.delay + 0.25);
+    ctx.save();
+    ctx.lineCap = "round";
+    for (const l of this.links) {
+      const age = this.time - l.at;
+      const k = Math.min(1, age / l.delay);
+      const fade = age > l.delay ? 1 - (age - l.delay) / 0.25 : 1;
+      const x1 = (l.x + 0.5) * s;
+      const y1 = (l.y + 0.5) * s;
+      const x2 = (l.toX + 0.5) * s;
+      const y2 = (l.toY + 0.5) * s;
+      const hx = x1 + (x2 - x1) * k;
+      const hy = y1 + (y2 - y1) * k;
+      // traînée lumineuse
+      ctx.globalAlpha = 0.85 * fade;
+      ctx.strokeStyle = "#ffb31a";
+      ctx.lineWidth = Math.max(2, s * 0.08);
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(hx, hy);
+      ctx.stroke();
+      ctx.strokeStyle = "#fff6c8";
+      ctx.lineWidth = Math.max(1, s * 0.03);
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(hx, hy);
+      ctx.stroke();
+      // tête de l'étincelle
+      if (k < 1) {
+        ctx.fillStyle = "#ffffff";
+        ctx.beginPath();
+        ctx.arc(hx, hy, s * 0.09, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
   }
 
   /** Bombe toxique : reflet vert, symbole ☣ et petite fumée verte/violette qui s'échappe. */

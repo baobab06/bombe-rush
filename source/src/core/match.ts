@@ -1,4 +1,4 @@
-import { FREEZE, SHOCK, THROW, TOXIC, bigRange, type BombRules } from "./bombs";
+import { CHAIN, FREEZE, SHOCK, THROW, TOXIC, bigRange, type BombRules } from "./bombs";
 import { BONUSES } from "./bonuses";
 import { DIRS, Grid } from "./grid";
 import { LOOT, LootTable } from "./loot";
@@ -139,6 +139,7 @@ export class Match {
         slowTime: 0,
         slowImmune: 0,
         toxicCharges: 0,
+        chainCharges: 0,
         toxDose: 0,
         toxTick: 0,
         toxRecover: 0,
@@ -361,6 +362,8 @@ export class Match {
     if (freeze) p.freezeCharges = 0;
     const toxic = p.toxicCharges > 0;
     if (toxic) p.toxicCharges = 0;
+    const chain = p.chainCharges > 0;
+    if (chain) p.chainCharges = 0;
     const bomb: BombState = {
       id: this.nextId++,
       ownerId: p.id,
@@ -376,6 +379,7 @@ export class Match {
     if (elec) bomb.elec = true;
     if (freeze) bomb.freeze = true;
     if (toxic) bomb.toxic = true;
+    if (chain) bomb.chainDepth = 0;
     this.bombs.set(bomb.id, bomb);
     p.activeBombs++;
     p.bombCooldown = this.bombRules.cooldown;
@@ -537,6 +541,8 @@ export class Match {
       const frostZone = b.freeze ? this.shockCells(b.tx, b.ty, b.range, FREEZE.radius) : null;
       // nuage toxique : exactement les cases touchées par l'explosion (calculées avant)
       const gasZone = b.toxic ? this.blastCells(b.tx, b.ty, b.range) : null;
+      // réaction en chaîne : zone d'influence calculée avant que l'explosion casse les caisses
+      const chainReach = b.chainDepth !== undefined && b.chainDepth < CHAIN.maxDepth ? this.chainReach(b.tx, b.ty) : null;
       let cells = 1;
       this.setFire(b.tx, b.ty, FIRE.CENTER, b.ownerId);
       for (const [dx, dy, bit] of DIRS) {
@@ -584,6 +590,7 @@ export class Match {
       if (shockZone) this.discharge(b, shockZone);
       if (frostZone) this.frostBlast(b, frostZone);
       if (gasZone) this.addToxicZone(b, gasZone);
+      if (chainReach) this.propagateChain(b, chainReach, queue);
       this.events.push(b.big ? { t: "explode", x: b.tx, y: b.ty, owner: b.ownerId, cells, chain, big: true } : { t: "explode", x: b.tx, y: b.ty, owner: b.ownerId, cells, chain });
     }
   }
@@ -666,6 +673,63 @@ export class Match {
   slow(p: PlayerState, by: number, dur: number): void {
     p.slowTime = Math.min(FREEZE.duration, Math.max(0, dur));
     this.events.push({ t: "frozen", player: p.id, by, dur: p.slowTime });
+  }
+
+  /**
+   * Zone d'influence d'une réaction en chaîne : case → distance (pas), jusqu'à
+   * CHAIN.radius, en contournant les coins ; murs et caisses bloquent.
+   */
+  chainReach(tx: number, ty: number): Map<number, number> {
+    const g = this.grid;
+    const start = g.idx(tx, ty);
+    const dist = new Map<number, number>([[start, 0]]);
+    const q = [start];
+    while (q.length) {
+      const c = q.shift()!;
+      const d = dist.get(c)!;
+      if (d >= CHAIN.radius) continue;
+      const x = c % g.w;
+      const y = (c - x) / g.w;
+      for (const [dx, dy] of DIRS) {
+        const t = g.tile(x + dx, y + dy);
+        if (t === TILE.WALL || t === TILE.BLOCK) continue;
+        const n = g.idx(x + dx, y + dy);
+        if (dist.has(n)) continue;
+        dist.set(n, d + 1);
+        q.push(n);
+      }
+    }
+    return dist;
+  }
+
+  /**
+   * Déclenchement CENTRALISÉ de la réaction en chaîne : les bombes au sol
+   * dans la zone sont programmées en cascade (la plus proche d'abord). Une
+   * bombe n'est jamais retardée, jamais re-programmée plus tard, jamais
+   * traitée deux fois ; celles qui sautent déjà dans cette explosion sont ignorées.
+   */
+  private propagateChain(b: BombState, reach: Map<number, number>, exploding: BombState[]): void {
+    const g = this.grid;
+    const busy = new Set(exploding.map((q) => q.id));
+    const targets: { o: BombState; d: number }[] = [];
+    for (const o of this.bombs.values()) {
+      if (o.flight || busy.has(o.id)) continue; // en vol : intouchable ; déjà en train de sauter : ignorée
+      const d = reach.get(g.idx(o.tx, o.ty));
+      if (d === undefined || d === 0) continue;
+      if (o.chainArmed) continue; // déjà déclenchée par une chaîne : jamais traitée deux fois
+      targets.push({ o, d });
+    }
+    targets.sort((p, q) => p.d - q.d || p.o.id - q.o.id);
+    let rank = 0;
+    for (const { o } of targets.slice(0, CHAIN.maxLinks)) {
+      rank++;
+      const delay = CHAIN.step * rank;
+      if (delay < o.fuse) o.fuse = delay; // on ne fait qu'avancer une explosion
+      o.chainArmed = true;
+      const depth = b.chainDepth! + 1;
+      if (o.chainDepth === undefined || depth < o.chainDepth) o.chainDepth = depth;
+      this.events.push({ t: "chainLink", x: b.tx, y: b.ty, toX: o.tx, toY: o.ty, delay: o.fuse });
+    }
   }
 
   /** Pose un nuage toxique (effet indépendant, durée fixe, jamais prolongé). */
@@ -860,6 +924,7 @@ export class Match {
     p.slowTime = 0;
     p.slowImmune = 0;
     p.toxicCharges = 0;
+    p.chainCharges = 0;
     p.toxDose = 0;
     p.toxTick = 0;
     p.toxRecover = 0;

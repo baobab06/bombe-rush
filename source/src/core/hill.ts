@@ -47,6 +47,9 @@ export const HILL_RULES = {
   /** bonus « bombe toxique » : première apparition, puis intervalle (s) */
   toxicFirst: 7,
   toxicEvery: 20,
+  /** bonus « réaction en chaîne » : première apparition, puis intervalle (s) */
+  chainFirst: 8,
+  chainEvery: 20,
 } as const;
 
 interface Site {
@@ -76,6 +79,8 @@ export class HillState {
   freezeSpawnIn: number = HILL_RULES.freezeFirst;
   /** secondes avant la prochaine apparition d'un bonus « bombe toxique » */
   toxicSpawnIn: number = HILL_RULES.toxicFirst;
+  /** secondes avant la prochaine apparition d'un bonus « réaction en chaîne » */
+  chainSpawnIn: number = HILL_RULES.chainFirst;
   /** temps restant avant la réapparition de chaque joueur (≤ 0 = rien en attente) */
   readonly respawnIn: number[];
   /** joueur qui marque en ce moment (-1 = personne) */
@@ -333,6 +338,11 @@ export class HillState {
       this.toxicSpawnIn = HILL_RULES.toxicEvery;
       this.spawnSpecialBonus("toxic");
     }
+    this.chainSpawnIn -= DT;
+    if (this.chainSpawnIn <= 0) {
+      this.chainSpawnIn = HILL_RULES.chainEvery;
+      this.spawnSpecialBonus("chain");
+    }
     // réapparitions
     // ordre tournant : à réapparition simultanée, personne ne choisit toujours sa case en premier
     const n = m.players.length;
@@ -443,6 +453,7 @@ export class HillState {
     p.slowTime = 0;
     p.slowImmune = 0;
     p.toxicCharges = 0;
+    p.chainCharges = 0;
     p.toxDose = 0;
     p.toxTick = 0;
     p.toxRecover = 0;

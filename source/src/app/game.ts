@@ -303,7 +303,7 @@ export class GameScreen {
     this.renderer.draw(m, frozen ? 0 : dt, this.prev, frozen ? 1 : Math.min(1, this.acc / DT));
     if (!this.demo && !this.finished) {
       const me = m.players[s.localPlayer];
-      this.controls.draw(this.renderer.ctx, me.shieldCharges, me.shieldTime, me.maxBombs - me.activeBombs, me.maxBombs, me.alive ? me.throwCharges : 0, me.alive ? me.bigCharges : 0, me.alive ? me.elecCharges : 0, me.alive ? me.stunTime : 0, me.alive ? me.freezeCharges : 0, me.alive ? me.toxicCharges : 0);
+      this.controls.draw(this.renderer.ctx, me.shieldCharges, me.shieldTime, me.maxBombs - me.activeBombs, me.maxBombs, me.alive ? me.throwCharges : 0, me.alive ? me.bigCharges : 0, me.alive ? me.elecCharges : 0, me.alive ? me.stunTime : 0, me.alive ? me.freezeCharges : 0, me.alive ? me.toxicCharges : 0, me.alive ? me.chainCharges : 0);
     }
   }
 
@@ -463,6 +463,7 @@ export class GameScreen {
     const near = (x: number, y: number) => Math.max(0.15, 1 - Math.hypot(x - me.x, y - me.y) / 11);
     let explodeVol = 0;
     let bigBoom = false;
+    let chainLinks = 0;
     for (const e of events) {
       switch (e.t) {
         case "bombPlaced":
@@ -478,6 +479,9 @@ export class GameScreen {
           break;
         case "shock":
           audio.play("zap", near(e.x + 0.5, e.y + 0.5));
+          break;
+        case "chainLink":
+          chainLinks++;
           break;
         case "gas":
           audio.play("gas", near(e.x + 0.5, e.y + 0.5));
@@ -584,6 +588,8 @@ export class GameScreen {
     }
     if (explodeVol > 0) audio.play("explode", explodeVol);
     if (bigBoom) setTimeout(() => audio.play("explode", 0.7), 90);
+    // un seul son de crépitement par image, quel que soit le nombre de bombes déclenchées
+    if (chainLinks) audio.play("chain", Math.min(1, 0.5 + chainLinks * 0.1));
   }
 
   // ------------------------------------------------------------ emotes

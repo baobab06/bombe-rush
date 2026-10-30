@@ -98,6 +98,16 @@ export const BONUSES: Record<string, BonusDef> = {
       return true;
     },
   },
+  chain: {
+    id: "chain",
+    label: "Réaction en chaîne",
+    description: "Ta prochaine bombe fait sauter en cascade les bombes proches.",
+    apply(p) {
+      if (p.chainCharges >= 1) return false;
+      p.chainCharges = 1;
+      return true;
+    },
+  },
   shield: {
     id: "shield",
     label: "Bouclier",

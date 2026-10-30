@@ -268,6 +268,12 @@ var TOXIC = {
   recoverEvery: 1,
   maxZones: 8
 };
+var CHAIN = {
+  radius: 3,
+  step: 0.09,
+  maxDepth: 6,
+  maxLinks: 12
+};
 function bigRange(range) {
   return Math.min(BIG.maxRange, Math.max(range + BIG.minExtra, Math.round(range * BIG.rangeMul)));
 }
@@ -276,9 +282,9 @@ var BOMB_WARN = Math.max(...Object.values(BOMB_KINDS).map((k) => k.warn));
 // src/core/loot.ts
 var LOOT = {
   dropChance: 0.42,
-  weights: { bomb: 34, flame: 30, speed: 18, shield: 18, big: 10, elec: 10, freeze: 10, toxic: 10 },
+  weights: { bomb: 34, flame: 30, speed: 18, shield: 18, big: 10, elec: 10, freeze: 10, toxic: 10, chain: 10 },
   maxOnBoard: 6,
-  maxPerMatch: { bomb: 14, flame: 12, speed: 6, shield: 5, big: 4, elec: 4, freeze: 4, toxic: 4 },
+  maxPerMatch: { bomb: 14, flame: 12, speed: 6, shield: 5, big: 4, elec: 4, freeze: 4, toxic: 4, chain: 4 },
   quadrantLead: 3,
   boostExtraOnBoard: 6
 };
@@ -747,7 +753,9 @@ var HILL_RULES = {
   freezeFirst: 6,
   freezeEvery: 20,
   toxicFirst: 7,
-  toxicEvery: 20
+  toxicEvery: 20,
+  chainFirst: 8,
+  chainEvery: 20
 };
 
 class HillState {
@@ -762,6 +770,7 @@ class HillState {
   elecSpawnIn = HILL_RULES.elecFirst;
   freezeSpawnIn = HILL_RULES.freezeFirst;
   toxicSpawnIn = HILL_RULES.toxicFirst;
+  chainSpawnIn = HILL_RULES.chainFirst;
   respawnIn;
   holder = -1;
   contested = false;
@@ -1009,6 +1018,11 @@ class HillState {
       this.toxicSpawnIn = HILL_RULES.toxicEvery;
       this.spawnSpecialBonus("toxic");
     }
+    this.chainSpawnIn -= DT;
+    if (this.chainSpawnIn <= 0) {
+      this.chainSpawnIn = HILL_RULES.chainEvery;
+      this.spawnSpecialBonus("chain");
+    }
     const n = m.players.length;
     for (let k = 0;k < n; k++) {
       const p = m.players[(k + m.tick) % n];
@@ -1112,6 +1126,7 @@ class HillState {
     p.slowTime = 0;
     p.slowImmune = 0;
     p.toxicCharges = 0;
+    p.chainCharges = 0;
     p.toxDose = 0;
     p.toxTick = 0;
     p.toxRecover = 0;
@@ -1164,7 +1179,7 @@ var MODES = [
     emoji: "\uD83D\uDC51",
     suddenDeath: false,
     bombRules: { fuse: 2.5, warn: 0.8, startRange: 2, startBombs: 1, fireDuration: 0.4, cooldown: 0.5 },
-    loot: { weights: { throw: 14 }, maxPerMatch: { throw: 4, big: 5, elec: 5, freeze: 5, toxic: 5 } },
+    loot: { weights: { throw: 14 }, maxPerMatch: { throw: 4, big: 5, elec: 5, freeze: 5, toxic: 5, chain: 5 } },
     onStart(m) {
       if (m.players.length >= 2)
         m.setTeams();
@@ -1535,7 +1550,7 @@ function computeDanger(m, extra) {
   const end = new Float32Array(n).fill(-Infinity);
   const list = [];
   for (const b of m.bombs.values())
-    list.push({ tx: b.tx, ty: b.ty, fuse: b.fuse, range: b.range, toxic: b.toxic });
+    list.push({ tx: b.tx, ty: b.ty, fuse: b.fuse, range: b.range, toxic: b.toxic, chain: b.chainDepth !== undefined && b.chainDepth < CHAIN.maxDepth && !b.flight });
   if (extra)
     list.push(extra);
   const bombCells = new Set(list.map((b) => g.idx(b.tx, b.ty)));
@@ -1546,6 +1561,16 @@ function computeDanger(m, extra) {
     blastCells(m, b.tx, b.ty, b.range, bombCells, out);
     return out;
   });
+  const chainHits = list.map((b) => {
+    if (!b.chain)
+      return [];
+    const out = [];
+    for (const [c, d] of m.chainReach(b.tx, b.ty))
+      if (d > 0 && cellToBomb.has(c))
+        out.push(c);
+    return out;
+  });
+  const isChain = list.map((b) => !!b.chain);
   const t = list.map((b) => Math.max(0, b.fuse));
   let changed = true;
   let guard = 0;
@@ -1556,6 +1581,23 @@ function computeDanger(m, extra) {
         const j = cellToBomb.get(c);
         if (j !== undefined && t[j] > t[a]) {
           t[j] = t[a];
+          changed = true;
+        }
+      }
+      for (const c of chainHits[a]) {
+        const j = cellToBomb.get(c);
+        const tj = t[a] + CHAIN.step;
+        if (t[j] > tj) {
+          t[j] = tj;
+          changed = true;
+        }
+        if (!isChain[j]) {
+          isChain[j] = true;
+          const out = [];
+          for (const [cc, d] of m.chainReach(list[j].tx, list[j].ty))
+            if (d > 0 && cellToBomb.has(cc))
+              out.push(cc);
+          chainHits[j] = out;
           changed = true;
         }
       }
@@ -1953,7 +1995,7 @@ class BotBrain {
     const tx = Math.floor(p.x);
     const ty = Math.floor(p.y);
     if (!sloppy) {
-      const danger = computeDanger(m, { tx, ty, fuse: m.bombRules.fuse * m.fuseMul, range: m.nextBombRange(p), toxic: p.toxicCharges > 0 });
+      const danger = computeDanger(m, { tx, ty, fuse: m.bombRules.fuse * m.fuseMul, range: m.nextBombRange(p), toxic: p.toxicCharges > 0, chain: p.chainCharges > 0 });
       const escape = this.findSafe(m, p, danger, this.prof.margin + 0.15, true);
       if (!escape)
         return false;
@@ -2171,6 +2213,17 @@ var BONUSES = {
       if (p.toxicCharges >= 1)
         return false;
       p.toxicCharges = 1;
+      return true;
+    }
+  },
+  chain: {
+    id: "chain",
+    label: "Réaction en chaîne",
+    description: "Ta prochaine bombe fait sauter en cascade les bombes proches.",
+    apply(p) {
+      if (p.chainCharges >= 1)
+        return false;
+      p.chainCharges = 1;
       return true;
     }
   },
@@ -2724,6 +2777,7 @@ class Match {
         slowTime: 0,
         slowImmune: 0,
         toxicCharges: 0,
+        chainCharges: 0,
         toxDose: 0,
         toxTick: 0,
         toxRecover: 0,
@@ -2934,6 +2988,9 @@ class Match {
     const toxic = p.toxicCharges > 0;
     if (toxic)
       p.toxicCharges = 0;
+    const chain = p.chainCharges > 0;
+    if (chain)
+      p.chainCharges = 0;
     const bomb = {
       id: this.nextId++,
       ownerId: p.id,
@@ -2953,6 +3010,8 @@ class Match {
       bomb.freeze = true;
     if (toxic)
       bomb.toxic = true;
+    if (chain)
+      bomb.chainDepth = 0;
     this.bombs.set(bomb.id, bomb);
     p.activeBombs++;
     p.bombCooldown = this.bombRules.cooldown;
@@ -3099,6 +3158,7 @@ class Match {
       const shockZone = b.elec ? this.shockCells(b.tx, b.ty, b.range) : null;
       const frostZone = b.freeze ? this.shockCells(b.tx, b.ty, b.range, FREEZE.radius) : null;
       const gasZone = b.toxic ? this.blastCells(b.tx, b.ty, b.range) : null;
+      const chainReach = b.chainDepth !== undefined && b.chainDepth < CHAIN.maxDepth ? this.chainReach(b.tx, b.ty) : null;
       let cells = 1;
       this.setFire(b.tx, b.ty, FIRE.CENTER, b.ownerId);
       for (const [dx, dy, bit] of DIRS) {
@@ -3149,6 +3209,8 @@ class Match {
         this.frostBlast(b, frostZone);
       if (gasZone)
         this.addToxicZone(b, gasZone);
+      if (chainReach)
+        this.propagateChain(b, chainReach, queue);
       this.events.push(b.big ? { t: "explode", x: b.tx, y: b.ty, owner: b.ownerId, cells, chain, big: true } : { t: "explode", x: b.tx, y: b.ty, owner: b.ownerId, cells, chain });
     }
   }
@@ -3220,6 +3282,59 @@ class Match {
   slow(p, by, dur) {
     p.slowTime = Math.min(FREEZE.duration, Math.max(0, dur));
     this.events.push({ t: "frozen", player: p.id, by, dur: p.slowTime });
+  }
+  chainReach(tx, ty) {
+    const g = this.grid;
+    const start = g.idx(tx, ty);
+    const dist = new Map([[start, 0]]);
+    const q = [start];
+    while (q.length) {
+      const c = q.shift();
+      const d = dist.get(c);
+      if (d >= CHAIN.radius)
+        continue;
+      const x = c % g.w;
+      const y = (c - x) / g.w;
+      for (const [dx, dy] of DIRS) {
+        const t = g.tile(x + dx, y + dy);
+        if (t === TILE.WALL || t === TILE.BLOCK)
+          continue;
+        const n = g.idx(x + dx, y + dy);
+        if (dist.has(n))
+          continue;
+        dist.set(n, d + 1);
+        q.push(n);
+      }
+    }
+    return dist;
+  }
+  propagateChain(b, reach, exploding) {
+    const g = this.grid;
+    const busy = new Set(exploding.map((q) => q.id));
+    const targets = [];
+    for (const o of this.bombs.values()) {
+      if (o.flight || busy.has(o.id))
+        continue;
+      const d = reach.get(g.idx(o.tx, o.ty));
+      if (d === undefined || d === 0)
+        continue;
+      if (o.chainArmed)
+        continue;
+      targets.push({ o, d });
+    }
+    targets.sort((p, q) => p.d - q.d || p.o.id - q.o.id);
+    let rank = 0;
+    for (const { o } of targets.slice(0, CHAIN.maxLinks)) {
+      rank++;
+      const delay = CHAIN.step * rank;
+      if (delay < o.fuse)
+        o.fuse = delay;
+      o.chainArmed = true;
+      const depth = b.chainDepth + 1;
+      if (o.chainDepth === undefined || depth < o.chainDepth)
+        o.chainDepth = depth;
+      this.events.push({ t: "chainLink", x: b.tx, y: b.ty, toX: o.tx, toY: o.ty, delay: o.fuse });
+    }
   }
   addToxicZone(b, cells) {
     const g = this.grid;
@@ -3404,6 +3519,7 @@ class Match {
     p.slowTime = 0;
     p.slowImmune = 0;
     p.toxicCharges = 0;
+    p.chainCharges = 0;
     p.toxDose = 0;
     p.toxTick = 0;
     p.toxRecover = 0;
@@ -3693,7 +3809,7 @@ function encodeSnapshot(m, acks, events) {
     tiles: Array.from(g.tiles).join(""),
     terrain: Array.from(g.terrain).join(""),
     fire,
-    bombs: [...m.bombs.values()].map((b) => [b.id, b.ownerId, b.tx, b.ty, r2(b.fuse), b.range, b.passable, b.fuseTotal, b.flight ? [b.flight.fromX, b.flight.fromY, r2(b.flight.t), r2(b.flight.dur)] : null, b.big ? 1 : 0, b.elec ? 1 : 0, b.freeze ? 1 : 0, b.toxic ? 1 : 0]),
+    bombs: [...m.bombs.values()].map((b) => [b.id, b.ownerId, b.tx, b.ty, r2(b.fuse), b.range, b.passable, b.fuseTotal, b.flight ? [b.flight.fromX, b.flight.fromY, r2(b.flight.t), r2(b.flight.dur)] : null, b.big ? 1 : 0, b.elec ? 1 : 0, b.freeze ? 1 : 0, b.toxic ? 1 : 0, b.chainDepth ?? -1]),
     toxic: m.toxicZones.map((z) => [z.id, z.owner, z.cells, r2(z.timeLeft), z.duration]),
     bonuses: [...m.bonuses.values()].map((b) => [b.id, b.type, b.tx, b.ty, r2(b.invuln), r2(b.age)]),
     pending: m.pendingDrops.map(([x, y, l]) => [x, y, r2(l)]),

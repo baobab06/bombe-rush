@@ -464,6 +464,7 @@ export const BONUS_COLORS: Record<string, [string, string]> = {
   elec: ["#3fa9ff", "#1546a8"],
   freeze: ["#7fe0f7", "#2a8fb0"],
   toxic: ["#7dd63f", "#5b2a8c"],
+  chain: ["#ffd23f", "#c78a00"],
 };
 
 export function drawBonusIcon(ctx: Ctx, cx: number, cy: number, s: number, type: string) {
@@ -532,6 +533,28 @@ export function drawBonusIcon(ctx: Ctx, cx: number, cy: number, s: number, type:
         ctx.moveTo(cx - s * 0.36, cy - s * 0.08 + k * s * 0.12);
         ctx.lineTo(cx - s * 0.26, cy - s * 0.08 + k * s * 0.12);
         ctx.stroke();
+      }
+      break;
+    }
+    case "chain": {
+      // trois petites bombes reliées par une étincelle
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = Math.max(1.2, s * 0.045);
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(cx - s * 0.2, cy + s * 0.14);
+      ctx.lineTo(cx, cy - s * 0.12);
+      ctx.lineTo(cx + s * 0.2, cy + s * 0.14);
+      ctx.stroke();
+      for (const [dx, dy, r] of [[-0.2, 0.14, 0.1], [0, -0.12, 0.12], [0.2, 0.14, 0.1]]) {
+        ctx.fillStyle = "#23243d";
+        ctx.beginPath();
+        ctx.arc(cx + dx * s, cy + dy * s, r * s, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#ff8a2b";
+        ctx.beginPath();
+        ctx.arc(cx + (dx + 0.06) * s, cy + (dy - 0.08) * s, r * 0.3 * s, 0, Math.PI * 2);
+        ctx.fill();
       }
       break;
     }

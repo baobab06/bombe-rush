@@ -32,6 +32,7 @@ export type Sfx =
   | "zap"
   | "freeze"
   | "gas"
+  | "chain"
   | "cough"
   | "stunned";
 
@@ -218,6 +219,11 @@ class AudioEngine {
         // souffle glacé : souffle filtré + petits tintements cristallins
         this.burst(t, 0.45, 0.35 * v, "bandpass", 3500, 7000);
         [2093, 2637, 3136].forEach((f, i) => this.osc("sine", f, f * 1.01, t + 0.04 + i * 0.05, 0.22, 0.09 * v));
+        break;
+      case "chain":
+        // mèche qui crépite et monte : la cascade arrive
+        for (let i = 0; i < 4; i++) this.osc("square", 700 + i * 220, 900 + i * 220, t + i * 0.035, 0.03, 0.07 * v);
+        this.burst(t, 0.15, 0.15 * v, "highpass", 4000, 2000);
         break;
       case "gas":
         // nuage qui s'échappe : long sifflement sourd

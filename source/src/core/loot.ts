@@ -34,9 +34,9 @@ export interface LootConfig {
 
 export const LOOT: LootConfig = {
   dropChance: 0.42,
-  weights: { bomb: 34, flame: 30, speed: 18, shield: 18, big: 10, elec: 10, freeze: 10, toxic: 10 },
+  weights: { bomb: 34, flame: 30, speed: 18, shield: 18, big: 10, elec: 10, freeze: 10, toxic: 10, chain: 10 },
   maxOnBoard: 6,
-  maxPerMatch: { bomb: 14, flame: 12, speed: 6, shield: 5, big: 4, elec: 4, freeze: 4, toxic: 4 },
+  maxPerMatch: { bomb: 14, flame: 12, speed: 6, shield: 5, big: 4, elec: 4, freeze: 4, toxic: 4, chain: 4 },
   quadrantLead: 3,
   boostExtraOnBoard: 6,
 };

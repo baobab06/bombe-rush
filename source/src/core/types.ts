@@ -97,6 +97,8 @@ export interface PlayerState {
   slowImmune: number;
   /** capacité « bombe toxique » (0 ou 1) : la prochaine bombe laisse un nuage toxique */
   toxicCharges: number;
+  /** capacité « réaction en chaîne » (0 ou 1) : la prochaine bombe déclenche les bombes proches */
+  chainCharges: number;
   /** doses de gaz reçues (à TOXIC.lethalDoses : éliminé) */
   toxDose: number;
   /** temps avant la prochaine dose possible dans le nuage (s) */
@@ -135,6 +137,13 @@ export interface BombState {
   freeze?: boolean;
   /** bombe toxique (bonus) : laisse un nuage toxique sur les cases touchées */
   toxic?: boolean;
+  /**
+   * Réaction en chaîne : 0 = bombe « réaction en chaîne » du bonus ;
+   * 1, 2… = bombe déclenchée par la chaîne (relais de niveau n). Absent = bombe normale.
+   */
+  chainDepth?: number;
+  /** déjà déclenchée par une réaction en chaîne (ne sera plus jamais re-déclenchée) */
+  chainArmed?: boolean;
 }
 
 /** Nuage toxique : effet temporaire indépendant de la grille (le sol n'est pas modifié). */
@@ -173,6 +182,8 @@ export type SimEvent =
   /** nuage toxique posé / dose reçue */
   | { t: "gas"; x: number; y: number; owner: number; cells: number[] }
   | { t: "poisoned"; player: number; dose: number }
+  /** réaction en chaîne : la bombe en (x, y) déclenche celle en (toX, toY) dans `delay` s */
+  | { t: "chainLink"; x: number; y: number; toX: number; toY: number; delay: number }
   | { t: "bonusSpawn"; x: number; y: number; type: string }
   | { t: "bonusPicked"; x: number; y: number; type: string; player: number }
   | { t: "bonusBurned"; x: number; y: number }

@@ -121,6 +121,30 @@ export const TOXIC = {
   maxZones: 8,
 } as const;
 
+/**
+ * BOMBE À RÉACTION EN CHAÎNE — réglages. À l'explosion, elle cherche les
+ * bombes dans sa zone d'influence (`radius` pas autour d'elle, en contournant
+ * les coins ; murs et caisses bloquent) et les déclenche en cascade rapide :
+ * la plus proche saute après `step` s, la suivante après 2 × `step`…
+ * Les bombes ainsi déclenchées deviennent des RELAIS : elles cherchent à
+ * leur tour les bombes autour d'elles, jusqu'à `maxDepth` relais.
+ * Sécurité : une bombe n'explose qu'une fois (elle quitte la carte à
+ * l'explosion), un déclenchement ne peut qu'AVANCER une explosion (jamais la
+ * retarder), une bombe déjà déclenchée n'est pas re-déclenchée, au plus
+ * `maxLinks` bombes déclenchées par explosion. Les bombes en vol (lancées)
+ * ne peuvent pas être déclenchées ; les bombes spéciales gardent leurs effets.
+ */
+export const CHAIN = {
+  /** zone d'influence (pas autour de la bombe) */
+  radius: 3,
+  /** délai entre deux explosions de la cascade (s) */
+  step: 0.09,
+  /** nombre maximal de relais successifs */
+  maxDepth: 6,
+  /** bombes déclenchées au plus par une explosion */
+  maxLinks: 12,
+} as const;
+
 /** Portée d'une grosse bombe à partir de la portée normale du joueur. */
 export function bigRange(range: number): number {
   return Math.min(BIG.maxRange, Math.max(range + BIG.minExtra, Math.round(range * BIG.rangeMul)));

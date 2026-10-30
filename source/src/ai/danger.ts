@@ -1,7 +1,7 @@
 import type { Match } from "../core/match";
 import { DIRS } from "../core/grid";
 import { RULES } from "../core/rules";
-import { TOXIC } from "../core/bombs";
+import { CHAIN, TOXIC } from "../core/bombs";
 import { TILE } from "../core/types";
 
 export interface VirtualBomb {
@@ -11,6 +11,8 @@ export interface VirtualBomb {
   range: number;
   /** bombe toxique : le nuage reste dangereux après l'explosion */
   toxic?: boolean;
+  /** réaction en chaîne (bombe du bonus ou relais) : déclenche les bombes proches */
+  chain?: boolean;
 }
 
 /**
@@ -55,7 +57,7 @@ export function computeDanger(m: Match, extra?: VirtualBomb): DangerMap {
   const end = new Float32Array(n).fill(-Infinity);
 
   const list: VirtualBomb[] = [];
-  for (const b of m.bombs.values()) list.push({ tx: b.tx, ty: b.ty, fuse: b.fuse, range: b.range, toxic: b.toxic });
+  for (const b of m.bombs.values()) list.push({ tx: b.tx, ty: b.ty, fuse: b.fuse, range: b.range, toxic: b.toxic, chain: b.chainDepth !== undefined && b.chainDepth < CHAIN.maxDepth && !b.flight });
   if (extra) list.push(extra);
 
   const bombCells = new Set<number>(list.map((b) => g.idx(b.tx, b.ty)));
@@ -68,6 +70,15 @@ export function computeDanger(m: Match, extra?: VirtualBomb): DangerMap {
     return out;
   });
 
+  // réaction en chaîne (bonus) : bombes que chaque bombe « chaîne » déclenchera
+  const chainHits = list.map((b) => {
+    if (!b.chain) return [] as number[];
+    const out: number[] = [];
+    for (const [c, d] of m.chainReach(b.tx, b.ty)) if (d > 0 && cellToBomb.has(c)) out.push(c);
+    return out;
+  });
+  const isChain = list.map((b) => !!b.chain);
+
   // propagation des réactions en chaîne
   const t = list.map((b) => Math.max(0, b.fuse));
   let changed = true;
@@ -79,6 +90,22 @@ export function computeDanger(m: Match, extra?: VirtualBomb): DangerMap {
         const j = cellToBomb.get(c);
         if (j !== undefined && t[j] > t[a]) {
           t[j] = t[a];
+          changed = true;
+        }
+      }
+      for (const c of chainHits[a]) {
+        const j = cellToBomb.get(c)!;
+        const tj = t[a] + CHAIN.step;
+        if (t[j] > tj) {
+          t[j] = tj;
+          changed = true;
+        }
+        // les bombes déclenchées relaient la chaîne
+        if (!isChain[j]) {
+          isChain[j] = true;
+          const out: number[] = [];
+          for (const [cc, d] of m.chainReach(list[j].tx, list[j].ty)) if (d > 0 && cellToBomb.has(cc)) out.push(cc);
+          chainHits[j] = out;
           changed = true;
         }
       }

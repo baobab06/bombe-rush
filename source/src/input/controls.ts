@@ -254,7 +254,7 @@ export class Controls {
   }
 
   // ---------------------------------------------------------------- dessin
-  draw(ctx: CanvasRenderingContext2D, shieldCharges: number, shieldActive: number, bombsLeft: number, maxBombs: number, throwCharges = 0, bigCharges = 0, elecCharges = 0, stunTime = 0, freezeCharges = 0, toxicCharges = 0) {
+  draw(ctx: CanvasRenderingContext2D, shieldCharges: number, shieldActive: number, bombsLeft: number, maxBombs: number, throwCharges = 0, bigCharges = 0, elecCharges = 0, stunTime = 0, freezeCharges = 0, toxicCharges = 0, chainCharges = 0) {
     const L = this.layout;
     const now = performance.now();
     // la capacité vient d'apparaître / de disparaître
@@ -301,6 +301,7 @@ export class Controls {
     const elec = elecCharges > 0;
     const frz = freezeCharges > 0;
     const tox = toxicCharges > 0;
+    const chn = chainCharges > 0;
     if (big) {
       const pulse = 0.5 + 0.5 * Math.sin(now / 160);
       ctx.save();
@@ -317,7 +318,7 @@ export class Controls {
     if (elec) this.drawElecHalo(ctx, L.bomb, now);
     if (frz) this.drawFrostHalo(ctx, L.bomb, now);
     if (tox) this.drawToxicHalo(ctx, L.bomb, now);
-    this.button(ctx, L.bomb, big ? "#ff3d4f" : elec ? "#2f8dff" : frz ? "#5fd3f0" : tox ? "#6fd13a" : "#ff6a2b", big ? "#a3101f" : elec ? "#1546a8" : frz ? "#1f7f9e" : tox ? "#3b7a1a" : "#b8380c", bp, bombsLeft > 0 && stunTime <= 0, (x, y, r) => {
+    this.button(ctx, L.bomb, big ? "#ff3d4f" : elec ? "#2f8dff" : frz ? "#5fd3f0" : tox ? "#6fd13a" : chn ? "#ffc12e" : "#ff6a2b", big ? "#a3101f" : elec ? "#1546a8" : frz ? "#1f7f9e" : tox ? "#3b7a1a" : chn ? "#b07a00" : "#b8380c", bp, bombsLeft > 0 && stunTime <= 0, (x, y, r) => {
       ctx.fillStyle = "#1b1c33";
       ctx.beginPath();
       ctx.arc(x - r * 0.06, y + r * 0.08, r * (big ? 0.5 : 0.42), 0, Math.PI * 2);
@@ -338,6 +339,19 @@ export class Controls {
     this.badge(ctx, L.bomb.x + L.bomb.r * 0.62, L.bomb.y - L.bomb.r * 0.86, `${bombsLeft}/${maxBombs}`, "#1b1c33");
     if (big) this.badge(ctx, L.bomb.x - L.bomb.r * 0.7, L.bomb.y - L.bomb.r * 0.86, "XL", "#d61f33");
     if (elec) this.badge(ctx, L.bomb.x - L.bomb.r * 0.95, L.bomb.y + (big ? -L.bomb.r * 0.2 : -L.bomb.r * 0.86), "⚡", "#1546a8");
+    if (chn) {
+      // anneau doré pointillé qui tourne autour du bouton
+      ctx.save();
+      ctx.strokeStyle = "#ffd23f";
+      ctx.lineWidth = 3;
+      ctx.setLineDash([8, 6]);
+      ctx.lineDashOffset = -now / 40;
+      ctx.beginPath();
+      ctx.arc(L.bomb.x, L.bomb.y, L.bomb.r + 9, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+      this.badge(ctx, L.bomb.x + L.bomb.r * 0.95, L.bomb.y + L.bomb.r * (tox ? 0.6 : 0.1), "🔗", "#b07a00");
+    }
     if (tox) this.badge(ctx, L.bomb.x + L.bomb.r * 0.95, L.bomb.y + L.bomb.r * 0.1, "☣", "#3b7a1a");
     if (frz) this.badge(ctx, L.bomb.x - L.bomb.r * 0.95, L.bomb.y + L.bomb.r * (elec ? 0.45 : big ? -0.2 : -0.86), "❄", "#1f7f9e");
     if (stunTime > 0) {

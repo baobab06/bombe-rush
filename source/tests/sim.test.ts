@@ -608,6 +608,7 @@ console.log("Bombe à lancer (Domination)");
     m.hill!.elecSpawnIn = 1e9;
     m.hill!.freezeSpawnIn = 1e9;
     m.hill!.toxicSpawnIn = 1e9;
+    m.hill!.chainSpawnIn = 1e9;
     place(m, 0, 1, 1); place(m, 1, 13, 1); place(m, 2, 1, 11); place(m, 3, 13, 11);
     return m;
   };
@@ -917,6 +918,7 @@ console.log("Grosse bombe");
     m.hill!.elecSpawnIn = 1e9;
     m.hill!.freezeSpawnIn = 1e9;
     m.hill!.toxicSpawnIn = 1e9;
+    m.hill!.chainSpawnIn = 1e9;
     place(m, 0, 1, 1); place(m, 1, 13, 1); place(m, 2, 1, 11); place(m, 3, 13, 11);
     return m;
   };
@@ -1224,7 +1226,7 @@ console.log("Bombe électrique");
   const mk = (seed = 41) => {
     const m = new Match({ seed, map: FACTORY, modeId: "koth", players: slots(4) });
     m.phase = "playing";
-    m.hill!.moveIn = 1e9; m.hill!.throwSpawnIn = 1e9; m.hill!.bigSpawnIn = 1e9; m.hill!.elecSpawnIn = 1e9; m.hill!.freezeSpawnIn = 1e9; m.hill!.toxicSpawnIn = 1e9;
+    m.hill!.moveIn = 1e9; m.hill!.throwSpawnIn = 1e9; m.hill!.bigSpawnIn = 1e9; m.hill!.elecSpawnIn = 1e9; m.hill!.freezeSpawnIn = 1e9; m.hill!.toxicSpawnIn = 1e9; m.hill!.chainSpawnIn = 1e9;
     place(m, 0, 1, 1); place(m, 1, 13, 1); place(m, 2, 1, 11); place(m, 3, 13, 11);
     return m;
   };
@@ -1496,7 +1498,7 @@ console.log("Bombe gelante");
   const mk = (seed = 41) => {
     const m = new Match({ seed, map: FACTORY, modeId: "koth", players: slots(4) });
     m.phase = "playing";
-    m.hill!.moveIn = 1e9; m.hill!.throwSpawnIn = 1e9; m.hill!.bigSpawnIn = 1e9; m.hill!.elecSpawnIn = 1e9; m.hill!.freezeSpawnIn = 1e9; m.hill!.toxicSpawnIn = 1e9;
+    m.hill!.moveIn = 1e9; m.hill!.throwSpawnIn = 1e9; m.hill!.bigSpawnIn = 1e9; m.hill!.elecSpawnIn = 1e9; m.hill!.freezeSpawnIn = 1e9; m.hill!.toxicSpawnIn = 1e9; m.hill!.chainSpawnIn = 1e9;
     place(m, 0, 1, 1); place(m, 1, 13, 1); place(m, 2, 1, 11); place(m, 3, 13, 11);
     return m;
   };
@@ -1758,7 +1760,7 @@ console.log("Bombe toxique");
   const mk = (seed = 41) => {
     const m = new Match({ seed, map: FACTORY, modeId: "koth", players: slots(4) });
     m.phase = "playing";
-    m.hill!.moveIn = 1e9; m.hill!.throwSpawnIn = 1e9; m.hill!.bigSpawnIn = 1e9; m.hill!.elecSpawnIn = 1e9; m.hill!.freezeSpawnIn = 1e9; m.hill!.toxicSpawnIn = 1e9;
+    m.hill!.moveIn = 1e9; m.hill!.throwSpawnIn = 1e9; m.hill!.bigSpawnIn = 1e9; m.hill!.elecSpawnIn = 1e9; m.hill!.freezeSpawnIn = 1e9; m.hill!.toxicSpawnIn = 1e9; m.hill!.chainSpawnIn = 1e9;
     place(m, 0, 1, 1); place(m, 1, 13, 1); place(m, 2, 1, 11); place(m, 3, 13, 11);
     return m;
   };
@@ -1839,6 +1841,223 @@ console.log("Bombe toxique");
         leftover += m.toxicZones.length;
       }
       check(ended === 6 && stuck === 0 && clouds > 0 && leftover === 0, `bots (${modeId}) : 6 parties terminées, ${clouds} nuages, ${gasDeaths}/${deaths} éliminations par le gaz, aucun nuage restant, personne coincé`);
+    }
+  }
+}
+
+console.log("Bombe à réaction en chaîne");
+{
+  const { FACTORY } = await import("../src/maps/factory");
+  const { CHAIN } = await import("../src/core/bombs");
+  const { HILL_RULES } = await import("../src/core/hill");
+  const { encodeSnapshot, applySnapshot } = await import("../src/net/snapshot");
+  const { computeDanger } = await import("../src/ai/danger");
+  const slots = (n: number) => Array.from({ length: n }, (_, i) => ({ name: "P" + i, characterId: "pip", isBot: false, difficulty: "normal" as Difficulty }));
+  /** grande arène vide 41 × 21 (pour les longues chaînes) */
+  const BIG_OPEN = {
+    id: "test-open", name: "Test", subtitle: "", theme: "forest", blockDensity: 0, spawnClear: 1, startRange: 2, available: false,
+    layout: ["#".repeat(41), ...Array.from({ length: 19 }, (_, y) => "#" + (y === 0 ? "S" + "_".repeat(37) + "S" : y === 18 ? "S" + "_".repeat(37) + "S" : "_".repeat(39)) + "#"), "#".repeat(41)],
+  };
+  const arena = (n = 2) => {
+    const m = new Match({ seed: 7, map: BIG_OPEN as never, modeId: "classic", players: slots(n) });
+    m.phase = "playing";
+    for (const p of m.players) p.range = 2;
+    place(m, 0, 1, 1); place(m, 1, 39, 19);
+    if (n > 2) place(m, 2, 1, 19);
+    if (n > 3) place(m, 3, 39, 1);
+    return m;
+  };
+  let nextId = 50000;
+  /** bombe posée directement (propriétaire, case, mèche) */
+  const put = (m: Match, owner: number, x: number, y: number, fuse = 3, extra: Record<string, unknown> = {}) => {
+    const b = { id: nextId++, ownerId: owner, tx: x, ty: y, fuse, fuseTotal: fuse, range: 2, passable: [] as number[], ...extra };
+    m.bombs.set(b.id, b as never);
+    m.grid.bombAt[m.grid.idx(x, y)] = b.id;
+    if (owner >= 0) m.players[owner].activeBombs++;
+    return b as unknown as import("../src/core/types").BombState;
+  };
+  /** temps (s) d'explosion de chaque case, sur `secs` secondes */
+  const boomTimes = (m: Match, secs: number) => {
+    const at = new Map<string, number[]>();
+    const t0 = m.time;
+    for (let i = 0; i < Math.round(secs / DT); i++) {
+      m.step(idle(m));
+      for (const e of m.events) if (e.t === "explode") { const k = `${e.x},${e.y}`; at.set(k, [...(at.get(k) ?? []), m.time - t0]); }
+    }
+    return at;
+  };
+  {
+    const c = new Match({ seed: 3, map: FOREST, modeId: "classic", players: slots(4) });
+    const k = new Match({ seed: 3, map: FACTORY, modeId: "koth", players: slots(4) });
+    const ch = new Match({ seed: 3, map: FOREST, modeId: "chaos", players: slots(4) });
+    check([c, k, ch].every((mm) => (mm.loot.cfg.weights.chain ?? 0) > 0), "bonus présent dans le butin : Classique, Chaos et Domination");
+    check([c, k, ch].every((mm) => mm.players.every((p) => p.chainCharges === 0)), "personne ne commence avec");
+  }
+  {
+    // ramassage, pas de cumul, bombe suivante, puis normale
+    const m = arena();
+    m.spawnBonus("chain", 3, 3); place(m, 0, 3, 3); run(m, 0.5);
+    check(m.players[0].chainCharges === 1, "ramasser le bonus donne la réaction en chaîne");
+    m.spawnBonus("chain", 4, 3); place(m, 0, 4, 3); run(m, 0.5);
+    check(m.players[0].chainCharges === 1, "une seule en réserve (pas de cumul)");
+    place(m, 0, 10, 10); run(m, DT, (mm) => mm.players.map((p) => ({ mx: 0, my: 0, bomb: p.id === 0, ability: false })));
+    const b = [...m.bombs.values()][0];
+    check(b?.chainDepth === 0 && m.players[0].chainCharges === 0, "la bombe suivante est « réaction en chaîne », réserve vidée");
+    place(m, 0, 1, 1);
+    boomTimes(m, 3); run(m, 0.6);
+    place(m, 0, 10, 10); run(m, DT, (mm) => mm.players.map((p) => ({ mx: 0, my: 0, bomb: p.id === 0, ability: false })));
+    check([...m.bombs.values()][0]?.chainDepth === undefined, "la bombe d'après redevient normale");
+  }
+  {
+    // bombe normale : ne déclenche pas une bombe hors de sa croix
+    const m = arena();
+    put(m, 0, 10, 10, 0.5);
+    put(m, 1, 11, 12, 2.5); // en diagonale : hors de la croix
+    const at = boomTimes(m, 3);
+    check(Math.abs((at.get("11,12")?.[0] ?? 0) - 2.5) < 2 * DT, "bombe normale : la bombe en diagonale saute à son heure (comportement inchangé)");
+  }
+  {
+    // chaîne simple : cascade dans l'ordre, très rapide, une seule explosion chacune
+    const m = arena();
+    put(m, 0, 10, 10, 0.5, { chainDepth: 0 });
+    put(m, 1, 11, 11, 2.5); // 2 pas
+    put(m, 1, 12, 12, 2.5); // 4 pas de A mais 2 de B → relais
+    put(m, 1, 9, 12, 2.5); // 3 pas
+    const at = boomTimes(m, 3.5);
+    const t = (k: string) => at.get(k)?.[0] ?? 99;
+    check(t("11,11") > t("10,10") && t("11,11") - t("10,10") <= CHAIN.step + 2 * DT, `la plus proche saute juste après (${(t("11,11") - t("10,10")).toFixed(2)} s)`);
+    check(t("9,12") > t("11,11") && t("9,12") - t("10,10") <= 2 * CHAIN.step + 2 * DT, "la suivante juste après : explosions successives");
+    check(t("12,12") > t("11,11") && t("12,12") < 1, `relais : une bombe hors de portée de la 1re est déclenchée par la 2e (${t("12,12").toFixed(2)} s)`);
+    check([...at.values()].every((l) => l.length === 1) && at.size === 4 && m.bombs.size === 0, "chaque bombe n'explose qu'une seule fois");
+    check(m.players.every((p) => p.activeBombs === 0), "compteurs de bombes des joueurs justes après la chaîne");
+  }
+  {
+    // longue chaîne : s'arrête à la profondeur maximale, le reste saute à son heure
+    const m = arena();
+    put(m, 0, 2, 2, 0.3, { chainDepth: 0 });
+    const line: [number, number][] = [];
+    for (let k = 1; k <= 12; k++) line.push([2 + k, 2 + k]); // escalier en diagonale : jamais dans la croix d'une autre
+    for (const [x, y] of line) put(m, 1, x, y, 5);
+    const at = boomTimes(m, 6);
+    const early = line.filter(([x, y]) => (at.get(`${x},${y}`)?.[0] ?? 99) < 2).length;
+    check(early >= CHAIN.maxDepth && early < line.length, `longue chaîne : ${early} bombes en cascade (limite ${CHAIN.maxDepth} relais), les autres sautent à leur heure`);
+    check([...at.values()].every((l) => l.length === 1) && m.bombs.size === 0, "aucune explosion en double, plus aucune bombe ensuite");
+  }
+  {
+    // feu + chaîne sur la même bombe, deux chaînes en même temps, bombes de chaîne partout : jamais de doublon ni de boucle
+    const m = arena(4);
+    put(m, 0, 10, 10, 0.4, { chainDepth: 0 });
+    put(m, 1, 12, 10, 3); // dans la croix ET dans la zone
+    put(m, 2, 14, 12, 0.4, { chainDepth: 0 }); // seconde chaîne qui saute en même temps
+    put(m, 3, 13, 11, 3); // dans la zone des deux
+    const at = boomTimes(m, 1.5);
+    check([...at.values()].every((l) => l.length === 1) && at.size === 4, "feu + chaîne + 2 chaînes simultanées : chaque bombe une seule fois");
+    const n = arena();
+    let k = 0;
+    for (let y = 2; y <= 18; y += 2) for (let x = 2; x <= 38; x += 3) { put(n, k % 2, x, y, 1 + (k % 7) * 0.3, { chainDepth: 0 }); k++; }
+    const t0 = performance.now();
+    const at2 = boomTimes(n, 4);
+    const ms = performance.now() - t0;
+    const links = 0;
+    check(n.bombs.size === 0 && [...at2.values()].every((l) => l.length === 1) && at2.size === k, `${k} bombes « chaîne » serrées : toutes sautent une seule fois, pas de boucle infinie`);
+    check(ms < 1500, `simulation rapide même avec ${k} bombes (${ms.toFixed(0)} ms pour 4 s de jeu)${links ? "" : ""}`);
+    check(n.players.every((p) => p.activeBombs >= 0), "aucun compteur négatif");
+  }
+  {
+    // n'avance qu'une explosion (jamais retardée) ; bombes en vol intouchables
+    const m = arena();
+    put(m, 0, 10, 10, 0.5, { chainDepth: 0 });
+    const soon = put(m, 1, 11, 11, 0.52);
+    const fly = { id: nextId++, ownerId: 1, tx: 9, ty: 11, fuse: 2.5, fuseTotal: 2.5, range: 2, passable: [], flight: { fromX: 9, fromY: 14, t: 0, dur: 5 } };
+    m.bombs.set(fly.id, fly as never);
+    m.players[1].activeBombs++;
+    run(m, 0.5 + DT);
+    check(soon.fuse <= 0.02 + 1e-9 || !m.bombs.has(soon.id), "bombe qui allait sauter : jamais retardée");
+    check(m.bombs.has(fly.id) && Math.abs(fly.fuse - 2.5) < 1e-9 && !(fly as { chainArmed?: boolean }).chainArmed, "bombe en vol : pas déclenchée");
+  }
+  {
+    // obstacles
+    const m = arena();
+    const g = m.grid;
+    put(m, 0, 10, 10, 0.4, { chainDepth: 0 });
+    // bombe en (12,10) derrière un mur en (11,10), contournement > 3 pas
+    for (const [x, y] of [[11, 9], [11, 10], [11, 11]]) g.tiles[g.idx(x, y)] = TILE.WALL;
+    put(m, 1, 12, 10, 3);
+    // bombe en (10,12) derrière une caisse en (10,11)
+    g.tiles[g.idx(10, 11)] = TILE.BLOCK; g.tiles[g.idx(9, 11)] = TILE.WALL; g.tiles[g.idx(11, 12)] = TILE.WALL;
+    put(m, 1, 10, 12, 3);
+    const at = boomTimes(m, 1.5);
+    check(!at.has("12,10") && !at.has("10,12"), "murs et caisses bloquent la réaction en chaîne");
+  }
+  {
+    // bombes spéciales déclenchées : elles gardent leurs effets ; bombes neutres (Chaos) compatibles
+    const m = arena(3);
+    put(m, 0, 10, 10, 0.4, { chainDepth: 0 });
+    put(m, 1, 11, 11, 3, { elec: true });
+    put(m, 1, 9, 11, 3, { toxic: true });
+    put(m, 1, 9, 9, 3, { big: true, range: 4 });
+    put(m, -1, 11, 9, 3);
+    const ev: string[] = [];
+    for (let i = 0; i < 60; i++) { m.step(idle(m)); for (const e of m.events) ev.push(e.t); }
+    check(ev.includes("shock") && ev.includes("gas") && m.bombs.size === 0, "déclenchées : la bombe électrique paralyse, la toxique laisse son nuage, la neutre saute aussi");
+    check(m.grid.fire[m.grid.idx(5, 9)] > 0 || ev.filter((e) => e === "explode").length === 5, "la grosse bombe garde sa grande portée");
+  }
+  {
+    // Domination 2v2 : équipes respectées, éliminations attribuées au propriétaire de chaque bombe
+    const m = new Match({ seed: 41, map: FACTORY, modeId: "koth", players: slots(4) });
+    m.phase = "playing";
+    m.hill!.moveIn = 1e9; m.hill!.throwSpawnIn = 1e9; m.hill!.bigSpawnIn = 1e9; m.hill!.elecSpawnIn = 1e9; m.hill!.freezeSpawnIn = 1e9; m.hill!.toxicSpawnIn = 1e9; m.hill!.chainSpawnIn = 1e9;
+    const mate = m.players.filter((p) => p.id !== 0 && m.sameTeam(0, p.id))[0];
+    const foes = m.players.filter((p) => m.isFoe(m.players[0], p));
+    place(m, 0, 1, 1); place(m, mate.id, 6, 4); place(m, foes[0].id, 9, 7); place(m, foes[1].id, 13, 11);
+    put(m, 0, 6, 6, 0.3, { chainDepth: 0 }); // le coéquipier est dans la croix : protégé
+    put(m, mate.id, 8, 7, 3); // bombe du coéquipier déclenchée → touche l'adversaire en (9,7)
+    run(m, 1);
+    check(mate.deathTime < 0, "Domination : coéquipier dans la croix de la bombe chaîne : épargné");
+    check(foes[0].deathTime >= 0 && foes[0].killedBy === mate.id, "Domination : bombe du coéquipier déclenchée → l'élimination lui revient");
+  }
+  {
+    // en ligne + prévision des bots
+    const m = arena();
+    const a = put(m, 0, 10, 10, 0.5, { chainDepth: 0 });
+    put(m, 1, 12, 11, 3);
+    const snap = JSON.parse(JSON.stringify(encodeSnapshot(m, [0, 0], [])));
+    const c = new Match({ seed: 7, map: BIG_OPEN as never, modeId: "classic", players: slots(2) });
+    applySnapshot(c, snap);
+    check([...c.bombs.values()].find((b) => b.id === a.id)?.chainDepth === 0, "en ligne : bombe « chaîne » recopiée");
+    const d = computeDanger(m);
+    const g = m.grid;
+    check(d.start[g.idx(14, 11)] < 0.7, `bots : la case autour d'une bombe qui sera déclenchée est vue comme dangereuse tôt (${d.start[g.idx(14, 11)].toFixed(2)} s au lieu de 3 s)`);
+  }
+  {
+    let appeared = 0;
+    for (let seed = 1; seed <= 12; seed++) {
+      const m = new Match({ seed, map: FACTORY, modeId: "koth", players: slots(4) });
+      m.phase = "playing"; m.hill!.moveIn = 1e9;
+      run(m, HILL_RULES.chainFirst + 0.2);
+      if ([...m.bonuses.values()].some((x) => x.type === "chain")) appeared++;
+    }
+    check(appeared >= 10, `Domination : le bonus apparaît dès le début (${appeared}/12 à ${HILL_RULES.chainFirst} s)`);
+  }
+  {
+    for (const [modeId, map] of [["classic", FOREST], ["koth", FACTORY]] as const) {
+      let stuck = 0, ended = 0, links = 0, doubles = 0;
+      for (let seed = 1; seed <= 6; seed++) {
+        const m = new Match({ seed: seed * 83, map, modeId, players: Array.from({ length: 4 }, (_, i) => ({ name: "B" + i, characterId: "pip", isBot: true, difficulty: "hard" as Difficulty })) });
+        const brains = m.players.map((p) => new BotBrain(p.id, "hard", seed));
+        let g = 0;
+        while (m.phase !== "over" && g++ < 60 * 200) {
+          if (g % 240 === 0) for (const p of m.players) if (p.alive) p.chainCharges = 1;
+          m.step(brains.map((b) => b.update(m, DT)));
+          links += m.events.filter((e) => e.t === "chainLink").length;
+          const seen = new Set<string>();
+          for (const e of m.events) if (e.t === "explode") { const k = `${e.x},${e.y}`; if (seen.has(k)) doubles++; seen.add(k); }
+          for (const p of m.players) if (p.alive && m.grid.blocksMove(Math.floor(p.x), Math.floor(p.y))) stuck++;
+          for (const p of m.players) if (p.activeBombs < 0) doubles++;
+        }
+        if (m.phase === "over") ended++;
+      }
+      check(ended === 6 && stuck === 0 && doubles === 0, `bots (${modeId}) : 6 parties terminées, ${links} déclenchements en chaîne, aucune explosion en double, personne coincé`);
     }
   }
 }
