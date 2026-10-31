@@ -40,6 +40,8 @@ export class Controls {
   private arenaRight = 0;
   /** place prévue du bouton « lancer » (avant ajustement au bloc d'infos du haut) */
   private throwBase: Circle = { x: 720, y: 180, r: 36 };
+  /** place normale du bouclier (il peut se décaler sur les très petits écrans) */
+  private shieldBase: Circle = { x: 600, y: 340, r: 36 };
   /** une bombe télécommandée est posée : le bouton « BOUM » existe */
   remoteReady = false;
   private remotePointer: number | null = null;
@@ -126,6 +128,7 @@ export class Controls {
       remote: { x: tx, y: ty, r: tr },
     };
     this.throwBase = { x: tx, y: ty, r: tr };
+    this.shieldBase = { x: sx, y: sy, r: sr };
     if (this.joyPointer === null) this.resetJoy();
   }
 
@@ -493,6 +496,7 @@ export class Controls {
    */
   private placeAux(throwOn: boolean, remoteOn: boolean): void {
     const L = this.layout;
+    L.shield = { ...this.shieldBase };
     const t = this.throwBase;
     const { w, h } = viewport;
     const lab = (r: number) => Math.max(10, r * 0.38) + 8; // étiquette sous le bouton
@@ -526,10 +530,21 @@ export class Controls {
       const x1 = w - 4;
       const top = Math.max(4, this.topReserved + 4);
       const above = Math.min(L.shield.y - L.shield.r, L.bomb.y - L.bomb.r) - 8;
-      const rr = Math.max(17, Math.min(r, (x1 - x0) / (2 * n) - 5, (above - top - 10) / 2 - 4));
-      const cy = Math.max(top + rr, Math.min(above - rr - 2, top + rr + 2));
       chosen.length = 0;
-      for (let k = 0; k < n; k++) chosen.push({ x: x0 + ((x1 - x0) * (2 * k + 1)) / (2 * n), y: cy, r: rr });
+      if (above - top >= 2 * 17 + 4) {
+        const rr = Math.max(17, Math.min(r, (x1 - x0) / (2 * n) - 5, (above - top - 10) / 2 - 4));
+        const cy = Math.max(top + rr, Math.min(above - rr - 2, top + rr + 2));
+        for (let k = 0; k < n; k++) chosen.push({ x: x0 + ((x1 - x0) * (2 * k + 1)) / (2 * n), y: cy, r: rr });
+      } else {
+        // très petit écran (iPhone SE…) : bouclier et boutons de capacité alignés à la hauteur du bouclier
+        const sh = this.shieldBase;
+        const k = n + 1;
+        const rr = Math.max(15, Math.min(sh.r, (x1 - x0) / (2 * k) - 4));
+        const cy = Math.max(top + rr, sh.y);
+        const xs = Array.from({ length: k }, (_, i) => x0 + ((x1 - x0) * (2 * i + 1)) / (2 * k));
+        L.shield = { x: xs[0], y: cy, r: rr };
+        for (let i = 1; i < k; i++) chosen.push({ x: xs[i], y: cy, r: rr });
+      }
     }
     L.throw = chosen[0];
     L.remote = throwOn ? chosen[1] ?? chosen[0] : chosen[0];
