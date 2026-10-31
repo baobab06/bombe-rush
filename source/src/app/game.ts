@@ -307,7 +307,7 @@ export class GameScreen {
     this.renderer.draw(m, frozen ? 0 : dt, this.prev, frozen ? 1 : Math.min(1, this.acc / DT));
     if (!this.demo && !this.finished) {
       const me = m.players[s.localPlayer];
-      this.controls.draw(this.renderer.ctx, me.shieldCharges, me.shieldTime, me.maxBombs - me.activeBombs, me.maxBombs, me.alive ? me.throwCharges : 0, me.alive ? me.bigCharges : 0, me.alive ? me.elecCharges : 0, me.alive ? me.stunTime : 0, me.alive ? me.freezeCharges : 0, me.alive ? me.toxicCharges : 0, me.alive ? me.chainCharges : 0, me.alive ? me.remoteCharges : 0, me.alive && m.remoteBombsOf(me).length > 0);
+      this.controls.draw(this.renderer.ctx, me.shieldCharges, me.shieldTime, Math.max(0, me.maxBombs - me.activeBombs), me.maxBombs, me.alive ? me.throwCharges : 0, me.alive ? me.bigCharges : 0, me.alive ? me.elecCharges : 0, me.alive ? me.stunTime : 0, me.alive ? me.freezeCharges : 0, me.alive ? me.toxicCharges : 0, me.alive ? me.chainCharges : 0, me.alive ? me.remoteCharges : 0, me.alive && m.remoteBombsOf(me).length > 0);
     }
   }
 
@@ -479,7 +479,7 @@ export class GameScreen {
           if (e.owner === me.id) haptics.bomb();
           break;
         case "bombLanded":
-          audio.play("place", near(e.x + 0.5, e.y + 0.5));
+          audio.play("land", near(e.x + 0.5, e.y + 0.5));
           break;
         case "shock":
           audio.play("zap", near(e.x + 0.5, e.y + 0.5));
@@ -491,6 +491,7 @@ export class GameScreen {
           if (e.player === me.id) audio.play("deny", 0.6);
           break;
         case "remoteDetonate":
+          audio.play("remote", e.player === me.id ? 1 : near(e.x + 0.5, e.y + 0.5) * 0.6);
           if (e.player === me.id) haptics.pulse(30);
           break;
         case "gas":
@@ -597,7 +598,7 @@ export class GameScreen {
       }
     }
     if (explodeVol > 0) audio.play("explode", explodeVol);
-    if (bigBoom) setTimeout(() => audio.play("explode", 0.7), 90);
+    if (bigBoom) audio.play("boomBig", Math.max(0.6, explodeVol));
     // un seul son de crépitement par image, quel que soit le nombre de bombes déclenchées
     if (chainLinks) audio.play("chain", Math.min(1, 0.5 + chainLinks * 0.1));
   }

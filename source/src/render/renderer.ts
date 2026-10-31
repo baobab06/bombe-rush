@@ -88,7 +88,15 @@ export class Renderer {
   /** souffles glacés en cours d'affichage */
   private frosts: { x: number; y: number; cells: number[]; at: number }[] = [];
   /** réaction en chaîne : étincelles qui voyagent d'une bombe à l'autre */
-  private links: { x: number; y: number; toX: number; toY: number; at: number; delay: number }[] = [];
+  private links: { x: number; y: number; toX: number; toY: number; at: number; delay: number; color?: string }[] = [];
+  /** petits mots « arcade » (BOOM!, ZAP!, CHAÎNE x3…) : courts, peu nombreux */
+  private callouts: { x: number; y: number; text: string; color: string; at: number; big: boolean }[] = [];
+  /** réaction en chaîne : cases qui vont sauter (pour compter le combo) */
+  private chainTargets = new Map<number, number>();
+  private combo = 0;
+  private comboAt = 0;
+  /** traînée des bombes lancées : dernière bouffée par bombe */
+  private trailAt = new Map<number, number>();
   private landed = new Map<number, number>();
   private boomAt = -10;
   private pfx = new Map<number, PlayerFx>();
@@ -110,6 +118,10 @@ export class Renderer {
     this.shocks = [];
     this.frosts = [];
     this.links = [];
+    this.callouts = [];
+    this.chainTargets.clear();
+    this.combo = 0;
+    this.trailAt.clear();
     this.landed.clear();
     this.pfx.clear();
     this.shake = 0;
@@ -170,13 +182,27 @@ export class Renderer {
           }
           break;
         }
-        case "explode":
-          if (fullBooms++ < 4) P.explosion(e.x + 0.5, e.y + 0.5, m.players[e.owner]?.boomId);
-          else {
+        case "explode": {
+          const full = fullBooms++ < 4;
+          if (full) {
+            P.explosion(e.x + 0.5, e.y + 0.5, m.players[e.owner]?.boomId);
+            // impact : flash blanc très bref au centre (lisible, ne cache rien)
+            P.spawn("glow", e.x + 0.5, e.y + 0.5, { z: 0.15, life: 0.1, size: 0.85, color: "#ffffff" });
+          } else {
             P.spawn("ring", e.x + 0.5, e.y + 0.5, { life: 0.4, size: 0.6, color: "#ffd23f" });
             P.spawn("glow", e.x + 0.5, e.y + 0.5, { z: 0.2, life: 0.2, size: 0.5, color: "#fff2b0" });
           }
+          // réaction en chaîne : combo qui monte
+          const ck = m.grid.idx(e.x, e.y);
+          if (this.chainTargets.has(ck)) {
+            this.chainTargets.delete(ck);
+            this.combo = this.time - this.comboAt < 0.8 ? this.combo + 1 : 2;
+            this.comboAt = this.time;
+            this.callout(e.x + 0.5, e.y + 0.2, `CHAÎNE x${this.combo}`, "#ffd23f", this.combo >= 4);
+          }
           if (e.big) {
+            this.callout(e.x + 0.5, e.y, "BOOM!", "#ff6a2b", true);
+            this.particles.mark("scorch", e.x + 0.5, e.y + 0.5, { life: 8, size: 0.85 });
             // grosse bombe : onde de choc large, étincelles en plus, secousse plus forte (flash limité pour garder le jeu lisible)
             P.spawn("ring", e.x + 0.5, e.y + 0.5, { life: 0.45, size: 1.6, color: "#ffb347" });
             P.spawn("ring", e.x + 0.5, e.y + 0.5, { life: 0.6, size: 2.6, color: "#ff5a3c" });
@@ -185,14 +211,17 @@ export class Renderer {
               P.spawn("spark", e.x + 0.5, e.y + 0.5, { vx: Math.cos(a) * 5, vy: Math.sin(a) * 5, vz: 3 + Math.random() * 3, life: 0.55, size: 0.1, color: k % 2 ? "#ffd23f" : "#ff6a2b" });
             }
             this.shake = Math.min(1, this.shake + 0.6);
-            this.flash = Math.min(0.32, this.flash + 0.22);
+            this.flash = Math.min(0.32, this.flash + (fullBooms > 2 ? 0.06 : 0.22));
           } else {
             this.shake = Math.min(1, this.shake + 0.35 + e.cells * 0.02);
-            this.flash = Math.min(0.5, this.flash + 0.18);
+            // flash plafonné : plusieurs explosions d'un coup ne blanchissent plus tout l'écran
+            this.flash = Math.min(fullBooms > 2 ? 0.22 : 0.4, this.flash + (fullBooms > 2 ? 0.04 : 0.16));
           }
           break;
+        }
         case "shock": {
           this.shocks.push({ x: e.x, y: e.y, cells: e.cells, at: this.time });
+          this.callout(e.x + 0.5, e.y - 0.1, "ZAP!", "#7fd4ff", false);
           P.spawn("ring", e.x + 0.5, e.y + 0.5, { life: 0.35, size: 1.2, color: "#7fd4ff" });
           for (let k = 0; k < 10; k++) {
             const a = (k / 10) * Math.PI * 2;
@@ -203,6 +232,8 @@ export class Renderer {
         }
         case "frost": {
           this.frosts.push({ x: e.x, y: e.y, cells: e.cells, at: this.time });
+          this.callout(e.x + 0.5, e.y - 0.1, "GEL!", "#c9f3ff", false);
+          for (let k = 0; k < 6; k++) P.spawn("flake", e.x + 0.5 + (Math.random() - 0.5) * 1.6, e.y + 0.5 + (Math.random() - 0.5) * 1.6, { z: 0.8 + Math.random() * 0.6, vz: -0.4, life: 1.1, size: 0.1, color: "#ffffff" });
           P.spawn("ring", e.x + 0.5, e.y + 0.5, { life: 0.5, size: 1.3, color: "#c9f3ff" });
           // particules de glace : éclats qui partent du centre + flocons sur la zone
           for (let k = 0; k < 14; k++) {
@@ -226,10 +257,17 @@ export class Renderer {
           }
           break;
         }
-        case "remoteDetonate":
+        case "remoteDetonate": {
           P.spawn("ring", e.x + 0.5, e.y + 0.5, { life: 0.25, size: 0.6, color: "#ff3b3b" });
+          // signal rouge du joueur vers sa bombe, puis « BOUM! »
+          const rp = m.players[e.player];
+          if (rp) this.links.push({ x: rp.x - 0.5, y: rp.y - 0.5, toX: e.x, toY: e.y, at: this.time, delay: 0.08, color: "#ff3b3b" });
+          this.callout(e.x + 0.5, e.y, "BOUM!", "#ff4a4a", false);
           break;
+        }
         case "chainLink": {
+          this.chainTargets.set(m.grid.idx(e.toX, e.toY), this.time);
+          if (this.chainTargets.size > 64) this.chainTargets.clear(); // borne de sécurité
           this.links.push({ x: e.x, y: e.y, toX: e.toX, toY: e.toY, at: this.time, delay: Math.max(0.05, e.delay) });
           if (this.links.length > 40) this.links.shift(); // borne : jamais trop de traits à dessiner
           P.spawn("ring", e.toX + 0.5, e.toY + 0.5, { life: Math.max(0.12, e.delay), size: 0.35, color: "#ffd23f" });
@@ -237,6 +275,7 @@ export class Renderer {
         }
         case "gas": {
           P.spawn("ring", e.x + 0.5, e.y + 0.5, { life: 0.5, size: 1.1, color: "#8fe85a" });
+          this.callout(e.x + 0.5, e.y - 0.1, "TOXIQUE!", "#a6f06a", false);
           const gw = m.grid.w;
           for (const i of e.cells) {
             const x = i % gw;
@@ -464,6 +503,13 @@ export class Renderer {
     const x = sx + (ex - sx) * k;
     const y = sy + (ey - sy) * k;
     const lift = Math.sin(Math.PI * k) * THROW.arcHeight * s;
+    // traînée : une petite bouffée toutes les 40 ms
+    const last = this.trailAt.get(b.id) ?? -1;
+    if (t - last > 0.04) {
+      this.trailAt.set(b.id, t);
+      if (this.trailAt.size > 32) this.trailAt.clear();
+      this.particles.spawn("smoke", x / s, y / s, { z: lift / s, life: 0.35, size: 0.12, color: "#ffffff" });
+    }
     ctx.save();
     // trajectoire en pointillés (reste du trajet)
     ctx.setLineDash([s * 0.08, s * 0.1]);
@@ -836,6 +882,8 @@ export class Renderer {
     if (this.frosts.length) this.drawFrosts(m);
     // réaction en chaîne : étincelles entre les bombes
     if (this.links.length) this.drawLinks();
+    // mots « arcade » (au-dessus de tout, très brefs)
+    if (this.callouts.length) this.drawCallouts();
 
     // mode Chaos : zones annoncées (rayures rouges qui pulsent)
     if (ch?.pending) {
@@ -1190,6 +1238,43 @@ export class Renderer {
       ctx.beginPath();
       ctx.arc(X + s * (0.25 + ((i * 13) % 5) * 0.12), Y + s * (0.8 - bp * 0.6), s * 0.04, 0, Math.PI * 2);
       ctx.fill();
+      // de temps en temps, une bulle qui éclate au-dessus du nuage (particule légère)
+      if (a > 0.5 && Math.random() < 0.012) this.particles.spawn("bubble", x + 0.2 + Math.random() * 0.6, y + 0.3 + Math.random() * 0.5, { z: 0.1, vz: 0.6, life: 0.7, size: 0.07, color: Math.random() < 0.5 ? "#b6f06a" : "#b98af0" });
+    }
+    ctx.restore();
+  }
+
+  /** Mot « arcade » : au plus 5 à l'écran (les plus anciens partent). */
+  private callout(x: number, y: number, text: string, color: string, big: boolean) {
+    if (this.reducedMotion && !big) return;
+    // beaucoup d'effets au même moment : on n'en garde que 2 (lisibilité), sauf les gros
+    if (!big && this.callouts.filter((c) => this.time - c.at < 0.15).length >= 2) return;
+    this.callouts.push({ x, y, text, color, at: this.time, big });
+    if (this.callouts.length > 5) this.callouts.shift();
+  }
+
+  private drawCallouts() {
+    const ctx = this.ctx;
+    const s = this.s;
+    const DUR = 0.55;
+    this.callouts = this.callouts.filter((c) => this.time - c.at < DUR);
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.lineJoin = "round";
+    for (const c of this.callouts) {
+      const k = (this.time - c.at) / DUR;
+      const pop = k < 0.18 ? 0.5 + (k / 0.18) * 0.7 : k < 0.3 ? 1.2 - ((k - 0.18) / 0.12) * 0.2 : 1;
+      const size = s * (c.big ? 0.62 : 0.44) * pop;
+      ctx.globalAlpha = k > 0.7 ? 1 - (k - 0.7) / 0.3 : 1;
+      ctx.font = `900 ${Math.round(size)}px "Baloo 2", system-ui, sans-serif`;
+      const x = c.x * s;
+      const y = (c.y - 0.55 - k * 0.35) * s;
+      ctx.lineWidth = Math.max(3, size * 0.18);
+      ctx.strokeStyle = "#1b1c33";
+      ctx.strokeText(c.text, x, y);
+      ctx.fillStyle = c.color;
+      ctx.fillText(c.text, x, y);
     }
     ctx.restore();
   }
@@ -1235,6 +1320,13 @@ export class Renderer {
   /** Bombe télécommandée : petite antenne et voyant rouge qui clignote. */
   private drawRemoteBomb(ctx: CanvasRenderingContext2D, cx: number, cy: number, s: number, t: number) {
     ctx.save();
+    // bombe armée : cible rouge au sol qui pulse (on voit tout de suite qu'elle peut sauter à tout moment)
+    const ph = (t * 1.6) % 1;
+    ctx.strokeStyle = `rgba(255,59,59,${0.75 * (1 - ph)})`;
+    ctx.lineWidth = Math.max(1.5, s * 0.04);
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + s * 0.3, s * (0.3 + ph * 0.2), s * (0.11 + ph * 0.07), 0, 0, Math.PI * 2);
+    ctx.stroke();
     ctx.strokeStyle = "#cfd3e0";
     ctx.lineWidth = Math.max(1.2, s * 0.03);
     ctx.lineCap = "round";
@@ -1301,7 +1393,7 @@ export class Renderer {
       const hy = y1 + (y2 - y1) * k;
       // traînée lumineuse
       ctx.globalAlpha = 0.85 * fade;
-      ctx.strokeStyle = "#ffb31a";
+      ctx.strokeStyle = l.color ?? "#ffb31a";
       ctx.lineWidth = Math.max(2, s * 0.08);
       ctx.beginPath();
       ctx.moveTo(x1, y1);
@@ -1394,6 +1486,28 @@ export class Renderer {
       const a = 1 - k;
       const grow = Math.min(1, k * 4);
       ctx.save();
+      // éclats de glace qui jaillissent du centre (début seulement)
+      if (k < 0.5) {
+        const cx = (f.x + 0.5) * s;
+        const cy = (f.y + 0.5) * s;
+        const len = s * (0.25 + 0.55 * Math.min(1, k * 5));
+        ctx.globalAlpha = 1 - k * 2;
+        ctx.fillStyle = "#e8fbff";
+        ctx.strokeStyle = "#7fd4ff";
+        ctx.lineWidth = Math.max(1, s * 0.025);
+        for (let j = 0; j < 8; j++) {
+          const a = (j / 8) * Math.PI * 2 + 0.2;
+          const w = s * 0.07;
+          ctx.beginPath();
+          ctx.moveTo(cx + Math.cos(a + Math.PI / 2) * w, cy + Math.sin(a + Math.PI / 2) * w);
+          ctx.lineTo(cx + Math.cos(a) * len, cy + Math.sin(a) * len);
+          ctx.lineTo(cx + Math.cos(a - Math.PI / 2) * w, cy + Math.sin(a - Math.PI / 2) * w);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+      }
       for (const i of f.cells) {
         const x = i % g.w;
         const y = (i - x) / g.w;

@@ -34,6 +34,12 @@ export class Controls {
     throw: { x: 720, y: 180, r: 36 },
     remote: { x: 720, y: 100, r: 36 },
   };
+  /** bas (px) du bloc d'infos en haut à droite : aucun bouton ne monte dessus */
+  topReserved = 0;
+  /** bord droit de l'arène (px) : les boutons ne couvrent pas de case jouable */
+  private arenaRight = 0;
+  /** place prévue du bouton « lancer » (avant ajustement au bloc d'infos du haut) */
+  private throwBase: Circle = { x: 720, y: 180, r: 36 };
   /** une bombe télécommandée est posée : le bouton « BOUM » existe */
   remoteReady = false;
   private remotePointer: number | null = null;
@@ -96,6 +102,7 @@ export class Controls {
     // est trop étroite (16:9, tablette) : il passe alors juste au-dessus,
     // pour ne jamais masquer une case jouable.
     const arenaRight = arena.x + arena.w - h * 0.035;
+    this.arenaRight = arena.x + arena.w;
     let sx = bx - br * 1.05;
     let sy = by - br * 1.55;
     // bouton « lancer » : juste au-dessus de la bombe (le bouclier est côté arène)
@@ -118,6 +125,7 @@ export class Controls {
       throw: { x: tx, y: ty, r: tr },
       remote: { x: tx, y: ty, r: tr },
     };
+    this.throwBase = { x: tx, y: ty, r: tr };
     if (this.joyPointer === null) this.resetJoy();
   }
 
@@ -289,12 +297,7 @@ export class Controls {
     if (remoteOnMap && !this.remoteReady) this.remoteSince = now;
     this.remoteReady = remoteOnMap;
     if (!remoteOnMap) this.remotePointer = null;
-    {
-      // emplacement : celui de « lancer », ou juste au-dessus s'il est déjà affiché
-      const t = L.throw;
-      const y = canThrow ? Math.max(t.r + 8, t.y - t.r * 2 - 30) : t.y;
-      L.remote = { x: t.x, y, r: t.r };
-    }
+    this.placeAux(canThrow, remoteOnMap);
     // joystick
     const active = this.joyPointer !== null;
     ctx.save();
@@ -467,7 +470,8 @@ export class Controls {
       ctx.arc(x - rr * 0.18, y + rr * 0.2, rr * 0.28, 0, Math.PI * 2);
       ctx.fill();
     });
-    // étiquette « LANCER »
+    // étiquette « LANCER » (pas sur un bouton réduit faute de place : l'icône suffit)
+    if (c.r < this.throwBase.r * 0.92) return;
     ctx.save();
     ctx.font = `900 ${Math.round(Math.max(11, r * 0.36))}px "Baloo 2", system-ui, sans-serif`;
     ctx.textAlign = "center";
@@ -478,6 +482,57 @@ export class Controls {
     ctx.fillStyle = "#ffd23f";
     ctx.fillText("LANCER", c.x, c.y + r + Math.max(10, r * 0.38));
     ctx.restore();
+  }
+
+  /**
+   * Place les boutons « lancer » et « BOUM » (ceux qui n'existent qu'avec une
+   * capacité) sans toucher les autres boutons, le bloc d'infos du haut,
+   * l'arène ni le bord de l'écran. S'il n'y a pas la place (petit écran,
+   * colonne étroite), ils se mettent côte à côte au-dessus du bouclier, un peu
+   * plus petits.
+   */
+  private placeAux(throwOn: boolean, remoteOn: boolean): void {
+    const L = this.layout;
+    const t = this.throwBase;
+    const { w, h } = viewport;
+    const lab = (r: number) => Math.max(10, r * 0.38) + 8; // étiquette sous le bouton
+    const fixed = [L.bomb, L.shield];
+    const fits = (c: Circle, others: Circle[]) =>
+      c.x - c.r >= Math.max(4, this.arenaRight + 2) &&
+      c.x + c.r <= w - 4 &&
+      c.y - c.r >= Math.max(4, this.topReserved + 4) &&
+      c.y + c.r + lab(c.r) <= h - 4 &&
+      others.every((o) => Math.hypot(o.x - c.x, o.y - c.y) >= o.r + c.r + 8 + (o.y < c.y ? lab(o.r) * 0.6 : lab(c.r) * 0.8));
+    const r = t.r;
+    const spots: Circle[] = [
+      t,
+      { x: t.x, y: this.topReserved + r + 6, r },
+      { x: t.x - t.r - r - 14, y: t.y, r },
+      { x: t.x - t.r - r - 14, y: Math.min(t.y, L.shield.y - L.shield.r - r - lab(r)), r },
+      { x: t.x, y: t.y - t.r - r - lab(r) - 6, r },
+      { x: L.shield.x - L.shield.r - r - 12, y: L.shield.y, r },
+      { x: L.bomb.x - L.bomb.r - r - 14, y: L.bomb.y + L.bomb.r * 0.3, r },
+    ];
+    const wanted = (throwOn ? 1 : 0) + (remoteOn ? 1 : 0);
+    const chosen: Circle[] = [];
+    for (const c of spots) {
+      if (chosen.length >= Math.max(1, wanted)) break;
+      if (fits(c, [...fixed, ...chosen])) chosen.push(c);
+    }
+    if (chosen.length < Math.max(1, wanted)) {
+      // pas la place : rangée de boutons plus petits entre le bloc d'infos et le bouclier
+      const n = Math.max(1, wanted);
+      const x0 = Math.max(this.arenaRight + 4, 4);
+      const x1 = w - 4;
+      const top = Math.max(4, this.topReserved + 4);
+      const above = Math.min(L.shield.y - L.shield.r, L.bomb.y - L.bomb.r) - 8;
+      const rr = Math.max(17, Math.min(r, (x1 - x0) / (2 * n) - 5, (above - top - 10) / 2 - 4));
+      const cy = Math.max(top + rr, Math.min(above - rr - 2, top + rr + 2));
+      chosen.length = 0;
+      for (let k = 0; k < n; k++) chosen.push({ x: x0 + ((x1 - x0) * (2 * k + 1)) / (2 * n), y: cy, r: rr });
+    }
+    L.throw = chosen[0];
+    L.remote = throwOn ? chosen[1] ?? chosen[0] : chosen[0];
   }
 
   /** Bouton « BOUM » : rouge, antenne qui clignote. */
@@ -519,6 +574,7 @@ export class Controls {
       ctx.arc(x, y + rr * 0.15, rr * 0.13, 0, Math.PI * 2);
       ctx.fill();
     });
+    if (c.r < this.throwBase.r * 0.92) return;
     ctx.save();
     ctx.font = `900 ${Math.round(Math.max(11, r * 0.36))}px "Baloo 2", system-ui, sans-serif`;
     ctx.textAlign = "center";

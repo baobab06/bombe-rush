@@ -30,6 +30,9 @@ export type Sfx =
   | "deny"
   | "tab"
   | "zap"
+  | "boomBig"
+  | "land"
+  | "remote"
   | "freeze"
   | "gas"
   | "chain"
@@ -130,8 +133,35 @@ class AudioEngine {
   }
 
   // ---------------------------------------------------------------- sfx
+  /**
+   * Limiteur de voix : un même son ne peut pas s'empiler (grosses réactions en
+   * chaîne) — au plus VOICES[nom] lectures par fenêtre de 120 ms, et deux
+   * lectures du même son à moins de 30 ms ne passent que si la seconde est
+   * nettement plus forte. Le compresseur de sortie évite la saturation.
+   */
+  private recent = new Map<Sfx, { t: number; v: number }[]>();
+  private static VOICES: Partial<Record<Sfx, number>> = { explode: 2, boomBig: 1, zap: 2, freeze: 2, gas: 2, chain: 1, land: 2, place: 3, break: 3, tick: 1 };
+  private allow(name: Sfx, v: number): boolean {
+    const now = this.ctx!.currentTime;
+    const list = (this.recent.get(name) ?? []).filter((r) => now - r.t < 0.12);
+    const max = AudioEngine.VOICES[name] ?? 3;
+    if (list.length >= max) {
+      this.recent.set(name, list);
+      return false;
+    }
+    const last = list[list.length - 1];
+    if (last && now - last.t < 0.03 && v <= last.v * 1.25) {
+      this.recent.set(name, list);
+      return false;
+    }
+    list.push({ t: now, v });
+    this.recent.set(name, list);
+    return true;
+  }
+
   play(name: Sfx, volume = 1) {
     if (!this.ctx || !this.sfxOn || this.ctx.state !== "running") return;
+    if (!this.allow(name, volume)) return;
     const t = this.ctx.currentTime + 0.005;
     const v = Math.max(0.05, Math.min(1, volume));
     switch (name) {
@@ -214,6 +244,23 @@ class AudioEngine {
         this.burst(t, 0.22, 0.4 * v, "highpass", 5000, 2500);
         this.osc("sawtooth", 1400, 180, t, 0.25, 0.16 * v);
         this.osc("square", 90, 60, t + 0.02, 0.3, 0.12 * v);
+        break;
+      case "boomBig":
+        // grosse bombe : coup grave et long + craquement
+        this.burst(t, 1.0, 1.0 * v, "lowpass", 2200, 70);
+        this.osc("sine", 90, 28, t, 0.7, 0.9 * v);
+        this.osc("triangle", 60, 30, t + 0.06, 0.5, 0.4 * v);
+        this.burst(t + 0.02, 0.18, 0.4 * v, "highpass", 2500, 900);
+        break;
+      case "land":
+        // atterrissage d'une bombe lancée : petit choc mat
+        this.osc("sine", 220, 70, t, 0.12, 0.45 * v);
+        this.burst(t, 0.07, 0.2 * v, "lowpass", 1200, 300);
+        break;
+      case "remote":
+        // télécommande : double bip électronique
+        this.osc("square", 1320, 1320, t, 0.045, 0.12 * v);
+        this.osc("square", 1760, 1760, t + 0.06, 0.05, 0.12 * v);
         break;
       case "freeze":
         // souffle glacé : souffle filtré + petits tintements cristallins

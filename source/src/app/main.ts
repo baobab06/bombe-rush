@@ -1461,8 +1461,9 @@ class App implements AppCtx {
     // en CHAOS, le badge prend de la place : bonus en version compacte (jamais sous les boutons)
     $("hud").classList.toggle("chaos", h.chaos);
     const pw0 = $("hudPowers");
-    // Domination : la colonne de droite accueille le tableau des points et le bouton « lancer »
-    const col = document.querySelector(h.chaos || h.hill ? "#hud .hud-l" : "#hud .hud-r")!;
+    // les capacités (lancer, BOUM) existent dans tous les modes : la colonne de droite
+    // reste libre pour leurs boutons, les pouvoirs vont à gauche partout
+    const col = document.querySelector("#hud .hud-l")!;
     if (pw0.parentElement !== col) col.appendChild(pw0);
     const ci = h.chaosInfo;
     if (ci) {
@@ -1504,14 +1505,26 @@ class App implements AppCtx {
           .join("")}${state}`;
       }
     }
+    // bas du bloc d'infos en haut à droite (chrono, joueurs en vie, tableau des points) : les boutons ne montent pas dessus
+    let topReserved = 0;
+    for (const el of document.querySelectorAll<HTMLElement>("#hud .hud-r > *")) {
+      if (el.hidden || !el.offsetParent) continue;
+      topReserved = Math.max(topReserved, el.getBoundingClientRect().bottom);
+    }
+    this.game.controls.topReserved = topReserved;
     const pw = $("hudPowers");
     const psig = h.powers.map((p) => `${p.type}:${p.value}`).join();
     if (pw.dataset.sig !== psig) {
       const old = (pw.dataset.sig ?? "").split(",").map((v) => v.split(":")[1]);
       pw.dataset.sig = psig;
-      pw.innerHTML = h.powers
-        .map((p, i) => `<span class="pw${old[i] && old[i] !== String(p.value) ? " up" : ""}" title="${p.label}"><img src="${bonusIconURL(p.type)}" alt="" width="20" height="20" class="pwi">${p.value}<small>${p.label}</small></span>`)
-        .join("");
+      // pouvoirs (bombes, portée, vitesse) puis UNE pastille compacte pour les capacités en réserve
+      const base = h.powers.filter((p) => !String(p.value).includes("/"));
+      const caps = h.powers.filter((p) => String(p.value).includes("/"));
+      pw.innerHTML =
+        base.map((p, i) => `<span class="pw${old[i] && old[i] !== String(p.value) ? " up" : ""}" title="${p.label}"><img src="${bonusIconURL(p.type)}" alt="" width="20" height="20" class="pwi">${p.value}<small>${p.label}</small></span>`).join("") +
+        (caps.length
+          ? `<span class="pw caps" title="${caps.map((c) => c.label).join(", ")}">${caps.map((c) => `<img src="${bonusIconURL(c.type)}" alt="" width="20" height="20" class="pwi">`).join("")}<small>${caps.length}/${String(caps[0].value).split("/")[1]}</small></span>`
+          : "");
     }
   }
 
