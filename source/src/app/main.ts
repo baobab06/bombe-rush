@@ -97,6 +97,7 @@ class App implements AppCtx {
     this.game.onHud = () => this.updateHud();
     this.game.onBanner = (k, t, h) => this.banner(k, t, h);
     this.game.onSpectate = () => this.updateSpectate();
+    this.game.onMalus = (phase, emoji, label, hint) => this.malus(phase, emoji, label, hint);
     this.game.controls.onPause = () => {
       if (this.screen === "game") this.pause();
       else if (this.screen === "pause") this.resume();
@@ -257,6 +258,7 @@ class App implements AppCtx {
     const inGame = id === "game" || id === "pause";
     this.game.background = !inGame;
     $("hud").hidden = !inGame;
+    if (id !== "game") this.hideMalus(true);
     $("veil").classList.toggle("off", inGame);
     $("veil").classList.toggle("deep", id === "results");
     $("veil").classList.toggle("dim", MENU_SCREENS.includes(id));
@@ -1518,6 +1520,7 @@ class App implements AppCtx {
     const h = this.game.hudState();
     if (!h) return;
     if (this.game.spectating) this.updateSpectate();
+    if (this.malusWarn) $("malusTime").textContent = this.malusLeft();
     const timer = $("hudTimer");
     timer.textContent = h.timer;
     timer.classList.toggle("hot", h.hot);
@@ -1590,6 +1593,49 @@ class App implements AppCtx {
           ? `<span class="pw caps" title="${caps.map((c) => c.label).join(", ")}">${caps.map((c) => `<img src="${bonusIconURL(c.type)}" alt="" width="20" height="20" class="pwi">`).join("")}<small>${caps.length}/${String(caps[0].value).split("/")[1]}</small></span>`
           : "");
     }
+  }
+
+  /**
+   * Malus CHAOS : petit bandeau semi-transparent en haut de l'écran (icône,
+   * nom, compte à rebours discret). Annonce → reste affiché pendant le compte
+   * à rebours ; activation → « ACTIF » puis disparaît tout seul.
+   */
+  private malusTimer = 0;
+  private malusWarn = false;
+  private malus(phase: "warn" | "start", emoji: string, label: string, hint?: string) {
+    const bar = $("malusBar");
+    window.clearTimeout(this.malusTimer);
+    $("malusIcon").textContent = emoji;
+    $("malusName").textContent = label;
+    $("malusHint").textContent = hint ?? "";
+    this.malusWarn = phase === "warn";
+    $("malusTime").textContent = phase === "warn" ? this.malusLeft() : "ACTIF";
+    bar.classList.toggle("on", phase === "start");
+    bar.classList.toggle("narrow", viewport.w < 900);
+    bar.classList.remove("out");
+    if (bar.hidden) {
+      bar.hidden = false;
+    }
+    if (phase === "start") this.malusTimer = window.setTimeout(() => this.hideMalus(), 1800);
+  }
+  private malusLeft(): string {
+    const w = this.game.hudState()?.chaosInfo?.warn;
+    return w ? `${w.left} s` : "";
+  }
+  private hideMalus(now = false) {
+    const bar = $("malusBar");
+    window.clearTimeout(this.malusTimer);
+    this.malusWarn = false;
+    if (bar.hidden) return;
+    if (now) {
+      bar.hidden = true;
+      return;
+    }
+    bar.classList.add("out");
+    this.malusTimer = window.setTimeout(() => {
+      bar.hidden = true;
+      bar.classList.remove("out");
+    }, 200);
   }
 
   private banner(kicker: string, text: string, hint?: string) {

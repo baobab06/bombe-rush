@@ -1017,14 +1017,7 @@ export class Renderer {
       gr.addColorStop(1, `rgba(255,30,30,${a})`);
       ctx.fillStyle = gr;
       ctx.fillRect(0, 0, this.viewW, this.viewH);
-      if (ch.pending.def.countdown > 0) {
-        const n = Math.max(1, Math.ceil(ch.pendingLeft));
-        const frac = ch.pendingLeft - Math.floor(ch.pendingLeft);
-        this.bigText(String(n), 0.8 + frac * 0.5, Math.min(1, frac * 3 + 0.3), "#ff5a4f");
-      }
-    } else if (this.time - this.boomAt < 0.8) {
-      const k = (this.time - this.boomAt) / 0.8;
-      this.bigText("BOOM !", 1 + k * 0.5, 1 - k, "#ff9a3d");
+      // (le compte à rebours est dans le petit bandeau en haut : le centre reste dégagé)
     }
 
     // compte à rebours

@@ -94,6 +94,8 @@ export class GameScreen {
   onFinished: ((r: GameResult) => void) | null = null;
   onHud: (() => void) | null = null;
   onBanner: ((kicker: string, text: string, hint?: string) => void) | null = null;
+  /** malus Chaos : petit bandeau en haut (annonce puis activation) */
+  onMalus: ((phase: "warn" | "start", emoji: string, label: string, hint?: string) => void) | null = null;
 
   private acc = 0;
   private last = 0;
@@ -660,7 +662,7 @@ export class GameScreen {
           const def = CHAOS_EVENTS.find((d) => d.id === e.id);
           audio.play("alarm");
           haptics.pulse(60);
-          this.onBanner?.(`⚠️ MALUS DANS ${Math.ceil(e.seconds)} s`, `${e.emoji} ${e.label}`, def?.hint);
+          this.onMalus?.("warn", e.emoji, e.label, def?.hint);
           break;
         }
         case "chaosStart": {
@@ -668,10 +670,8 @@ export class GameScreen {
           if (def && def.countdown > 0) {
             audio.play("explode", 1);
             haptics.explosionNear();
-          } else {
-            audio.play("alarm");
-            this.onBanner?.("💀 MALUS CHAOS", `${e.emoji} ${e.label} !`, def?.hint);
-          }
+          } else audio.play("alarm");
+          this.onMalus?.("start", e.emoji, e.label, def?.hint);
           break;
         }
         case "ventWarn":

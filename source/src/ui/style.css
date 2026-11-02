@@ -1418,3 +1418,23 @@ button:focus-visible, input:focus-visible + i { outline: 3px solid var(--coin); 
 #hud.spectating #hudPowers, #hud.spectating #btnEmote, #hud.spectating #emoteWheel { display: none; }
 #hud.compact .spec-btn span { display: none; }
 @keyframes specIn { from { opacity: 0; transform: translateY(1cqh); } to { opacity: 1; transform: none; } }
+
+/* ---------- malus CHAOS : petit bandeau compact en haut ---------- */
+#malusBar { position: absolute; z-index: 6; left: 50%; top: calc(var(--st) + max(4px, 1cqh)); transform: translateX(-50%); pointer-events: none;
+  display: flex; align-items: center; gap: 6px; height: clamp(26px, 7.4cqh, 36px); padding: 0 12px 0 8px; box-sizing: border-box; white-space: nowrap;
+  max-width: calc(100% - var(--colL, 0px) - var(--colR, 0px) - 2 * var(--gut, 8px)); min-width: 0; overflow: hidden;
+  border-radius: 99px; background: rgba(28,12,40,.72); border: max(1.5px,.35cqh) solid rgba(255,90,80,.85); box-shadow: 0 .5cqh 1.4cqh rgba(0,0,0,.25);
+  font-size: clamp(11px, 3.6cqh, 15px); line-height: 1; color: #fff; animation: malusIn .22s cubic-bezier(.2,1.3,.4,1); }
+#malusBar[hidden] { display: none; }
+#malusBar.out { animation: malusOut .2s ease-in forwards; }
+#malusIcon { font-style: normal; font-size: 1.25em; flex: none; }
+#malusName { font-weight: 800; letter-spacing: .02em; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+#malusHint { font-style: normal; font-weight: 600; font-size: .82em; color: rgba(255,255,255,.72); overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+#malusHint:empty { display: none; }
+#malusTime { flex: none; font-weight: 800; font-size: .86em; font-variant-numeric: tabular-nums; color: #ffb3ad; padding: .2em .55em; border-radius: 99px; background: rgba(255,70,60,.22); }
+#malusTime:empty { display: none; }
+#malusBar.on { border-color: rgba(255,210,63,.9); }
+#malusBar.on #malusTime { color: #ffe27a; background: rgba(255,210,63,.18); }
+#hud.compact ~ #malusBar #malusHint, #malusBar.narrow #malusHint { display: none; }
+@keyframes malusIn { from { opacity: 0; transform: translate(-50%, -120%); } to { opacity: 1; transform: translate(-50%, 0); } }
+@keyframes malusOut { to { opacity: 0; transform: translate(-50%, -120%); } }
