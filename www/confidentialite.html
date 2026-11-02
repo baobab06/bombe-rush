@@ -25,8 +25,8 @@
 
   <h2>En bref</h2>
   <ul>
-    <li>Pas de compte, pas d'adresse e-mail, pas de numéro de téléphone demandés.</li>
-    <li>Ta progression (pièces, objets, niveau, missions…) est enregistrée <b>uniquement sur ton appareil</b>.</li>
+    <li>Aucun compte obligatoire : on peut jouer sans rien donner (compte invité). Pas de numéro de téléphone demandé.</li>
+    <li>Ta progression (pièces, objets, niveau, missions…) est enregistrée sur ton appareil. Si tu choisis de te <b>connecter avec Google</b> (facultatif), une copie est aussi sauvegardée sur notre serveur pour la retrouver sur un autre téléphone.</li>
     <li>Sur le site web : pas de publicité, pas de mesure d'audience, pas de traceur.</li>
     <li>Dans l'application Android (à partir de la version 1.1) : des <b>vidéos publicitaires facultatives</b> (pour gagner des pièces) et parfois une publicité entre deux parties, fournies par <b>Google AdMob</b> (voir plus bas). Nous ne vendons aucune donnée.</li>
     <li>Seules les <b>parties privées en ligne</b> envoient quelques informations de jeu à notre serveur, le temps de la partie.</li>
@@ -34,6 +34,16 @@
 
   <h2>Données enregistrées sur ton appareil</h2>
   <p>Le jeu enregistre localement ton pseudo, ta progression, tes objets et tes réglages (son, vibration). Ces données ne quittent pas ton appareil. Elles sont effacées si tu supprimes les données de l'application ou si tu la désinstalles, ou depuis Paramètres → « Réinitialiser la progression ».</p>
+
+  <h2>Connexion avec Google (facultative)</h2>
+  <p>Si tu appuies sur « Se connecter avec Google », Google nous transmet un jeton signé qui contient l'identifiant de ton compte Google et ton adresse e-mail. <b>Aucun mot de passe</b> n'est transmis au jeu. Notre serveur vérifie ce jeton auprès de Google, puis enregistre :</p>
+  <ul>
+    <li>une <b>empreinte chiffrée</b> (irréversible) de l'identifiant de ton compte Google, pour retrouver ton profil ;</li>
+    <li>la <b>copie de ta progression</b> (pseudo, pièces, objets, niveau, statistiques, réglages de jeu) et ses copies de secours (gardées 90 jours au plus) ;</li>
+    <li>une <b>clé de session</b> (sous forme d'empreinte) pour rester connecté, valable 6 mois.</li>
+  </ul>
+  <p>Ton adresse e-mail est seulement affichée sur ton téléphone ; elle n'est pas conservée sur notre serveur. Ces données servent uniquement à sauvegarder et retrouver ta progression : elles ne sont ni vendues, ni utilisées pour de la publicité. Elles sont hébergées par notre prestataire de base de données (Upstash, Union européenne).</p>
+  <p><b>Supprimer ton compte</b> : dans le jeu, Paramètres → Compte → « Supprimer mon compte en ligne ». Le lien avec ton compte Google et ta sauvegarde en ligne sont alors effacés définitivement de notre serveur. Tu peux aussi le demander à l'adresse de contact indiquée sur la fiche Google Play du jeu.</p>
 
   <h2>Données envoyées pendant une partie privée en ligne</h2>
   <table>
@@ -75,10 +85,10 @@
   <p>Le jeu ne demande aucune information personnelle. En ligne, seul le pseudo choisi est visible des amis invités dans la salle ; il n'y a pas de discussion écrite libre (seulement des emotes prédéfinies).</p>
 
   <h2>Tes droits</h2>
-  <p>Comme nous ne conservons pas de données personnelles sur nos serveurs, il n'y a rien à exporter ni à supprimer de notre côté : la suppression des données de l'application sur ton appareil efface tout. Pour toute question, utilise l'adresse de contact du développeur indiquée sur la fiche Google Play du jeu.</p>
+  <p>Sans connexion Google, nous ne conservons aucune donnée personnelle sur nos serveurs : supprimer les données de l'application sur ton appareil efface tout. Avec la connexion Google, tu peux supprimer ton compte en ligne à tout moment depuis le jeu (voir plus haut), ou demander l'accès, la rectification ou la suppression de tes données à l'adresse de contact du développeur indiquée sur la fiche Google Play du jeu.</p>
 
   <h2>Évolutions</h2>
-  <p>Si le jeu ajoute un jour des comptes joueurs, cette page sera mise à jour avant leur activation, et ton consentement sera demandé lorsque la loi l'exige.</p>
+  <p>Cette page est mise à jour à chaque changement dans les données utilisées par le jeu (dernière mise à jour : connexion avec Google, novembre 2026).</p>
 </main>
 </body>
 </html>

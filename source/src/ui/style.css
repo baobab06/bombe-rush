@@ -1397,3 +1397,4 @@ button:focus-visible, input:focus-visible + i { outline: 3px solid var(--coin); 
 .acct-card small { color: var(--muted); font-weight: 700; }
 .sheet-actions.wrap { flex-wrap: wrap; }
 .welcome-google { align-self: center; margin-top: .6cqh; }
+.acct-delete { color: #ff8a7a; font-size: max(10px, .66em); }

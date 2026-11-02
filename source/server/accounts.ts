@@ -242,6 +242,7 @@ export class Accounts {
         profileId = fresh;
         created = true;
         await this.store.set(`prof:${fresh}`, JSON.stringify({ rev: 0, updatedAt: Date.now(), data: null } satisfies CloudSave));
+        await this.store.set(`prof:${fresh}:acct`, accKey); // pour pouvoir supprimer le compte
       } else profileId = (await this.store.get(accKey))!;
     }
     const pid = profileId as string;
@@ -257,6 +258,21 @@ export class Accounts {
   }
 
   async signOut(session: string): Promise<void> {
+    await this.store.del(`sess:${sha(session)}`);
+  }
+
+  /**
+   * Suppression du compte (exigence Google Play) : lien Google ↔ profil,
+   * sauvegarde en ligne, copies de secours et session en cours. Une nouvelle
+   * connexion recréerait un compte vide.
+   */
+  async deleteAccount(profileId: string, session: string): Promise<void> {
+    const cur = await this.load(profileId);
+    for (let r = Math.max(0, cur.rev - 10); r <= cur.rev; r++) await this.store.del(`prof:${profileId}:backup:${r}`);
+    const acc = await this.store.get(`prof:${profileId}:acct`);
+    if (acc) await this.store.del(acc);
+    await this.store.del(`prof:${profileId}:acct`);
+    await this.store.del(`prof:${profileId}`);
     await this.store.del(`sess:${sha(session)}`);
   }
 
@@ -336,6 +352,7 @@ async function body(req: IncomingMessage, max = MAX_SAVE_BYTES + 4096): Promise<
  *   POST /api/auth/logout    (Bearer)
  *   GET  /api/profile        (Bearer)               → { rev, updatedAt, data }
  *   PUT  /api/profile        (Bearer) { data, baseRev, force? } → { rev } | 409 { cloud }
+ *   POST /api/account/delete (Bearer)               → compte et sauvegarde en ligne supprimés
  */
 export function accountRoutes(accounts: Accounts | null, webClientId: string | undefined) {
   const authLimit = new RateLimit(20, 60_000);
@@ -385,6 +402,11 @@ export function accountRoutes(accounts: Accounts | null, webClientId: string | u
       if (!profileId) return reply(401, { error: "Session expirée, reconnecte-toi." }), true;
       if (path === "/api/auth/logout" && req.method === "POST") {
         await accounts.signOut(bearer!);
+        reply(200, { ok: true });
+        return true;
+      }
+      if (path === "/api/account/delete" && req.method === "POST") {
+        await accounts.deleteAccount(profileId, bearer!);
         reply(200, { ok: true });
         return true;
       }

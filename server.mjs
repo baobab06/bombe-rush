@@ -4924,6 +4924,7 @@ class Accounts {
         profileId = fresh;
         created = true;
         await this.store.set(`prof:${fresh}`, JSON.stringify({ rev: 0, updatedAt: Date.now(), data: null }));
+        await this.store.set(`prof:${fresh}:acct`, accKey);
       } else
         profileId = await this.store.get(accKey);
     }
@@ -4938,6 +4939,17 @@ class Accounts {
     return this.store.get(`sess:${sha(session)}`);
   }
   async signOut(session) {
+    await this.store.del(`sess:${sha(session)}`);
+  }
+  async deleteAccount(profileId, session) {
+    const cur = await this.load(profileId);
+    for (let r = Math.max(0, cur.rev - 10);r <= cur.rev; r++)
+      await this.store.del(`prof:${profileId}:backup:${r}`);
+    const acc = await this.store.get(`prof:${profileId}:acct`);
+    if (acc)
+      await this.store.del(acc);
+    await this.store.del(`prof:${profileId}:acct`);
+    await this.store.del(`prof:${profileId}`);
     await this.store.del(`sess:${sha(session)}`);
   }
   async load(profileId) {
@@ -5056,6 +5068,11 @@ function accountRoutes(accounts, webClientId) {
         return reply(401, { error: "Session expirée, reconnecte-toi." }), true;
       if (path === "/api/auth/logout" && req.method === "POST") {
         await accounts.signOut(bearer);
+        reply(200, { ok: true });
+        return true;
+      }
+      if (path === "/api/account/delete" && req.method === "POST") {
+        await accounts.deleteAccount(profileId, bearer);
         reply(200, { ok: true });
         return true;
       }

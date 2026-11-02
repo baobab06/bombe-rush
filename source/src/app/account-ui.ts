@@ -128,6 +128,11 @@ export class AccountUI {
       out.onclick = () => this.confirmSignOut();
       row.append(sync, out);
       el.appendChild(row);
+      const del = document.createElement("button");
+      del.className = "btn-link acct-delete";
+      del.textContent = "Supprimer mon compte en ligne";
+      del.onclick = () => this.confirmDelete();
+      el.appendChild(del);
     } else {
       el.appendChild(line);
       if (c.enabled) {
@@ -138,6 +143,44 @@ export class AccountUI {
         el.appendChild(b);
       }
     }
+  }
+
+  /** Suppression du compte en ligne (double confirmation). */
+  private confirmDelete() {
+    this.host.modal.open((sheet, close) => {
+      sheet.insertAdjacentHTML(
+        "beforeend",
+        `<h2>Supprimer le compte en ligne ?</h2><p class="sub">Ta sauvegarde en ligne et le lien avec ton compte Google seront <b>définitivement supprimés</b> de notre serveur. La progression reste sur ce téléphone (en compte invité).</p><p class="acct-msg" hidden></p>`,
+      );
+      const msg = sheet.querySelector<HTMLElement>(".acct-msg")!;
+      const row = document.createElement("div");
+      row.className = "sheet-actions";
+      const no = document.createElement("button");
+      no.className = "btn btn-ghost";
+      no.innerHTML = "<span>Annuler</span>";
+      no.onclick = close;
+      const yes = document.createElement("button");
+      yes.className = "btn btn-red";
+      yes.innerHTML = "<span>Supprimer définitivement</span>";
+      yes.onclick = async () => {
+        yes.disabled = no.disabled = true;
+        msg.hidden = false;
+        msg.className = "acct-msg wait";
+        msg.innerHTML = '<i class="spin"></i>Suppression…';
+        const ok = await this.cloud.deleteAccount();
+        if (!ok) {
+          yes.disabled = no.disabled = false;
+          msg.className = "acct-msg bad";
+          msg.textContent = this.cloud.lastError || "Suppression impossible pour l'instant.";
+          return;
+        }
+        forgetGoogleAccount();
+        close();
+        this.host.toast("Compte en ligne supprimé. Ta progression reste sur ce téléphone.", "");
+      };
+      row.append(no, yes);
+      sheet.appendChild(row);
+    });
   }
 
   private confirmSignOut() {

@@ -247,6 +247,19 @@ console.log("Cas limites : réseau coupé, deux téléphones en même temps, ses
   check(!q.cloud.signedIn && q.state.profile.coins === 999 && q.cloud.status === "signedOut", "session expirée : déconnecté proprement, progression du téléphone intacte");
 }
 
+console.log("Suppression du compte (exigence Google Play)");
+{
+  const d = device(url, { profile: progressed("Bye", 10) });
+  await d.cloud.init();
+  await d.cloud.signInWithGoogleToken(token("8008"));
+  const pid = d.cloud.meta.profileId!;
+  const ok = await d.cloud.deleteAccount();
+  const left = keys(store).filter((k) => k.includes(pid));
+  check(ok && left.length === 0 && !d.cloud.signedIn && d.state.profile.coins === 10, "compte supprimé : plus rien sur le serveur, progression gardée sur le téléphone");
+  const again = await accounts.signIn(token("8008"));
+  check(again.created && again.profileId !== pid, "se reconnecter ensuite recrée un compte vide (l'ancien est bien parti)");
+}
+
 console.log("Stockage persistant (redémarrage du serveur)");
 {
   const dir = mkdtempSync(join(tmpdir(), "acct-"));

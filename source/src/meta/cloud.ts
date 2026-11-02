@@ -373,6 +373,31 @@ export class CloudSync {
     this.set(this.enabled ? "signedOut" : "disabled");
   }
 
+  /**
+   * Supprime le compte en ligne (et la sauvegarde en ligne). La progression
+   * reste sur ce téléphone, qui redevient un compte invité.
+   */
+  async deleteAccount(): Promise<boolean> {
+    if (!this.signedIn) return false;
+    try {
+      const r = await this.d.api("/api/account/delete", { method: "POST", session: this.meta.session });
+      if (r.status !== 200) {
+        this.set(this.status, "Suppression impossible pour l'instant. Réessaie.");
+        return false;
+      }
+    } catch {
+      this.set(this.status, "Pas de réseau : suppression impossible pour l'instant.");
+      return false;
+    }
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = null;
+    this.conflict = null;
+    this.meta = { session: null, profileId: null, email: null, baseRev: 0, dirty: false, lastSync: 0 };
+    this.writeMeta();
+    this.set(this.enabled ? "signedOut" : "disabled");
+    return true;
+  }
+
   private now(): number {
     return (this.d.now ?? Date.now)();
   }
