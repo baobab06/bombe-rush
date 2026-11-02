@@ -2239,41 +2239,175 @@ console.log("Système commun des capacités");
   }
 }
 
-console.log("Domination : zone qui se déplace");
+console.log("Domination : point de capture dynamique");
 {
   const { HILL_RULES } = await import("../src/core/hill");
-  const slots = (n: number) => Array.from({ length: n }, (_, i) => ({ name: "P" + i, characterId: "pip", isBot: false, difficulty: "normal" as Difficulty }));
-  for (const map of MAPS) {
-    const m = new Match({ seed: 5, map, modeId: "koth", players: slots(4) });
-    const g = m.grid;
-    const h = m.hill!;
-    // emplacements praticables et disposés en miroir (équité)
-    const okSites = h.sites.every((st) => st.cells.length === 1 && st.cells.every((i) => g.tiles[i] !== TILE.WALL && !g.isHazard(i % g.w, Math.floor(i / g.w))));
-    const centers = new Set(h.sites.map((st) => st.center.join(",")));
-    const mirrored = h.sites.every((st) => centers.has(`${g.w - 1 - st.center[0]},${st.center[1]}`) && centers.has(`${st.center[0]},${g.h - 1 - st.center[1]}`));
-    const centerOnly = h.sites.length === 1 && h.sites[0].center[0] === (g.w - 1) / 2 && h.sites[0].center[1] === (g.h - 1) / 2;
-    check((h.sites.length >= 3 || centerOnly) && okSites && mirrored, `${map.name} : ${h.sites.length} emplacements de zone, praticables, en miroir`);
-  }
+  const { FACTORY } = await import("../src/maps/factory");
+  const { encodeSnapshot, applySnapshot } = await import("../src/net/snapshot");
+  const slots = (n: number, bot = false) => Array.from({ length: n }, (_, i) => ({ name: "P" + i, characterId: "pip", isBot: bot, difficulty: "hard" as Difficulty }));
+  const g0 = new Match({ seed: 5, map: FACTORY, modeId: "koth", players: slots(4) });
+  const tiles0 = Array.from(g0.grid.tiles).join("");
+  const h0 = g0.hill!;
+  const starts = g0.players.map((p) => [Math.floor(p.x), Math.floor(p.y)]);
+  check(h0.sites.length >= 20, `Usine : ${h0.sites.length} positions possibles pour la zone (au lieu d'une seule)`);
+  const plan = FACTORY.layout;
+  const bad = h0.sites.filter((st) => {
+    const [x, y] = st.center;
+    return plan[y][x] === "#" || x <= 0 || y <= 0 || x >= g0.grid.w - 1 || y >= g0.grid.h - 1 || g0.grid.tile(x, y) === TILE.WALL;
+  });
+  check(bad.length === 0, "aucune position dans un mur, un obstacle ou en dehors de la carte");
+  check(h0.sites.slice(1).every((st) => starts.every(([x, y]) => Math.abs(x - st.center[0]) + Math.abs(y - st.center[1]) >= HILL_RULES.spawnGap)), `jamais à moins de ${HILL_RULES.spawnGap} cases d'un départ d'équipe`);
+  const centers = new Set(h0.sites.map((st) => st.center.join(",")));
+  const mirror = h0.sites.filter((st) => centers.has(`${g0.grid.w - 1 - st.center[0]},${st.center[1]}`)).length;
+  check(mirror === h0.sites.length, "positions symétriques gauche/droite (même chance pour rouges et bleus)");
   {
-    const m = new Match({ seed: 6, map: FOREST, modeId: "koth", players: slots(2) });
+    // une partie de 3 minutes : intervalles, cases, répétitions, annonce, carte intacte
+    const m = new Match({ seed: 11, map: FACTORY, modeId: "koth", players: slots(4) });
     m.phase = "playing";
     const h = m.hill!;
-    const first = h.site;
-    let warnAt = -1, movedAt = -1;
-    const t0 = m.time;
-    for (let k = 0; k < Math.round((HILL_RULES.moveEvery + 1) / DT); k++) {
+    const moves: { t: number; cell: number; warn: number }[] = [];
+    let lastWarn = -1;
+    let badCell = 0, crate = 0, maxLean = 0;
+    for (let k = 0; k < Math.round(180 / DT) && m.phase === "playing"; k++) {
       m.step(idle(m));
       for (const e of m.events) {
-        if (e.t === "hillWarn" && warnAt < 0) warnAt = m.time - t0;
-        if (e.t === "hillMoved" && movedAt < 0) movedAt = m.time - t0;
+        if (e.t === "hillWarn") lastWarn = m.time;
+        if (e.t === "hillMoved") {
+          moves.push({ t: m.time, cell: h.cells[0], warn: m.time - lastWarn });
+          maxLean = Math.max(maxLean, Math.abs(h.lean));
+          const i = h.cells[0];
+          if (m.grid.tiles[i] !== TILE.FLOOR) crate++;
+          if (m.players.some((p) => p.alive && m.grid.idx(Math.floor(p.x), Math.floor(p.y)) === i)) badCell++;
+        }
       }
-      if (warnAt >= 0 && movedAt < 0 && h.next >= 0) {
-        // la prochaine zone est déjà dégagée des blocs
-        if (h.nextCells.some((i) => m.grid.tiles[i] === TILE.BLOCK)) warnAt = -99;
+      // personne ne marque : partie vide (on reste en jeu)
+      h.scores.fill(0);
+    }
+    const gaps = moves.slice(1).map((mv, k) => mv.t - moves[k].t);
+    const firstGap = moves[0]?.t ?? 0;
+    check(moves.length >= 11 && [firstGap, ...gaps].every((d) => d >= HILL_RULES.moveMin - DT && d <= HILL_RULES.moveMax + DT), `en 3 min : ${moves.length} déplacements, toujours entre ${HILL_RULES.moveMin} et ${HILL_RULES.moveMax} s (${Math.min(firstGap, ...gaps).toFixed(1)}–${Math.max(firstGap, ...gaps).toFixed(1)} s)`);
+    check(moves.every((mv) => Math.abs(mv.warn - HILL_RULES.moveWarn) < 0.05), `chaque déplacement est annoncé ${HILL_RULES.moveWarn} s avant (compte à rebours)`);
+    check(crate === 0 && badCell === 0, "jamais sur une caisse, jamais sous un joueur");
+    const cells = moves.map((mv) => mv.cell);
+    const repeatSoon = cells.filter((c, k) => cells.slice(Math.max(0, k - HILL_RULES.memory), k).includes(c)).length;
+    check(new Set(cells).size >= Math.min(cells.length, 9) && repeatSoon === 0, `positions variées (${new Set(cells).size} différentes), jamais une des ${HILL_RULES.memory} dernières`);
+    check(maxLean <= HILL_RULES.fairGap, `équilibre dans la durée : une zone plus proche d'une équipe est compensée ensuite (écart cumulé max ${maxLean} pas)`);
+    check(Array.from(m.grid.tiles).join("") === tiles0, "carte inchangée : aucune caisse cassée, obstacles et départs identiques");
+  }
+  {
+    // capture : points gardés, progression en cours remise à zéro, l'ancienne zone ne compte plus
+    const m = new Match({ seed: 3, map: FACTORY, modeId: "koth", players: slots(4) });
+    m.phase = "playing";
+    const h = m.hill!;
+    const red = m.players.find((p) => m.teamOf(p.id) === 0)!;
+    const [cx, cy] = h.center;
+    place(m, red.id, cx, cy);
+    // les autres loin (sur leurs départs)
+    run(m, 6.5);
+    h.moveIn = HILL_RULES.moveWarn + DT; // le déplacement arrive
+    let moved = false;
+    let before = 0;
+    let frac = 0;
+    for (let k = 0; k < 400 && !moved; k++) {
+      before = h.teamPoints(0);
+      frac = h.scores[0] - before;
+      m.step(idle(m));
+      if (m.events.some((e) => e.t === "hillMoved")) moved = true;
+    }
+    check(frac > 0.05, `(capture en cours au moment du déplacement : ${frac.toFixed(2)} point entamé)`);
+    check(moved && h.teamPoints(0) === before && h.scores[0] === Math.floor(h.scores[0]), `déplacement : les ${before} points gagnés restent, la fraction en cours repart de zéro`);
+    run(m, 2);
+    check(h.teamPoints(0) === before && h.holder === -1, "rester sur l'ancienne zone ne rapporte plus rien");
+    const [nx, ny] = h.center;
+    place(m, red.id, nx, ny);
+    run(m, 2.05);
+    check(h.teamPoints(0) === before + 2, "sur la nouvelle zone : les points reprennent normalement");
+    const blue = m.players.find((p) => m.teamOf(p.id) === 1)!;
+    place(m, blue.id, nx, ny);
+    run(m, 2);
+    check(h.contested && h.teamPoints(0) === before + 2 && h.teamPoints(1) === 0, "deux équipes sur la nouvelle zone : disputée, personne ne marque");
+  }
+  {
+    // équité : les deux équipes peuvent atteindre chaque nouvel objectif, à distance proche
+    let fair = 0, total = 0, unreachable = 0;
+    for (let seed = 1; seed <= 20; seed++) {
+      const m = new Match({ seed, map: FACTORY, modeId: "koth", players: slots(4) });
+      m.phase = "playing";
+      const h = m.hill!;
+      for (let k = 0; k < Math.round(60 / DT); k++) {
+        m.step(idle(m));
+        h.scores.fill(0);
+        if (m.events.some((e) => e.t === "hillWarn")) {
+          const target = h.nextCells[0];
+          const dist = (team: number) => {
+            const from = m.players.filter((p) => p.alive && m.teamOf(p.id) === team).map((p) => m.grid.idx(Math.floor(p.x), Math.floor(p.y)));
+            const d = (h as unknown as { walkCost(f: number[]): Float32Array }).walkCost(from);
+            return d[target];
+          };
+          const a = dist(0), b = dist(1);
+          total++;
+          if (!isFinite(a) || !isFinite(b)) unreachable++;
+          else if (Math.abs(a - b) <= HILL_RULES.liveFairGap) fair++;
+        }
       }
     }
-    check(warnAt > 0 && Math.abs(warnAt - (HILL_RULES.moveEvery - HILL_RULES.moveWarn)) < 0.2, `annonce ${HILL_RULES.moveWarn} s avant (à ${warnAt.toFixed(1)} s), nouvelle zone dégagée`);
-    check(movedAt > 0 && Math.abs(movedAt - HILL_RULES.moveEvery) < 0.2 && h.site !== first && h.next === -1, `la zone change de place après ${HILL_RULES.moveEvery} s (à ${movedAt.toFixed(1)} s)`);
+    check(unreachable === 0 && fair === total, `équité : ${fair}/${total} nouveaux objectifs à distance équivalente pour les deux équipes, tous atteignables`);
+  }
+  {
+    // les deux équipes capturent : parties de bots complètes, chaque équipe marque sur plusieurs positions
+    let ended = 0, stuck = 0;
+    const scoredBy = [new Set<number>(), new Set<number>()];
+    for (let seed = 1; seed <= 6; seed++) {
+      const m = new Match({ seed: seed * 37, map: FACTORY, modeId: "koth", players: slots(4, true) });
+      m.specials.disabled = true;
+      const brains = m.players.map((p) => new BotBrain(p.id, "hard", seed));
+      let g = 0;
+      while (m.phase !== "over" && g++ < 60 * 200) {
+        const before = [...m.hill!.scores];
+        m.step(brains.map((b) => b.update(m, DT)));
+        m.hill!.scores.forEach((v, k) => v > before[k] && scoredBy[k].add(m.hill!.cells[0]));
+        for (const p of m.players) if (p.alive && m.grid.blocksMove(Math.floor(p.x), Math.floor(p.y))) stuck++;
+      }
+      if (m.phase === "over") ended++;
+    }
+    check(ended === 6 && stuck === 0 && scoredBy[0].size >= 3 && scoredBy[1].size >= 3, `bots : 6 parties terminées ; rouges ont marqué sur ${scoredBy[0].size} positions, bleus sur ${scoredBy[1].size}`);
+  }
+  {
+    // synchronisation : un client qui ne reçoit que les instantanés voit la même zone au même moment
+    const srv = new Match({ seed: 21, map: FACTORY, modeId: "koth", players: slots(4) });
+    srv.phase = "playing";
+    const cli = new Match({ seed: 21, map: FACTORY, modeId: "koth", players: slots(4) });
+    let diff = 0, checks = 0;
+    for (let k = 0; k < Math.round(60 / DT); k++) {
+      srv.step(idle(srv));
+      srv.hill!.scores.fill(0);
+      if (k % 3 === 0) {
+        applySnapshot(cli, JSON.parse(JSON.stringify(encodeSnapshot(srv, [0, 0, 0, 0], srv.events))));
+        checks++;
+        if (cli.hill!.cells[0] !== srv.hill!.cells[0] || (cli.hill!.nextCells[0] ?? -1) !== (srv.hill!.nextCells[0] ?? -1) || Math.abs(cli.hill!.moveIn - srv.hill!.moveIn) > 0.01) diff++;
+      }
+    }
+    check(diff === 0, `client et serveur : même zone, même annonce, même compte à rebours (${checks} instantanés comparés)`);
+    // liste d'emplacements différente chez le client (version différente) : la case fait foi
+    const odd = new Match({ seed: 21, map: FACTORY, modeId: "koth", players: slots(4) });
+    odd.hill!.sites.reverse();
+    applySnapshot(odd, JSON.parse(JSON.stringify(encodeSnapshot(srv, [0, 0, 0, 0], []))));
+    check(odd.hill!.cells[0] === srv.hill!.cells[0], "même si la liste diffère chez un client, il affiche la bonne case");
+  }
+  {
+    // fin de partie : plus de déplacement
+    const m = new Match({ seed: 2, map: FACTORY, modeId: "koth", players: slots(4) });
+    m.phase = "playing";
+    m.hill!.scores[0] = HILL_RULES.target;
+    run(m, 0.2);
+    const site = m.hill!.site;
+    m.hill!.moveIn = 0.1;
+    let moved = 0;
+    for (let k = 0; k < 400; k++) {
+      m.step(idle(m));
+      moved += m.events.filter((e) => e.t === "hillMoved" || e.t === "hillWarn").length;
+    }
+    check((m.phase as string) === "over" && moved === 0 && m.hill!.site === site, "partie terminée : aucun nouveau déplacement");
   }
 }
 

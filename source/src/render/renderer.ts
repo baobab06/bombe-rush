@@ -91,6 +91,8 @@ export class Renderer {
   private links: { x: number; y: number; toX: number; toY: number; at: number; delay: number; color?: string }[] = [];
   /** petits mots « arcade » (BOOM!, ZAP!, CHAÎNE x3…) : courts, peu nombreux */
   private callouts: { x: number; y: number; text: string; color: string; at: number; big: boolean }[] = [];
+  /** Domination : ancienne zone qui s'efface et nouvelle zone qui apparaît */
+  private hillShift: { fromX: number; fromY: number; x: number; y: number; at: number } | null = null;
   /** réaction en chaîne : cases qui vont sauter (pour compter le combo) */
   private chainTargets = new Map<number, number>();
   private combo = 0;
@@ -119,6 +121,7 @@ export class Renderer {
     this.frosts = [];
     this.links = [];
     this.callouts = [];
+    this.hillShift = null;
     this.chainTargets.clear();
     this.combo = 0;
     this.trailAt.clear();
@@ -365,7 +368,13 @@ export class Renderer {
           P.spawn("ring", e.x + 0.5, e.y + 0.5, { life: 0.5, size: 0.3, color: "#ffd64a" });
           break;
         }
+        case "hillWarn":
+          this.callout(e.x + 0.5, e.y - 0.2, "NOUVELLE ZONE", "#9fe6ff", true);
+          break;
         case "hillMoved":
+          this.hillShift = { fromX: e.fromX ?? e.x, fromY: e.fromY ?? e.y, x: e.x, y: e.y, at: this.time };
+          if (e.fromX !== undefined && e.fromY !== undefined) for (let k = 0; k < 10; k++) P.spawn("twinkle", e.fromX + 0.5 + (Math.random() - 0.5) * 0.9, e.fromY + 0.5 + (Math.random() - 0.5) * 0.9, { z: 0.1, vz: 1.2, life: 0.5, size: 0.08, color: "#fff2b0" });
+          this.callout(e.x + 0.5, e.y - 0.2, "ZONE ICI !", "#ffd64a", true);
           P.spawn("ring", e.x + 0.5, e.y + 0.5, { life: 0.7, size: 1.4, color: "#ffd64a" });
           for (let k = 0; k < 18; k++) P.spawn("twinkle", e.x + 0.5 + (Math.random() - 0.5) * 2.6, e.y + 0.5 + (Math.random() - 0.5) * 2.6, { z: 0.2 + Math.random(), vz: 0.8, life: 0.8, size: 0.1, color: "#ffe27a" });
           break;
@@ -1071,26 +1080,51 @@ export class Renderer {
     const hot = hill.contested;
     const held = hill.holder >= 0;
     const pulse = 0.5 + 0.5 * Math.sin(t * (hot ? 10 : 3));
-    // emplacements possibles (cartes Domination) : dalles dorées discrètes au sol
-    if (m.config.map.modes?.includes("koth")) {
-      for (let k = 0; k < hill.sites.length; k++) {
-        if (k === hill.site || k === hill.next) continue;
-        for (const i of hill.sites[k].cells) {
-          const X = (i % w) * s;
-          const Y = Math.floor(i / w) * s;
-          ctx.fillStyle = "rgba(255,215,90,0.10)";
-          ctx.fillRect(X + s * 0.06, Y + s * 0.06, s * 0.88, s * 0.88);
-          ctx.strokeStyle = "rgba(255,225,130,0.28)";
-          ctx.lineWidth = Math.max(1, s * 0.03);
-          ctx.strokeRect(X + s * 0.12, Y + s * 0.12, s * 0.76, s * 0.76);
-        }
-      }
+    // zone de départ peinte au sol (médaillon) : éteinte quand la zone est ailleurs, pour ne pas tromper
+    if (hill.site !== 0 && hill.sites[0]) {
+      const [hx, hy] = hill.sites[0].center;
+      ctx.beginPath();
+      ctx.arc(hx * s + s / 2, hy * s + s / 2, s * 0.5, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(18,22,32,0.62)";
+      ctx.fill();
+    }
+    // déplacement : l'ancienne zone rétrécit et s'efface, la nouvelle « pousse » (0,5 s)
+    const sh = this.hillShift;
+    const age = sh ? t - sh.at : 99;
+    if (sh && age < 0.6 && (sh.fromX !== sh.x || sh.fromY !== sh.y)) {
+      const k = age / 0.6;
+      const r = (1 - k) * s * 0.46;
+      const X = sh.fromX * s + s / 2;
+      const Y = sh.fromY * s + s / 2;
+      ctx.fillStyle = `rgba(255,205,60,${0.35 * (1 - k)})`;
+      ctx.fillRect(X - r, Y - r, r * 2, r * 2);
+      ctx.strokeStyle = `rgba(255,235,150,${0.9 * (1 - k)})`;
+      ctx.lineWidth = Math.max(1.5, s * 0.05);
+      ctx.strokeRect(X - r, Y - r, r * 2, r * 2);
+    }
+    const pop = age < 0.35 ? 0.35 + 0.65 * Math.sin((age / 0.35) * Math.PI * 0.5) * 1.08 : 1;
+    // faisceau lumineux au-dessus de la nouvelle zone pendant 2 s : repérable d'un coup d'œil
+    if (sh && age < 2) {
+      const a = age < 1.4 ? 1 : (2 - age) / 0.6;
+      const X = sh.x * s + s / 2;
+      const top = sh.y * s - s * 2.2;
+      const grad = ctx.createLinearGradient(0, top, 0, sh.y * s + s);
+      grad.addColorStop(0, "rgba(255,225,120,0)");
+      grad.addColorStop(1, `rgba(255,225,120,${0.42 * a})`);
+      ctx.fillStyle = grad;
+      ctx.fillRect(X - s * 0.32, top, s * 0.64, sh.y * s + s - top);
     }
     const fill = hot ? `rgba(255,70,70,${0.18 + pulse * 0.18})` : `rgba(255,205,60,${0.16 + pulse * (held ? 0.2 : 0.1)})`;
     const edge = hot ? `rgba(255,110,110,${0.7 + pulse * 0.3})` : `rgba(255,225,120,${0.65 + pulse * 0.3})`;
     for (const i of hill.cells) {
       const X = (i % w) * s;
       const Y = Math.floor(i / w) * s;
+      ctx.save();
+      if (pop !== 1) {
+        ctx.translate(X + s / 2, Y + s / 2);
+        ctx.scale(pop, pop);
+        ctx.translate(-X - s / 2, -Y - s / 2);
+      }
       ctx.fillStyle = fill;
       ctx.fillRect(X + 1, Y + 1, s - 2, s - 2);
       ctx.strokeStyle = edge;
@@ -1098,6 +1132,7 @@ export class Renderer {
       ctx.setLineDash([s * 0.18, s * 0.1]);
       ctx.lineDashOffset = -t * s * 0.3;
       ctx.strokeRect(X + s * 0.08, Y + s * 0.08, s * 0.84, s * 0.84);
+      ctx.restore();
     }
     ctx.setLineDash([]);
     // prochaine zone annoncée : contour bleu qui clignote + compte à rebours

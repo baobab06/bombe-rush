@@ -210,7 +210,7 @@ export type SimEvent =
   | { t: "hillTaken"; player: number }
   | { t: "hillPoints"; player: number; points: number }
   | { t: "hillWarn"; x: number; y: number }
-  | { t: "hillMoved"; x: number; y: number }
+  | { t: "hillMoved"; x: number; y: number; fromX?: number; fromY?: number }
   | { t: "respawn"; player: number; x: number; y: number }
   | { t: "eruption"; x: number; y: number }
   | { t: "matchEnd"; winner: number };

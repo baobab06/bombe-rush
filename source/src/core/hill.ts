@@ -1,10 +1,17 @@
 /**
  * Mode « Roi de la colline ».
  *
- * - La zone (au plus 3×3 cases, sans les murs ni l'eau / la lave) commence au
- *   centre puis SE DÉPLACE toutes les HILL_RULES.moveEvery secondes vers un
- *   autre emplacement (centre ou un des 4 quarts, placés en miroir). Le nouvel
- *   emplacement est annoncé moveWarn secondes avant (et dégagé des blocs).
+ * - La zone (une case) commence au centre puis SE DÉPLACE toutes les 10 à 15 s
+ *   (HILL_RULES.moveMin/moveMax, tirage au rng de la partie) vers une case
+ *   tirée au sort parmi les cases autorisées : jamais un mur, une caisse, un
+ *   obstacle, le bord ou une case dangereuse ; loin des départs des équipes ;
+ *   jamais une des dernières positions ; à distance de marche équitable pour
+ *   les deux équipes. Le nouvel emplacement est annoncé moveWarn s avant.
+ *   Au déplacement : la progression en cours (fraction de point) repart de
+ *   zéro, les points gagnés restent ; l'ancienne zone ne compte plus, la
+ *   nouvelle se prend avec les règles habituelles (une seule équipe dessus =
+ *   elle marque, deux équipes = disputée). Plus aucun déplacement une fois la
+ *   partie terminée.
  * - Un joueur SEUL sur la colline marque 1 point par seconde. À deux ou plus,
  *   la colline est disputée : personne ne marque.
  * - Un joueur éliminé réapparaît après quelques secondes, loin des autres,
@@ -18,7 +25,7 @@
 import type { Match } from "./match";
 import { clearAbilities } from "./specials";
 import { DT, RULES } from "./rules";
-import { TILE, type PlayerState } from "./types";
+import { TERRAIN, TILE, type PlayerState } from "./types";
 
 export const HILL_RULES = {
   /** points pour gagner (1 point = 1 seconde seul sur la colline) */
@@ -29,16 +36,29 @@ export const HILL_RULES = {
   respawnShield: 2.5,
   /** distance minimale (cases) entre la réapparition et la colline */
   respawnHillGap: 3,
-  /** la zone change de place toutes les N secondes */
-  moveEvery: 10,
+  /** la zone change de place toutes les moveMin à moveMax secondes (tirage à chaque fois) */
+  moveMin: 10,
+  moveMax: 15,
   /** annonce (contour + compte à rebours) avant le déplacement */
   moveWarn: 3,
+  /** distance minimale (cases) entre la zone et les départs des équipes */
+  spawnGap: 3,
+  /** distance minimale (cases) entre l'ancienne et la nouvelle position */
+  minJump: 3,
+  /** positions récentes à ne pas reprendre */
+  memory: 4,
+  /** équité : écart maximal de distance de marche entre les deux équipes (départs), et avantage cumulé maximal */
+  fairGap: 4,
+  /** équité au moment du tirage (positions actuelles des joueurs) */
+  liveFairGap: 3,
 } as const;
 
 interface Site {
   center: [number, number];
   cells: number[];
   set: Set<number>;
+  /** Avance d'une équipe (marche des rouges − marche des bleus depuis leurs départs). */
+  lean?: number;
 }
 
 export class HillState {
@@ -49,7 +69,11 @@ export class HillState {
   /** prochain emplacement annoncé (-1 = pas encore) */
   next = -1;
   /** secondes avant le prochain déplacement */
-  moveIn: number = HILL_RULES.moveEvery;
+  moveIn: number = HILL_RULES.moveMin;
+  /** dernières positions (index d'emplacement), pour ne pas revenir aux mêmes */
+  recent: number[] = [];
+  /** Avantage cumulé des emplacements tirés (0 = parfaitement équilibré). */
+  lean = 0;
   /** points de chaque joueur (secondes passées seul sur la colline) */
   readonly scores: number[];
   /** temps restant avant la réapparition de chaque joueur (≤ 0 = rien en attente) */
@@ -121,9 +145,117 @@ export class HillState {
     }
     this.sites = single;
     this.clearBlocks(this.sites[0]);
+    // toutes les autres cases autorisées : la zone pourra s'y déplacer
+    this.sites.push(...this.buildPool());
+    this.moveIn = this.rollInterval();
     // équipes : un score par équipe (rouges, bleus) ; sinon un score par joueur
     this.scores = m.teams ? [0, 0] : m.players.map(() => 0);
     this.respawnIn = m.players.map(() => 0);
+  }
+
+  /** Délai avant le prochain déplacement : entre moveMin et moveMax (rng de la partie : identique pour tous). */
+  private rollInterval(): number {
+    return HILL_RULES.moveMin + (HILL_RULES.moveMax - HILL_RULES.moveMin) * this.m.rng.next();
+  }
+
+  /**
+   * Emplacements possibles (calculés une fois, à partir du plan : identiques
+   * sur le serveur et chez tous les joueurs) : cases intérieures qui ne sont ni
+   * un mur / obstacle, ni de la lave, de l'eau ou une cheminée ; loin des
+   * départs des équipes ; à distance de marche équitable des deux départs.
+   */
+  private buildPool(): Site[] {
+    const m = this.m;
+    const g = m.grid;
+    const plan = m.config.map.layout;
+    const starts = m.players.map((p) => [Math.floor(p.x), Math.floor(p.y), m.teamOf(p.id)] as const);
+    const fromTeam = (team: number) => this.walkCost(starts.filter((s) => m.teams === null || s[2] === team).map((s) => g.idx(s[0], s[1])));
+    const dA = m.teams ? fromTeam(0) : null;
+    const dB = m.teams ? fromTeam(1) : null;
+    const first = this.sites[0]?.cells[0];
+    const out: Site[] = [];
+    for (let y = 1; y < g.h - 1; y++)
+      for (let x = 1; x < g.w - 1; x++) {
+        const i = g.idx(x, y);
+        if (i === first) continue;
+        if (plan[y]?.[x] === "#" || g.tile(x, y) === TILE.WALL || g.isHazard(x, y) || g.terrainAt(x, y) === TERRAIN.VENT) continue;
+        if (starts.some((s) => Math.abs(s[0] - x) + Math.abs(s[1] - y) < HILL_RULES.spawnGap)) continue;
+        if (dA && dB) {
+          if (!isFinite(dA[i]) || !isFinite(dB[i]) || Math.abs(dA[i] - dB[i]) > HILL_RULES.fairGap) continue;
+        }
+        out.push({ center: [x, y], cells: [i], set: new Set([i]), lean: dA && dB ? dA[i] - dB[i] : 0 });
+      }
+    return out;
+  }
+
+  /** Coût de marche depuis des cases de départ : sol 1, caisse 3 (à casser), murs infranchissables. */
+  private walkCost(from: number[]): Float32Array {
+    const g = this.m.grid;
+    const dist = new Float32Array(g.w * g.h).fill(Infinity);
+    const buckets: number[][] = [[]];
+    for (const i of from) {
+      dist[i] = 0;
+      buckets[0].push(i);
+    }
+    for (let d = 0; d < buckets.length; d++) {
+      for (const c of buckets[d] ?? []) {
+        if (dist[c] !== d) continue;
+        const x = c % g.w;
+        const y = (c - x) / g.w;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const t = g.tile(x + dx, y + dy);
+          if (t === TILE.WALL || g.isHazard(x + dx, y + dy)) continue;
+          const n = g.idx(x + dx, y + dy);
+          const nd = d + (t === TILE.BLOCK ? 3 : 1);
+          if (nd >= dist[n]) continue;
+          dist[n] = nd;
+          (buckets[nd] ??= []).push(n);
+        }
+      }
+    }
+    return dist;
+  }
+
+  /**
+   * Choix du prochain emplacement (tirage déterministe) : case libre maintenant
+   * (sol, sans bombe, feu, gaz, bonus ni joueur), pas une des dernières
+   * positions, assez loin de la zone actuelle, et la plus équitable pour les
+   * deux équipes vu leurs positions actuelles. -1 = aucune case possible.
+   */
+  pickNext(): number {
+    const m = this.m;
+    const g = m.grid;
+    const [cx, cy] = this.center;
+    const occupied = new Set(m.players.filter((p) => p.alive).map((p) => g.idx(Math.floor(p.x), Math.floor(p.y))));
+    const free = (k: number, strict: boolean) => {
+      if (k === this.site) return false;
+      const i = this.sites[k].cells[0];
+      const [x, y] = this.sites[k].center;
+      if (g.tiles[i] !== TILE.FLOOR || g.bombAt[i] >= 0 || g.fire[i] > 0 || g.bonusAt[i] >= 0 || m.gasAt(i) || occupied.has(i)) return false;
+      if (strict && (this.recent.includes(k) || Math.abs(x - cx) + Math.abs(y - cy) < HILL_RULES.minJump)) return false;
+      return true;
+    };
+    let cands = this.sites.map((_, k) => k).filter((k) => free(k, true));
+    if (!cands.length) cands = this.sites.map((_, k) => k).filter((k) => free(k, false));
+    if (!cands.length) return -1;
+    if (m.teams) {
+      // équité dans la durée : une zone plus proche des rouges est suivie d'une zone neutre ou plus proche des bleus
+      const balanced = cands.filter((k) => Math.abs(this.lean + (this.sites[k].lean ?? 0)) <= HILL_RULES.fairGap);
+      if (balanced.length) cands = balanced;
+      // équité en direct : distance de marche du joueur le plus proche de chaque équipe
+      const alive = (team: number) => m.players.filter((p) => p.alive && m.teamOf(p.id) === team).map((p) => g.idx(Math.floor(p.x), Math.floor(p.y)));
+      const a = alive(0);
+      const b = alive(1);
+      if (a.length && b.length) {
+        const dA = this.walkCost(a);
+        const dB = this.walkCost(b);
+        const gap = (k: number) => Math.abs(dA[this.sites[k].cells[0]] - dB[this.sites[k].cells[0]]);
+        const best = Math.min(...cands.map(gap));
+        const fair = cands.filter((k) => gap(k) <= Math.max(best, HILL_RULES.liveFairGap));
+        if (fair.length) cands = fair;
+      }
+    }
+    return cands[Math.floor(m.rng.next() * cands.length)];
   }
 
   /** Index du score d'un joueur (son équipe en 2 contre 2, sinon lui-même). */
@@ -268,20 +400,26 @@ export class HillState {
     if (this.sites.length > 1) {
       this.moveIn -= DT;
       if (this.next < 0 && this.moveIn <= HILL_RULES.moveWarn) {
-        // tirage déterministe (rng de la partie), jamais le même emplacement
-        let k = Math.floor(m.rng.next() * (this.sites.length - 1));
-        if (k >= this.site) k++;
-        this.next = k;
-        this.clearBlocks(this.sites[k]);
-        m.events.push({ t: "hillWarn", x: this.sites[k].center[0], y: this.sites[k].center[1] });
+        const k = this.pickNext();
+        if (k < 0) this.moveIn = HILL_RULES.moveWarn + 1; // aucune case libre : on réessaie dans 1 s
+        else {
+          this.next = k;
+          m.events.push({ t: "hillWarn", x: this.sites[k].center[0], y: this.sites[k].center[1] });
+        }
       }
       if (this.moveIn <= 0 && this.next >= 0) {
+        const from = this.center;
+        this.recent.push(this.site);
+        this.lean += this.sites[this.next].lean ?? 0;
+        if (this.recent.length > HILL_RULES.memory) this.recent.shift();
         this.site = this.next;
         this.next = -1;
-        this.moveIn = HILL_RULES.moveEvery;
+        this.moveIn = this.rollInterval();
+        // la capture en cours repart de zéro (les points entiers déjà gagnés restent)
+        for (let k = 0; k < this.scores.length; k++) this.scores[k] = Math.floor(this.scores[k] + 1e-6);
         this.holder = -1;
         this.contested = false;
-        m.events.push({ t: "hillMoved", x: this.center[0], y: this.center[1] });
+        m.events.push({ t: "hillMoved", x: this.center[0], y: this.center[1], fromX: from[0], fromY: from[1] });
       }
     }
     // réapparitions

@@ -1033,8 +1033,14 @@ var HILL_RULES = {
   respawnDelay: 3,
   respawnShield: 2.5,
   respawnHillGap: 3,
-  moveEvery: 10,
-  moveWarn: 3
+  moveMin: 10,
+  moveMax: 15,
+  moveWarn: 3,
+  spawnGap: 3,
+  minJump: 3,
+  memory: 4,
+  fairGap: 4,
+  liveFairGap: 3
 };
 
 class HillState {
@@ -1042,7 +1048,9 @@ class HillState {
   sites;
   site = 0;
   next = -1;
-  moveIn = HILL_RULES.moveEvery;
+  moveIn = HILL_RULES.moveMin;
+  recent = [];
+  lean = 0;
   scores;
   respawnIn;
   holder = -1;
@@ -1114,8 +1122,109 @@ class HillState {
     }
     this.sites = single;
     this.clearBlocks(this.sites[0]);
+    this.sites.push(...this.buildPool());
+    this.moveIn = this.rollInterval();
     this.scores = m.teams ? [0, 0] : m.players.map(() => 0);
     this.respawnIn = m.players.map(() => 0);
+  }
+  rollInterval() {
+    return HILL_RULES.moveMin + (HILL_RULES.moveMax - HILL_RULES.moveMin) * this.m.rng.next();
+  }
+  buildPool() {
+    const m = this.m;
+    const g = m.grid;
+    const plan = m.config.map.layout;
+    const starts = m.players.map((p) => [Math.floor(p.x), Math.floor(p.y), m.teamOf(p.id)]);
+    const fromTeam = (team) => this.walkCost(starts.filter((s) => m.teams === null || s[2] === team).map((s) => g.idx(s[0], s[1])));
+    const dA = m.teams ? fromTeam(0) : null;
+    const dB = m.teams ? fromTeam(1) : null;
+    const first = this.sites[0]?.cells[0];
+    const out = [];
+    for (let y = 1;y < g.h - 1; y++)
+      for (let x = 1;x < g.w - 1; x++) {
+        const i = g.idx(x, y);
+        if (i === first)
+          continue;
+        if (plan[y]?.[x] === "#" || g.tile(x, y) === TILE.WALL || g.isHazard(x, y) || g.terrainAt(x, y) === TERRAIN.VENT)
+          continue;
+        if (starts.some((s) => Math.abs(s[0] - x) + Math.abs(s[1] - y) < HILL_RULES.spawnGap))
+          continue;
+        if (dA && dB) {
+          if (!isFinite(dA[i]) || !isFinite(dB[i]) || Math.abs(dA[i] - dB[i]) > HILL_RULES.fairGap)
+            continue;
+        }
+        out.push({ center: [x, y], cells: [i], set: new Set([i]), lean: dA && dB ? dA[i] - dB[i] : 0 });
+      }
+    return out;
+  }
+  walkCost(from) {
+    const g = this.m.grid;
+    const dist = new Float32Array(g.w * g.h).fill(Infinity);
+    const buckets = [[]];
+    for (const i of from) {
+      dist[i] = 0;
+      buckets[0].push(i);
+    }
+    for (let d = 0;d < buckets.length; d++) {
+      for (const c of buckets[d] ?? []) {
+        if (dist[c] !== d)
+          continue;
+        const x = c % g.w;
+        const y = (c - x) / g.w;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const t = g.tile(x + dx, y + dy);
+          if (t === TILE.WALL || g.isHazard(x + dx, y + dy))
+            continue;
+          const n = g.idx(x + dx, y + dy);
+          const nd = d + (t === TILE.BLOCK ? 3 : 1);
+          if (nd >= dist[n])
+            continue;
+          dist[n] = nd;
+          (buckets[nd] ??= []).push(n);
+        }
+      }
+    }
+    return dist;
+  }
+  pickNext() {
+    const m = this.m;
+    const g = m.grid;
+    const [cx, cy] = this.center;
+    const occupied = new Set(m.players.filter((p) => p.alive).map((p) => g.idx(Math.floor(p.x), Math.floor(p.y))));
+    const free = (k, strict) => {
+      if (k === this.site)
+        return false;
+      const i = this.sites[k].cells[0];
+      const [x, y] = this.sites[k].center;
+      if (g.tiles[i] !== TILE.FLOOR || g.bombAt[i] >= 0 || g.fire[i] > 0 || g.bonusAt[i] >= 0 || m.gasAt(i) || occupied.has(i))
+        return false;
+      if (strict && (this.recent.includes(k) || Math.abs(x - cx) + Math.abs(y - cy) < HILL_RULES.minJump))
+        return false;
+      return true;
+    };
+    let cands = this.sites.map((_, k) => k).filter((k) => free(k, true));
+    if (!cands.length)
+      cands = this.sites.map((_, k) => k).filter((k) => free(k, false));
+    if (!cands.length)
+      return -1;
+    if (m.teams) {
+      const balanced = cands.filter((k) => Math.abs(this.lean + (this.sites[k].lean ?? 0)) <= HILL_RULES.fairGap);
+      if (balanced.length)
+        cands = balanced;
+      const alive = (team) => m.players.filter((p) => p.alive && m.teamOf(p.id) === team).map((p) => g.idx(Math.floor(p.x), Math.floor(p.y)));
+      const a = alive(0);
+      const b = alive(1);
+      if (a.length && b.length) {
+        const dA = this.walkCost(a);
+        const dB = this.walkCost(b);
+        const gap = (k) => Math.abs(dA[this.sites[k].cells[0]] - dB[this.sites[k].cells[0]]);
+        const best = Math.min(...cands.map(gap));
+        const fair = cands.filter((k) => gap(k) <= Math.max(best, HILL_RULES.liveFairGap));
+        if (fair.length)
+          cands = fair;
+      }
+    }
+    return cands[Math.floor(m.rng.next() * cands.length)];
   }
   slot(id) {
     return this.m.teams ? this.m.teams[id] : id;
@@ -1250,20 +1359,28 @@ class HillState {
     if (this.sites.length > 1) {
       this.moveIn -= DT;
       if (this.next < 0 && this.moveIn <= HILL_RULES.moveWarn) {
-        let k = Math.floor(m.rng.next() * (this.sites.length - 1));
-        if (k >= this.site)
-          k++;
-        this.next = k;
-        this.clearBlocks(this.sites[k]);
-        m.events.push({ t: "hillWarn", x: this.sites[k].center[0], y: this.sites[k].center[1] });
+        const k = this.pickNext();
+        if (k < 0)
+          this.moveIn = HILL_RULES.moveWarn + 1;
+        else {
+          this.next = k;
+          m.events.push({ t: "hillWarn", x: this.sites[k].center[0], y: this.sites[k].center[1] });
+        }
       }
       if (this.moveIn <= 0 && this.next >= 0) {
+        const from = this.center;
+        this.recent.push(this.site);
+        this.lean += this.sites[this.next].lean ?? 0;
+        if (this.recent.length > HILL_RULES.memory)
+          this.recent.shift();
         this.site = this.next;
         this.next = -1;
-        this.moveIn = HILL_RULES.moveEvery;
+        this.moveIn = this.rollInterval();
+        for (let k = 0;k < this.scores.length; k++)
+          this.scores[k] = Math.floor(this.scores[k] + 0.000001);
         this.holder = -1;
         this.contested = false;
-        m.events.push({ t: "hillMoved", x: this.center[0], y: this.center[1] });
+        m.events.push({ t: "hillMoved", x: this.center[0], y: this.center[1], fromX: from[0], fromY: from[1] });
       }
     }
     const n = m.players.length;
@@ -4012,7 +4129,7 @@ function encodeSnapshot(m, acks, events) {
     toxic: m.toxicZones.map((z) => [z.id, z.owner, z.cells, r2(z.timeLeft), z.duration]),
     bonuses: [...m.bonuses.values()].map((b) => [b.id, b.type, b.tx, b.ty, r2(b.invuln), r2(b.age)]),
     pending: m.pendingDrops.map(([x, y, l]) => [x, y, r2(l)]),
-    hill: m.hill ? { scores: m.hill.scores.map(r2), respawn: m.hill.respawnIn.map(r2), holder: m.hill.holder, contested: m.hill.contested, site: m.hill.site, next: m.hill.next, moveIn: r2(m.hill.moveIn) } : null,
+    hill: m.hill ? { scores: m.hill.scores.map(r2), respawn: m.hill.respawnIn.map(r2), holder: m.hill.holder, contested: m.hill.contested, site: m.hill.site, next: m.hill.next, moveIn: r2(m.hill.moveIn), siteCell: m.hill.cells[0], nextCell: m.hill.next >= 0 ? m.hill.sites[m.hill.next].cells[0] : -1 } : null,
     chaos: m.chaos ? {
       pending: m.chaos.pending ? [m.chaos.pending.def.id, r2(m.chaos.pendingLeft), m.chaos.pending.zone] : null,
       active: m.chaos.active.map((a) => [a.def.id, r2(a.timer), a.zone]),
