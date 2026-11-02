@@ -44,7 +44,7 @@ export class GameRunner {
 
   constructor(
     seats: Seat[],
-    opts: { mapId: string; modeId: string; fillBots: boolean; maxPlayers: number },
+    private opts: { mapId: string; modeId: string; fillBots: boolean; maxPlayers: number; spectators?: boolean },
     private send: (token: string, msg: ServerMsg) => void,
     private onEnd: (winner: number) => void,
   ) {
@@ -89,6 +89,8 @@ export class GameRunner {
       modeId: m.config.modeId,
       slots: this.slots,
       you,
+      // salle privée : un joueur éliminé peut regarder la fin de la manche (Chaos)
+      spectate: !!this.opts.spectators,
     });
     this.send(token, { t: "snap", s: encodeSnapshot(m, this.acks, []) });
   }

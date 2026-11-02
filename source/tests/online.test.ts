@@ -100,5 +100,16 @@ pump();
 check(m.phase === "over" && mirrors.get("A")!.match.phase === "over", "fin de partie reçue par les clients");
 check(mirrors.get("A")!.match.bonuses.size === 0 && mirrors.get("A")!.match.toxicZones.length === 0, "fin de partie : rien ne reste chez les clients");
 runner.stop();
+// mode spectateur : seulement en salle privée (le serveur le dit au client)
+{
+  const sent: Msg[] = [];
+  const mk = (isPublic: boolean) => {
+    const g = new GameRunner([{ token: "S", name: "S", characterId: "pip" }], { mapId: "forest", modeId: "chaos", fillBots: true, maxPlayers: 4, spectators: !isPublic }, (_t, msg) => sent.push(JSON.parse(JSON.stringify(msg))), () => {});
+    g.sendStart("S");
+    const start = sent.filter((x) => x.t === "matchStart").pop()!;
+    return start.spectate;
+  };
+  check(mk(false) === true && mk(true) === false, "spectateur annoncé en salle privée, pas en partie publique");
+}
 console.log(failures ? `\n${failures} échec(s)` : "\nTout est vert.");
 (globalThis as unknown as { process: { exit(c: number): void } }).process.exit(failures ? 1 : 0);

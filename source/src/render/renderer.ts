@@ -104,6 +104,8 @@ export class Renderer {
   private pfx = new Map<number, PlayerFx>();
   private ambientAcc = 0;
   localPlayer = -1;
+  /** mode spectateur : joueur regardé (-1 = aucun) */
+  watchId = -1;
   reducedMotion = false;
 
   constructor(canvas: HTMLCanvasElement) {
@@ -942,6 +944,32 @@ export class Renderer {
     this.particles.draw(ctx, 0, 0, s);
     for (const p of m.players) if (p.alive) this.drawEmote(p.id, px(p.id), py(p.id), headTopOffset(lookOf(p.characterId).kind));
 
+    // mode spectateur : flèche et anneau qui suivent le joueur regardé
+    const wp = this.watchId >= 0 ? m.players[this.watchId] : undefined;
+    if (wp && wp.alive) {
+      const x = px(wp.id) * s;
+      const yy = py(wp.id) * s;
+      const above = oy + yy - s * 1.6 > 0;
+      const y = above ? yy - s * 1.1 + Math.sin(t * 5) * s * 0.07 : yy + s * 0.95 + Math.sin(t * 5) * s * 0.07;
+      const dir = above ? 1 : -1;
+      ctx.save();
+      ctx.fillStyle = "#ffe066";
+      ctx.strokeStyle = "rgba(30,20,0,0.85)";
+      ctx.lineWidth = Math.max(1.5, s * 0.05);
+      ctx.beginPath();
+      ctx.moveTo(x - s * 0.2, y - s * 0.14 * dir);
+      ctx.lineTo(x + s * 0.2, y - s * 0.14 * dir);
+      ctx.lineTo(x, y + s * 0.14 * dir);
+      ctx.closePath();
+      ctx.stroke();
+      ctx.fill();
+      ctx.strokeStyle = `rgba(255,224,102,${0.55 + 0.35 * Math.sin(t * 6)})`;
+      ctx.lineWidth = Math.max(1.5, s * 0.06);
+      ctx.beginPath();
+      ctx.ellipse(x, yy + s * 0.32, s * 0.46, s * 0.17, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
     // repère « TOI » en début de partie
     const me = m.players[this.localPlayer];
     if (me && me.alive && m.time < 3) {
@@ -1016,7 +1044,7 @@ export class Renderer {
     if (this.fogK < 0.02) return;
     const ctx = this.ctx;
     const s = this.s;
-    const me = m.players[this.localPlayer];
+    const me = m.players[this.watchId >= 0 ? this.watchId : this.localPlayer];
     const cx = me && me.alive ? this.ox + me.x * s : this.ox + (m.grid.w * s) / 2;
     const cy = me && me.alive ? this.oy + me.y * s : this.oy + (m.grid.h * s) / 2;
     const r = s * (me && me.alive ? 2.4 : 4);

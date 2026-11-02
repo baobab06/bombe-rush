@@ -30,14 +30,17 @@ export class OnlineSession implements GameSession {
   private history: Received[] = [];
   private events: SimEvent[] = [];
   serverEnded = false;
+  /** salle privée : mode spectateur autorisé après élimination */
+  readonly spectate: boolean;
 
   constructor(
-    start: { matchId: number; seed: number; mapId: string; modeId: string; slots: PlayerSlot[]; you: number },
+    start: { matchId: number; seed: number; mapId: string; modeId: string; slots: PlayerSlot[]; you: number; spectate?: boolean },
     private conn: Connection,
   ) {
     this.matchId = start.matchId;
     this.match = new Match({ seed: start.seed, map: getMap(start.mapId), modeId: start.modeId, players: start.slots });
     this.localPlayer = start.you;
+    this.spectate = !!start.spectate;
   }
 
   push(s: Snapshot) {
@@ -66,8 +69,11 @@ export class OnlineSession implements GameSession {
     // 2. notre entrée : envoyée au serveur et appliquée tout de suite (prédiction)
     const playing = me.alive && (m.phase === "playing" || m.phase === "ending");
     const cmd = playing ? localInput : NO_INPUT;
-    this.seq++;
-    this.conn.send({ t: "input", seq: this.seq, cmd });
+    // éliminé (spectateur ou en attente de réapparition) : rien à envoyer
+    if (playing || me.alive) {
+      this.seq++;
+      this.conn.send({ t: "input", seq: this.seq, cmd });
+    }
     if (playing) {
       this.pending.push({ seq: this.seq, cmd });
       if (this.pending.length > 120) this.pending.shift();

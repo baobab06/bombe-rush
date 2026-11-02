@@ -266,7 +266,7 @@ export class Lobby {
     }
     r.game = new GameRunner(
       seats,
-      { mapId: r.mapId, modeId: r.modeId, fillBots: r.fillBots || r.modeId === "koth", maxPlayers: MAX_ROOM_PLAYERS },
+      { mapId: r.mapId, modeId: r.modeId, fillBots: r.fillBots || r.modeId === "koth", maxPlayers: MAX_ROOM_PLAYERS, spectators: !r.isPublic },
       this.hooks.send,
       () => this.endGame(r),
     );

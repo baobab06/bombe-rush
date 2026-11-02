@@ -106,6 +106,60 @@ export class GameScreen {
   private viewH = 0;
   private finished = false;
 
+  // ------------------------------------------------- mode spectateur (Chaos, salle privée)
+  /** le joueur local, éliminé, regarde la fin de la manche */
+  spectating = false;
+  /** joueur regardé (-1 = aucun) */
+  watchId = -1;
+  private spectateDelay = 0;
+  /** le mode spectateur vient de commencer / changer (main.ts met l'interface à jour) */
+  onSpectate: (() => void) | null = null;
+
+  /** Spectateur possible : partie en ligne en salle privée, mode Chaos. */
+  get canSpectate(): boolean {
+    const s = this.session as (GameSession & { spectate?: boolean }) | null;
+    return !!s && this.online && !!s.spectate && s.match.config.modeId === "chaos";
+  }
+
+  /** Joueurs encore en vie que l'on peut regarder (dans l'ordre des places). */
+  private watchable(): number[] {
+    const s = this.session;
+    if (!s) return [];
+    return s.match.players.filter((p) => p.alive && p.id !== s.localPlayer).map((p) => p.id);
+  }
+
+  /** Change de joueur regardé : +1 suivant, -1 précédent. */
+  watchStep(dir: 1 | -1) {
+    if (!this.spectating) return;
+    const list = this.watchable();
+    if (!list.length) return;
+    const k = list.indexOf(this.watchId);
+    this.watchId = list[(k < 0 ? 0 : k + dir + list.length) % list.length];
+    this.renderer.watchId = this.watchId;
+    audio.play("click", 0.5);
+    this.onSpectate?.();
+  }
+
+  private enterSpectate() {
+    this.spectating = true;
+    this.controls.releaseAll();
+    this.controls.enabled = false;
+    // on suit en priorité celui qui nous a éliminé, sinon le premier encore en vie
+    const list = this.watchable();
+    this.watchId = list.includes(this.killedBy) ? this.killedBy : (list[0] ?? -1);
+    this.renderer.watchId = this.watchId;
+    this.onSpectate?.();
+  }
+
+  private leaveSpectate() {
+    if (!this.spectating && this.watchId < 0) return;
+    this.spectating = false;
+    this.watchId = -1;
+    this.renderer.watchId = -1;
+    this.onSpectate?.();
+  }
+  private killedBy = -1;
+
   constructor(private canvas: HTMLCanvasElement) {
     this.renderer = new Renderer(canvas);
     this.controls = new Controls(canvas);
@@ -175,6 +229,12 @@ export class GameScreen {
     this.finished = false;
     this.result = null;
     this.endingSignaled = false;
+    this.spectating = false;
+    this.watchId = -1;
+    this.renderer.watchId = -1;
+    this.spectateDelay = 1.6;
+    this.killedBy = -1;
+    this.onSpectate?.();
     this.matchKey = this.demo ? "" : session instanceof LocalSession ? `L-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e9).toString(36)}` : `O-${session.match.config.seed}-${(session as { matchId?: number }).matchId ?? 0}`;
     this.countdownShown = -1;
     this.paused = false;
@@ -282,7 +342,8 @@ export class GameScreen {
           this.prev[p.id * 2] = p.x;
           this.prev[p.id * 2 + 1] = p.y;
         }
-        const input = this.demo || this.paused ? NO_INPUT : this.controls.read();
+        // spectateur : aucune commande n'est envoyée (aucune influence sur la partie)
+        const input = this.demo || this.paused || this.spectating ? NO_INPUT : this.controls.read();
         s.step(input);
         this.handleEvents(m.events);
         this.acc -= DT;
@@ -305,7 +366,7 @@ export class GameScreen {
       return;
     }
     this.renderer.draw(m, frozen ? 0 : dt, this.prev, frozen ? 1 : Math.min(1, this.acc / DT));
-    if (!this.demo && !this.finished) {
+    if (!this.demo && !this.finished && !this.spectating) {
       const me = m.players[s.localPlayer];
       this.controls.draw(this.renderer.ctx, me.shieldCharges, me.shieldTime, Math.max(0, me.maxBombs - me.activeBombs), me.maxBombs, me.alive ? me.throwCharges : 0, me.alive ? me.bigCharges : 0, me.alive ? me.elecCharges : 0, me.alive ? me.stunTime : 0, me.alive ? me.freezeCharges : 0, me.alive ? me.toxicCharges : 0, me.alive ? me.chainCharges : 0, me.alive ? me.remoteCharges : 0, me.alive && m.remoteBombsOf(me).length > 0);
     }
@@ -353,7 +414,30 @@ export class GameScreen {
       this.endingSignaled = true;
       this.onEnding?.();
     }
-    if (!this.finished && this.finishTimer < 0) {
+    // Chaos en salle privée : éliminé, on reste pour regarder la fin de la manche
+    if (!this.finished && this.finishTimer < 0 && !me.alive && !m.hill && m.phase !== "over" && this.canSpectate) {
+      if (!this.result) {
+        // la place est connue : règlement tout de suite (comme sans spectateur)
+        this.result = this.computeResult();
+        this.onOutcome?.(this.result);
+      }
+      if (!this.spectating) {
+        this.spectateDelay -= dt;
+        if (this.spectateDelay <= 0) this.enterSpectate();
+      } else if (!m.players[this.watchId]?.alive) {
+        // le joueur regardé vient d'être éliminé : on passe au suivant
+        const list = this.watchable();
+        if (list.length) {
+          this.watchId = list[0];
+          this.renderer.watchId = this.watchId;
+          this.onSpectate?.();
+        }
+      }
+    } else if (!this.finished && this.finishTimer < 0 && this.spectating && m.phase === "over") {
+      // fin de la manche : écran de résultats (classement final)
+      this.finishTimer = 1.4;
+      this.result = this.computeResult();
+    } else if (!this.finished && this.finishTimer < 0) {
       // (Roi de la colline : on réapparaît, la partie continue)
       if (!me.alive && !m.hill) this.finishTimer = 1.8;
       else if (m.phase === "over") this.finishTimer = 1.0;
@@ -450,6 +534,7 @@ export class GameScreen {
 
   private finish() {
     this.finished = true;
+    this.leaveSpectate();
     const r = this.result ?? this.computeResult();
     audio.play(r.won ? "win" : "lose");
     this.onFinished?.(r);
@@ -533,6 +618,7 @@ export class GameScreen {
         case "playerDied":
           audio.play("death", e.player === me.id ? 1 : 0.6);
           if (e.player === me.id) haptics.death();
+          if (e.player === me.id) this.killedBy = e.killer;
           this.onHud?.();
           break;
         case "shieldOn":
@@ -656,8 +742,11 @@ export class GameScreen {
     const tl = m.phase === "countdown" ? RULES.matchDuration : m.timeLeft;
     const mm = Math.floor(tl / 60);
     const ss = Math.floor(tl % 60);
+    const watched = this.spectating ? m.players[this.watchId] : undefined;
     return {
       timer: `${mm}:${String(ss).padStart(2, "0")}`,
+      /** mode spectateur : joueur regardé et nombre de joueurs encore en vie */
+      spectate: this.spectating ? { name: watched?.name ?? "", color: watched ? lookOf(watched.characterId, watched.skinId).palette.main : "#fff", count: this.watchable().length } : null,
       hot: m.suddenDeath,
       chaos: m.config.modeId === "chaos",
       /** mode Chaos : prochain malus et effets en cours (HUD) */

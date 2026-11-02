@@ -66,7 +66,7 @@ export type ServerMsg =
   | { t: "roomEvent"; kind: RoomEventKind; name: string }
   | { t: "kicked" }
   | { t: "error"; code: string; message: string }
-  | { t: "matchStart"; matchId: number; seed: number; mapId: string; modeId: string; slots: PlayerSlot[]; you: number }
+  | { t: "matchStart"; matchId: number; seed: number; mapId: string; modeId: string; slots: PlayerSlot[]; you: number; spectate?: boolean }
   | { t: "snap"; s: Snapshot }
   | { t: "emote"; player: number; id: string }
   | { t: "matchEnd"; winner: number };

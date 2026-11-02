@@ -4148,6 +4148,7 @@ var MAX_QUEUE = 4;
 var matchCounter = 0;
 
 class GameRunner {
+  opts;
   send;
   onEnd;
   matchId = ++matchCounter;
@@ -4164,6 +4165,7 @@ class GameRunner {
   last = 0;
   ended = false;
   constructor(seats, opts, send, onEnd) {
+    this.opts = opts;
     this.send = send;
     this.onEnd = onEnd;
     const used = new Set(seats.map((s) => s.characterId));
@@ -4205,7 +4207,8 @@ class GameRunner {
       mapId: m.config.map.id,
       modeId: m.config.modeId,
       slots: this.slots,
-      you
+      you,
+      spectate: !!this.opts.spectators
     });
     this.send(token, { t: "snap", s: encodeSnapshot(m, this.acks, []) });
   }
@@ -4513,7 +4516,7 @@ class Lobby {
       }
       taken.add(s.characterId);
     }
-    r.game = new GameRunner(seats, { mapId: r.mapId, modeId: r.modeId, fillBots: r.fillBots || r.modeId === "koth", maxPlayers: MAX_ROOM_PLAYERS }, this.hooks.send, () => this.endGame(r));
+    r.game = new GameRunner(seats, { mapId: r.mapId, modeId: r.modeId, fillBots: r.fillBots || r.modeId === "koth", maxPlayers: MAX_ROOM_PLAYERS, spectators: !r.isPublic }, this.hooks.send, () => this.endGame(r));
     for (const mb of r.members)
       if (mb.token !== r.hostToken)
         mb.ready = false;

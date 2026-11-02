@@ -22,6 +22,12 @@
       <div class="hill-board" id="hudHill" hidden></div>
       <div class="powers" id="hudPowers"></div>
     </div>
+    <!-- mode spectateur (Chaos, salle privée) : après élimination -->
+    <div class="spec" id="hudSpec" hidden>
+      <button class="spec-btn spec-prev" id="btnSpecPrev" aria-label="Joueur précédent"><b>◀</b><span>Joueur<br>précédent</span></button>
+      <div class="spec-tag"><em>👁 MODE SPECTATEUR</em><strong id="specName"><i id="specDot"></i><span id="specText"></span></strong></div>
+      <button class="spec-btn spec-next" id="btnSpecNext" aria-label="Joueur suivant"><span>Joueur<br>suivant</span><b>▶</b></button>
+    </div>
   </div>
   <div id="banner" hidden><span id="bannerKicker">⚠️</span><strong id="bannerText">MORT SUBITE !</strong><em id="bannerHint"></em></div>
   <div id="netOverlay" hidden><div><b>📶 Connexion perdue</b><span>Reconnexion en cours… ta place est gardée.</span></div></div>

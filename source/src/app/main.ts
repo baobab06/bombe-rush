@@ -96,6 +96,7 @@ class App implements AppCtx {
     };
     this.game.onHud = () => this.updateHud();
     this.game.onBanner = (k, t, h) => this.banner(k, t, h);
+    this.game.onSpectate = () => this.updateSpectate();
     this.game.controls.onPause = () => {
       if (this.screen === "game") this.pause();
       else if (this.screen === "pause") this.resume();
@@ -1452,7 +1453,27 @@ class App implements AppCtx {
   }
 
   // ------------------------------------------------------------------ HUD
+  /** Mode spectateur : interface affichée / joueur regardé. */
+  private updateSpectate() {
+    const on = this.game.spectating;
+    const box = $("hudSpec");
+    $("hud").classList.toggle("spectating", on);
+    if (on && box.hidden) $("emoteWheel").hidden = true;
+    box.hidden = !on;
+    if (!on) return;
+    const h = this.game.hudState();
+    const sp = h?.spectate;
+    if (!sp) return;
+    $("specText").textContent = sp.name || "—";
+    ($("specDot") as HTMLElement).style.background = sp.color;
+    const many = sp.count > 1;
+    ($("btnSpecPrev") as HTMLButtonElement).disabled = !many;
+    ($("btnSpecNext") as HTMLButtonElement).disabled = !many;
+  }
+
   private wireHud() {
+    $("btnSpecPrev").addEventListener("click", () => this.game.watchStep(-1));
+    $("btnSpecNext").addEventListener("click", () => this.game.watchStep(1));
     const wheel = $("emoteWheel");
     $("btnEmote").addEventListener("click", () => {
       this.click();
@@ -1496,6 +1517,7 @@ class App implements AppCtx {
   private updateHud() {
     const h = this.game.hudState();
     if (!h) return;
+    if (this.game.spectating) this.updateSpectate();
     const timer = $("hudTimer");
     timer.textContent = h.timer;
     timer.classList.toggle("hot", h.hot);

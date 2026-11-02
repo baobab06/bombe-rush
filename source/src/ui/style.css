@@ -1398,3 +1398,23 @@ button:focus-visible, input:focus-visible + i { outline: 3px solid var(--coin); 
 .sheet-actions.wrap { flex-wrap: wrap; }
 .welcome-google { align-self: center; margin-top: .6cqh; }
 .acct-delete { color: #ff8a7a; font-size: max(10px, .66em); }
+
+/* ---------- mode spectateur (Chaos, salle privée) ---------- */
+.spec { position: absolute; inset: 0; pointer-events: none; }
+.spec[hidden] { display: none; }
+.spec-tag { position: absolute; left: calc(var(--sl) + var(--gut)); bottom: calc(var(--sb, 0px) + 3cqh + max(48px, 15cqh) + 3.4cqh); display: flex; flex-direction: column; align-items: flex-start; gap: .4cqh; padding: 1cqh 2.4cqh; border-radius: 2.6cqh;
+  background: rgba(20,15,60,.82); border: max(1.5px,.4cqh) solid var(--ink); max-width: max(96px, calc(var(--colL) - var(--sl) - var(--gut) * 2)); box-sizing: border-box; animation: specIn .3s ease-out; }
+.spec-tag em { font-style: normal; font-weight: 900; letter-spacing: .12em; font-size: max(10px, .72em); color: #ffe066; }
+.spec-tag strong { max-width: 100%; display: flex; align-items: center; gap: 1cqh; font-weight: 800; font-size: max(12px, .86em); color: #fff; overflow: hidden; text-overflow: ellipsis; }
+.spec-tag strong span { overflow: hidden; text-overflow: ellipsis; }
+#specDot { width: 2.6cqh; height: 2.6cqh; min-width: 9px; min-height: 9px; border-radius: 50%; border: 1.5px solid var(--ink); flex: none; }
+.spec-btn { pointer-events: auto; position: absolute; bottom: calc(var(--sb, 0px) + 3cqh); display: flex; align-items: center; gap: 1.4cqh; min-height: 48px; height: 15cqh; padding: 0 3cqh; border-radius: 99px;
+  font-weight: 800; font-size: max(11px, .78em); line-height: 1.1; color: #fff; text-align: left; background: linear-gradient(180deg, rgba(70,68,170,.94), rgba(40,38,120,.94)); border: var(--edge) solid var(--ink); box-shadow: inset 0 .5cqh 0 rgba(255,255,255,.2), 0 .8cqh 0 var(--ink); transition: transform .08s; }
+.spec-btn b { font-size: 1.5em; color: #ffe066; }
+.spec-btn:active { transform: translateY(.6cqh); box-shadow: inset 0 .5cqh 0 rgba(255,255,255,.2), 0 .2cqh 0 var(--ink); }
+.spec-btn:disabled { opacity: .45; }
+.spec-prev { left: calc(var(--sl) + var(--gut)); }
+.spec-next { right: calc(var(--sr) + var(--gut)); text-align: right; }
+#hud.spectating #hudPowers, #hud.spectating #btnEmote, #hud.spectating #emoteWheel { display: none; }
+#hud.compact .spec-btn span { display: none; }
+@keyframes specIn { from { opacity: 0; transform: translateY(1cqh); } to { opacity: 1; transform: none; } }
