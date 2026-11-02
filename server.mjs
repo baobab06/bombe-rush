@@ -1,9 +1,9 @@
 // server/index.ts
-import { randomBytes } from "node:crypto";
+import { randomBytes as randomBytes2 } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
-import { existsSync } from "node:fs";
-import { dirname, extname, join, normalize, resolve } from "node:path";
+import { existsSync as existsSync2 } from "node:fs";
+import { dirname, extname, join as join2, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // src/core/characters.ts
@@ -4720,10 +4720,777 @@ function acceptUpgrade(req, socket) {
   return new WsConn(socket, ip);
 }
 
+// server/accounts.ts
+import { createHash as createHash2, createPublicKey, createVerify, randomBytes } from "node:crypto";
+import { mkdirSync, readFileSync, renameSync, writeFileSync, existsSync } from "node:fs";
+import { join } from "node:path";
+
+class MemoryStore {
+  kind = "memory";
+  m = new Map;
+  async get(k) {
+    const e = this.m.get(k);
+    if (!e)
+      return null;
+    if (e.exp && e.exp < Date.now()) {
+      this.m.delete(k);
+      return null;
+    }
+    return e.v;
+  }
+  async set(k, v, ttl) {
+    this.m.set(k, { v, exp: ttl ? Date.now() + ttl * 1000 : 0 });
+  }
+  async setNX(k, v) {
+    const e = this.m.get(k);
+    if (e && (!e.exp || e.exp >= Date.now()))
+      return false;
+    this.m.set(k, { v, exp: 0 });
+    this.written();
+    return true;
+  }
+  written() {}
+  async del(k) {
+    this.m.delete(k);
+  }
+}
+
+class FileStore extends MemoryStore {
+  kind = "file";
+  file;
+  timer = null;
+  constructor(dir) {
+    super();
+    mkdirSync(dir, { recursive: true });
+    this.file = join(dir, "accounts.json");
+    if (existsSync(this.file)) {
+      const data = JSON.parse(readFileSync(this.file, "utf8"));
+      for (const [k, e] of Object.entries(data))
+        this.m.set(k, e);
+    }
+  }
+  written() {
+    this.flush();
+  }
+  flush() {
+    if (this.timer)
+      return;
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      const tmp = this.file + ".tmp";
+      writeFileSync(tmp, JSON.stringify(Object.fromEntries(this.m)));
+      renameSync(tmp, this.file);
+    }, 50);
+  }
+  async set(k, v, ttl) {
+    await super.set(k, v, ttl);
+    this.flush();
+  }
+  async del(k) {
+    await super.del(k);
+    this.flush();
+  }
+}
+
+class UpstashStore {
+  url;
+  token;
+  kind = "upstash";
+  constructor(url, token) {
+    this.url = url;
+    this.token = token;
+  }
+  async cmd(args) {
+    const r = await fetch(this.url, {
+      method: "POST",
+      headers: { authorization: `Bearer ${this.token}`, "content-type": "application/json" },
+      body: JSON.stringify(args)
+    });
+    if (!r.ok)
+      throw new Error(`stockage ${r.status}`);
+    const j = await r.json();
+    if (j.error)
+      throw new Error(j.error);
+    return j.result;
+  }
+  async get(k) {
+    return await this.cmd(["GET", k]) ?? null;
+  }
+  async set(k, v, ttl) {
+    await this.cmd(ttl ? ["SET", k, v, "EX", ttl] : ["SET", k, v]);
+  }
+  async setNX(k, v) {
+    return await this.cmd(["SET", k, v, "NX"]) === "OK";
+  }
+  async del(k) {
+    await this.cmd(["DEL", k]);
+  }
+}
+function storeFromEnv(env = process.env) {
+  if (env.UPSTASH_REDIS_REST_URL && env.UPSTASH_REDIS_REST_TOKEN)
+    return new UpstashStore(env.UPSTASH_REDIS_REST_URL, env.UPSTASH_REDIS_REST_TOKEN);
+  if (env.ACCOUNTS_DATA_DIR)
+    return new FileStore(env.ACCOUNTS_DATA_DIR);
+  return null;
+}
+
+class GoogleVerifier {
+  clientIds;
+  jwksUrl;
+  fetchJson;
+  now;
+  keys = new Map;
+  keysUntil = 0;
+  constructor(clientIds, jwksUrl = "https://www.googleapis.com/oauth2/v3/certs", fetchJson = async (url) => {
+    const r = await fetch(url);
+    if (!r.ok)
+      throw new Error("clés Google indisponibles");
+    const m = /max-age=(\d+)/.exec(r.headers.get("cache-control") ?? "");
+    return { keys: (await r.json()).keys, maxAge: m ? Number(m[1]) : 3600 };
+  }, now = () => Date.now()) {
+    this.clientIds = clientIds;
+    this.jwksUrl = jwksUrl;
+    this.fetchJson = fetchJson;
+    this.now = now;
+  }
+  async key(kid) {
+    if (this.now() > this.keysUntil || !this.keys.has(kid)) {
+      const { keys, maxAge } = await this.fetchJson(this.jwksUrl);
+      this.keys = new Map(keys.map((k) => [k.kid, k]));
+      this.keysUntil = this.now() + Math.min(maxAge, 24 * 3600) * 1000;
+    }
+    return this.keys.get(kid);
+  }
+  async verify(idToken) {
+    if (typeof idToken !== "string" || idToken.length > 4096)
+      throw new Error("jeton invalide");
+    const parts = idToken.split(".");
+    if (parts.length !== 3)
+      throw new Error("jeton invalide");
+    const dec = (s) => JSON.parse(Buffer.from(s, "base64url").toString("utf8"));
+    let header;
+    let payload;
+    try {
+      header = dec(parts[0]);
+      payload = dec(parts[1]);
+    } catch {
+      throw new Error("jeton invalide");
+    }
+    if (header.alg !== "RS256" || !header.kid)
+      throw new Error("jeton invalide");
+    const jwk = await this.key(header.kid);
+    if (!jwk)
+      throw new Error("clé inconnue");
+    const pub = createPublicKey({ key: { kty: jwk.kty, n: jwk.n, e: jwk.e }, format: "jwk" });
+    const ok = createVerify("RSA-SHA256").update(`${parts[0]}.${parts[1]}`).verify(pub, Buffer.from(parts[2], "base64url"));
+    if (!ok)
+      throw new Error("signature invalide");
+    if (payload.iss !== "accounts.google.com" && payload.iss !== "https://accounts.google.com")
+      throw new Error("émetteur invalide");
+    if (!payload.aud || !this.clientIds.includes(payload.aud))
+      throw new Error("audience invalide");
+    const nowSec = Math.floor(this.now() / 1000);
+    if (!payload.exp || payload.exp < nowSec - 30)
+      throw new Error("jeton expiré");
+    if (payload.iat && payload.iat > nowSec + 300)
+      throw new Error("jeton invalide");
+    if (!payload.sub || !/^[0-9A-Za-z_-]{1,255}$/.test(payload.sub))
+      throw new Error("jeton invalide");
+    return { sub: payload.sub, email: payload.email, name: payload.name };
+  }
+}
+var SESSION_TTL = 180 * 24 * 3600;
+var MAX_SAVE_BYTES = 256 * 1024;
+var BACKUPS = 5;
+var sha = (s) => createHash2("sha256").update(s).digest("hex");
+
+class Accounts {
+  store;
+  verifier;
+  sanitize;
+  constructor(store, verifier, sanitize = (d) => d) {
+    this.store = store;
+    this.verifier = verifier;
+    this.sanitize = sanitize;
+  }
+  async signIn(idToken) {
+    const id = await this.verifier.verify(idToken);
+    const accKey = `acct:${sha("google:" + id.sub)}`;
+    let profileId = await this.store.get(accKey);
+    let created = false;
+    if (!profileId) {
+      const fresh = randomBytes(12).toString("hex");
+      if (await this.store.setNX(accKey, fresh)) {
+        profileId = fresh;
+        created = true;
+        await this.store.set(`prof:${fresh}`, JSON.stringify({ rev: 0, updatedAt: Date.now(), data: null }));
+      } else
+        profileId = await this.store.get(accKey);
+    }
+    const pid = profileId;
+    const session = randomBytes(32).toString("base64url");
+    await this.store.set(`sess:${sha(session)}`, pid, SESSION_TTL);
+    return { session, profileId: pid, created, email: id.email, name: id.name, cloud: await this.load(pid) };
+  }
+  async profileOf(session) {
+    if (typeof session !== "string" || session.length < 20 || session.length > 100)
+      return null;
+    return this.store.get(`sess:${sha(session)}`);
+  }
+  async signOut(session) {
+    await this.store.del(`sess:${sha(session)}`);
+  }
+  async load(profileId) {
+    const raw = await this.store.get(`prof:${profileId}`);
+    return raw ? JSON.parse(raw) : { rev: 0, updatedAt: 0, data: null };
+  }
+  async save(profileId, data, baseRev, force = false) {
+    const size = Buffer.byteLength(JSON.stringify(data ?? null));
+    if (!data || typeof data !== "object" || Array.isArray(data) || size > MAX_SAVE_BYTES)
+      throw new Error("sauvegarde invalide");
+    const clean = this.sanitize(data);
+    const cur = await this.load(profileId);
+    if (!force && baseRev !== cur.rev)
+      return { ok: false, cloud: cur };
+    if (force && cur.data) {
+      await this.store.set(`prof:${profileId}:backup:${cur.rev}`, JSON.stringify(cur), 90 * 24 * 3600);
+      await this.store.del(`prof:${profileId}:backup:${cur.rev - BACKUPS}`);
+    }
+    const next = { rev: cur.rev + 1, updatedAt: Date.now(), data: clean };
+    await this.store.set(`prof:${profileId}`, JSON.stringify(next));
+    return { ok: true, rev: next.rev, updatedAt: next.updatedAt };
+  }
+}
+function allowedOrigin(origin, host) {
+  if (!origin)
+    return null;
+  if (origin === "https://appassets.androidplatform.net")
+    return origin;
+  if (/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin))
+    return origin;
+  if (host && (origin === `https://${host}` || origin === `http://${host}`))
+    return origin;
+  const extra = (process.env.ACCOUNTS_ORIGINS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+  return extra.includes(origin) ? origin : null;
+}
+
+class RateLimit {
+  max;
+  windowMs;
+  hits = new Map;
+  constructor(max, windowMs) {
+    this.max = max;
+    this.windowMs = windowMs;
+  }
+  allow(key) {
+    const now = Date.now();
+    const h = this.hits.get(key);
+    if (!h || now - h.t > this.windowMs) {
+      this.hits.set(key, { n: 1, t: now });
+      if (this.hits.size > 1e4)
+        this.hits.clear();
+      return true;
+    }
+    return ++h.n <= this.max;
+  }
+}
+async function body(req, max = MAX_SAVE_BYTES + 4096) {
+  const chunks = [];
+  let n = 0;
+  for await (const c of req) {
+    n += c.length;
+    if (n > max)
+      throw new Error("trop gros");
+    chunks.push(c);
+  }
+  return chunks.length ? JSON.parse(Buffer.concat(chunks).toString("utf8")) : {};
+}
+function accountRoutes(accounts, webClientId) {
+  const authLimit = new RateLimit(20, 60000);
+  const saveLimit = new RateLimit(60, 60000);
+  return async (req, res, path) => {
+    if (!path.startsWith("/api/"))
+      return false;
+    const origin = allowedOrigin(req.headers.origin, req.headers.host);
+    const headers = { "content-type": "application/json", "cache-control": "no-store" };
+    if (origin) {
+      headers["access-control-allow-origin"] = origin;
+      headers["access-control-allow-headers"] = "authorization, content-type";
+      headers["access-control-allow-methods"] = "GET, POST, PUT, OPTIONS";
+      headers["vary"] = "origin";
+    }
+    const reply = (status, obj) => {
+      res.writeHead(status, headers);
+      res.end(JSON.stringify(obj));
+    };
+    if (req.method === "OPTIONS") {
+      res.writeHead(origin ? 204 : 403, headers);
+      res.end();
+      return true;
+    }
+    if (path === "/api/config" && req.method === "GET") {
+      reply(200, { accounts: !!accounts && !!webClientId, googleClientId: webClientId ?? null });
+      return true;
+    }
+    if (!accounts || !webClientId) {
+      reply(503, { error: "Les comptes ne sont pas encore activés sur le serveur." });
+      return true;
+    }
+    const ip = (req.headers["x-forwarded-for"] ?? req.socket.remoteAddress ?? "?").split(",")[0].trim();
+    const bearer = /^Bearer (.+)$/.exec(req.headers.authorization ?? "")?.[1];
+    try {
+      if (path === "/api/auth/google" && req.method === "POST") {
+        if (!authLimit.allow(ip))
+          return reply(429, { error: "Trop de tentatives, réessaie dans une minute." }), true;
+        const b = await body(req, 8192);
+        try {
+          const r = await accounts.signIn(String(b.idToken ?? ""));
+          reply(200, r);
+        } catch (e) {
+          reply(401, { error: "Connexion Google refusée (" + e.message + ")." });
+        }
+        return true;
+      }
+      const profileId = await accounts.profileOf(bearer);
+      if (!profileId)
+        return reply(401, { error: "Session expirée, reconnecte-toi." }), true;
+      if (path === "/api/auth/logout" && req.method === "POST") {
+        await accounts.signOut(bearer);
+        reply(200, { ok: true });
+        return true;
+      }
+      if (path === "/api/profile" && req.method === "GET") {
+        reply(200, await accounts.load(profileId));
+        return true;
+      }
+      if (path === "/api/profile" && req.method === "PUT") {
+        if (!saveLimit.allow(profileId))
+          return reply(429, { error: "Trop de sauvegardes, patiente un peu." }), true;
+        const b = await body(req);
+        const r = await accounts.save(profileId, b.data, Number(b.baseRev ?? -1), b.force === true);
+        reply(r.ok ? 200 : 409, r);
+        return true;
+      }
+      reply(404, { error: "Introuvable" });
+    } catch (e) {
+      reply(400, { error: "Requête invalide (" + e.message + ")." });
+    }
+    return true;
+  };
+}
+
+// src/core/cosmetics.ts
+var ACCESSORIES = [
+  { id: "acc-cap", wear: "cap", name: "Casquette", rarity: "common", desc: "Visière vers l'avant, comme un pro." },
+  { id: "acc-shades", wear: "shades", name: "Lunettes de soleil", rarity: "common", desc: "Trop cool pour regarder les explosions." },
+  { id: "acc-scarf", wear: "scarf", name: "Écharpe", rarity: "common", desc: "Toute douce, elle flotte quand tu cours." },
+  { id: "acc-bow", wear: "bow", name: "Gros nœud", rarity: "common", desc: "Mignon. Dangereux." },
+  { id: "acc-beanie", wear: "beanie", name: "Bonnet", rarity: "common", desc: "Avec un pompon qui rebondit." },
+  { id: "acc-flower", wear: "flower", name: "Fleur", rarity: "common", desc: "Une petite fleur qui tourne au vent." },
+  { id: "acc-headphones", wear: "headphones", name: "Casque audio", rarity: "rare", desc: "Le son des bombes, en stéréo." },
+  { id: "acc-pirate", wear: "pirate", name: "Tricorne", rarity: "rare", desc: "Le chapeau du capitaine." },
+  { id: "acc-lei", wear: "lei", name: "Collier hawaïen", rarity: "rare", desc: "Aloha… BOUM." },
+  { id: "acc-tophat", wear: "tophat", name: "Haut-de-forme", rarity: "epic", desc: "Pour exploser avec classe." },
+  { id: "acc-horns", wear: "horns", name: "Cornes", rarity: "epic", desc: "Un petit air de démon." },
+  { id: "acc-visor", wear: "visor", name: "Visière néon", rarity: "epic", desc: "Elle brille dans le noir." },
+  { id: "acc-halo", wear: "halo", name: "Auréole", rarity: "legend", desc: "Un ange… qui pose des bombes." },
+  { id: "acc-crown", wear: "crown", name: "Couronne", rarity: "legend", desc: "Réservée aux rois de l'arène." }
+];
+var TRAILS = [
+  { id: "fx-dust", kind: "dust", name: "Poussière", rarity: "common", desc: "Le petit nuage classique.", colors: ["#e8dcc4", "#cbbd9f"], free: true },
+  { id: "fx-sparks", kind: "sparks", name: "Étincelles", rarity: "common", desc: "Des étincelles à chaque pas.", colors: ["#ffe066", "#ff9f1c"] },
+  { id: "fx-leaves", kind: "leaves", name: "Feuilles", rarity: "common", desc: "Un tourbillon de feuilles.", colors: ["#7bd389", "#3fa34d", "#c9e265"] },
+  { id: "fx-bubbles", kind: "bubbles", name: "Bulles", rarity: "rare", desc: "Des bulles de savon qui flottent.", colors: ["#a0e7ff", "#ffffff"] },
+  { id: "fx-snow", kind: "snow", name: "Flocons", rarity: "rare", desc: "Il neige sur ton passage.", colors: ["#ffffff", "#cfe8ff"] },
+  { id: "fx-hearts", kind: "hearts", name: "Cœurs", rarity: "rare", desc: "Tout le monde t'aime (sauf tes ennemis).", colors: ["#ff5d8f", "#ffb3c6"] },
+  { id: "fx-fire", kind: "fire", name: "Flammes", rarity: "epic", desc: "Tes pas laissent des flammèches.", colors: ["#ffcf4a", "#ff6a1f", "#ff2e2e"] },
+  { id: "fx-bolts", kind: "bolts", name: "Éclairs", rarity: "epic", desc: "Électrique !", colors: ["#7df9ff", "#ffffff", "#4361ee"] },
+  { id: "fx-notes", kind: "notes", name: "Musique", rarity: "epic", desc: "Tu danses en esquivant.", colors: ["#c77dff", "#ffd60a", "#4cc9f0"] },
+  { id: "fx-rainbow", kind: "rainbow", name: "Arc-en-ciel", rarity: "legend", desc: "Une traînée arc-en-ciel éclatante.", colors: ["#ff595e", "#ffca3a", "#8ac926", "#1982c4", "#6a4c93"] },
+  { id: "fx-stardust", kind: "stardust", name: "Poussière d'étoiles", rarity: "legend", desc: "Des étoiles filantes te suivent.", colors: ["#fff3b0", "#ffd60a", "#ffffff"] }
+];
+var EMOTES = [
+  { id: "emo-hello", emoji: "\uD83D\uDC4B", name: "Salut !", rarity: "common", anim: "shake", free: true },
+  { id: "emo-gg", emoji: "\uD83D\uDC4D", name: "GG", rarity: "common", anim: "bounce", free: true },
+  { id: "emo-lol", emoji: "\uD83D\uDE02", name: "MDR", rarity: "common", anim: "bounce" },
+  { id: "emo-cool", emoji: "\uD83D\uDE0E", name: "Trop facile", rarity: "common", anim: "pop" },
+  { id: "emo-angry", emoji: "\uD83D\uDE21", name: "Grrr !", rarity: "common", anim: "shake" },
+  { id: "emo-cry", emoji: "\uD83D\uDE2D", name: "Snif…", rarity: "common", anim: "bounce" },
+  { id: "emo-love", emoji: "\uD83D\uDE0D", name: "Trop beau", rarity: "rare", anim: "pop" },
+  { id: "emo-bomb", emoji: "\uD83D\uDCA3", name: "Attention !", rarity: "rare", anim: "shake" },
+  { id: "emo-ghost", emoji: "\uD83D\uDC7B", name: "Bouh !", rarity: "rare", anim: "spin" },
+  { id: "emo-fire", emoji: "\uD83D\uDD25", name: "En feu", rarity: "epic", anim: "bounce" },
+  { id: "emo-crown", emoji: "\uD83D\uDC51", name: "Le roi", rarity: "epic", anim: "spin" },
+  { id: "emo-party", emoji: "\uD83C\uDF89", name: "La fête !", rarity: "legend", anim: "party" },
+  { id: "emo-tongue", emoji: "\uD83D\uDE1C", name: "Nananère !", rarity: "common", anim: "shake", taunt: true },
+  { id: "emo-missed", emoji: "\uD83E\uDD2D", name: "Raté !", rarity: "common", anim: "laugh", taunt: true },
+  { id: "emo-snail", emoji: "\uD83D\uDC0C", name: "Trop lent !", rarity: "rare", anim: "bounce", taunt: true },
+  { id: "emo-clown", emoji: "\uD83E\uDD21", name: "Le clown !", rarity: "rare", anim: "laugh", taunt: true },
+  { id: "emo-yawn", emoji: "\uD83E\uDD71", name: "Je m'ennuie…", rarity: "rare", anim: "pop", taunt: true },
+  { id: "emo-chicken", emoji: "\uD83D\uDC14", name: "Poule mouillée !", rarity: "epic", anim: "shake", taunt: true },
+  { id: "emo-baby", emoji: "\uD83C\uDF7C", name: "Petit joueur", rarity: "epic", anim: "spin", taunt: true },
+  { id: "emo-dance", emoji: "\uD83D\uDD7A", name: "Danse de la victoire", rarity: "legend", anim: "dance", taunt: true }
+];
+var BOOMS = [
+  { id: "boom-classic", name: "Classique", rarity: "common", desc: "La bonne vieille explosion orange.", spark: ["#ffe066", "#ff8a2a"], smoke: ["#e9e2d6", "#bdb4a6"], ring: "#ffb347", glow: "#fffbe0", free: true, bomb: { body: ["#5b5f8a", "#1b1c33"], cap: "#8b8fb3" } },
+  { id: "boom-confetti", name: "Confettis", rarity: "common", desc: "Boum… et c'est la fête !", spark: ["#ff5d8f", "#ffd60a", "#4cc9f0", "#8ac926"], smoke: ["#fff0f6", "#e8e2ff"], ring: "#ff9ec4", glow: "#ffffff", extra: "confetti", bomb: { body: ["#ffffff", "#ff8ab8"], cap: "#ffd60a", deco: "dots" } },
+  { id: "boom-fire", name: "Feu", rarity: "rare", desc: "Une bombe rouge en flammes, et un souffle brûlant.", spark: ["#ffd23f", "#ff6a1f", "#ff2e2e"], smoke: ["#5a2a1a", "#2a1410"], ring: "#ff6a1f", glow: "#fff0c0", bomb: { body: ["#ff8a5a", "#9a1010"], cap: "#ffb020", deco: "flame", aura: "#ff6a1f" } },
+  { id: "boom-toxic", name: "Toxique", rarity: "rare", desc: "Un nuage vert qui pique les yeux.", spark: ["#b8ff3a", "#4cd137"], smoke: ["#9be15d", "#5f8f3a"], ring: "#7bff6a", glow: "#eaffd0", extra: "bubbles", bomb: { body: ["#8dff6a", "#1f7a2a"], cap: "#2a3a2a", deco: "skull", aura: "#7bff6a" } },
+  { id: "boom-ice", name: "Glace", rarity: "rare", desc: "Une explosion glaciale pleine de flocons.", spark: ["#ffffff", "#9ad7ff"], smoke: ["#e6f4ff", "#b6d4ee"], ring: "#8fd3ff", glow: "#f2fbff", extra: "snow", bomb: { body: ["#e6f7ff", "#2f8fe0"], cap: "#bfe8ff", deco: "ice", aura: "#8fd3ff" } },
+  { id: "boom-love", name: "Coup de cœur", rarity: "epic", desc: "Ça explose… d'amour.", spark: ["#ff5d8f", "#ffb3c6"], smoke: ["#ffe0ea", "#ffc2d4"], ring: "#ff5d8f", glow: "#fff0f5", extra: "hearts", bomb: { body: ["#ffc2d4", "#e0306a"], cap: "#ffffff", deco: "hearts" } },
+  { id: "boom-neon", name: "Néon", rarity: "epic", desc: "Rose et bleu électrique, comme en boîte.", spark: ["#ff3fb4", "#3ff0ff"], smoke: ["#3a2a5c", "#25204a"], ring: "#ff3fb4", glow: "#d6fbff", bomb: { body: ["#5a3a8f", "#1b1035"], cap: "#3ff0ff", deco: "stripes", aura: "#ff3fb4" } },
+  { id: "boom-cosmic", name: "Galaxie", rarity: "legend", desc: "Une bombe-planète et une supernova en miniature.", spark: ["#c77dff", "#ffd60a", "#ffffff"], smoke: ["#2a1b5c", "#4b2a8f"], ring: "#c77dff", glow: "#fff3b0", extra: "stars", bomb: { body: ["#b07dff", "#2a1065"], cap: "#ffd60a", deco: "ring", aura: "#c77dff" } },
+  { id: "boom-gold", name: "Pluie d'or", rarity: "legend", desc: "Réservé aux meilleurs : une explosion en or massif.", spark: ["#ffd23f", "#fff4c2", "#c98a10"], smoke: ["#fff1c4", "#e8c56a"], ring: "#ffd23f", glow: "#fffbe0", extra: "stars", exclusive: "rank", bomb: { body: ["#fff1a8", "#c98a10"], cap: "#fff8dc", deco: "stars", aura: "#ffd23f" } },
+  { id: "boom-veteran", name: "Vétéran", rarity: "epic", desc: "Pour ceux qui ont joué des centaines de parties.", spark: ["#ff6a1f", "#ffcf4a", "#ffffff"], smoke: ["#5a5a5a", "#3a3a3a"], ring: "#ff6a1f", glow: "#fff0d0", exclusive: "achievement", bomb: { body: ["#7a7a7a", "#2a2a2a"], cap: "#ff6a1f", deco: "stripes" } }
+];
+var DEFAULT_BOOM = "boom-classic";
+var getBoom = (id) => BOOMS.find((b) => b.id === id) ?? BOOMS[0];
+var TITLES = [
+  { id: "title-rookie", name: "Petit nouveau", rarity: "common", desc: "Tout le monde commence quelque part.", free: true },
+  { id: "title-artificer", name: "Artificier", rarity: "rare", desc: "Atteins le niveau 10.", exclusive: "level" },
+  { id: "title-veteran", name: "Vétéran", rarity: "epic", desc: "Atteins le niveau 25.", exclusive: "level" },
+  { id: "title-legend", name: "Légende de l'arène", rarity: "legend", desc: "Atteins le niveau 50.", exclusive: "level" },
+  { id: "title-centurion", name: "Centurion", rarity: "legend", desc: "Atteins le niveau 100.", exclusive: "level" },
+  { id: "title-regular", name: "Habitué", rarity: "common", desc: "Joue 100 parties.", exclusive: "achievement" },
+  { id: "title-champion", name: "Champion", rarity: "epic", desc: "Gagne 50 parties.", exclusive: "achievement" },
+  { id: "title-unbeatable", name: "Invincible", rarity: "legend", desc: "Gagne 200 parties.", exclusive: "achievement" },
+  { id: "title-demolisher", name: "Démolisseur", rarity: "rare", desc: "Détruis 5 000 blocs.", exclusive: "achievement" },
+  { id: "title-hunter", name: "Chasseur", rarity: "rare", desc: "Élimine 250 adversaires.", exclusive: "achievement" },
+  { id: "title-unstoppable", name: "Inarrêtable", rarity: "epic", desc: "Gagne 10 parties d'affilée.", exclusive: "achievement" },
+  { id: "title-expert", name: "Expert", rarity: "epic", desc: "Gagne 10 parties en Expert.", exclusive: "achievement" },
+  { id: "title-collector", name: "Collectionneur", rarity: "epic", desc: "Possède 60 objets.", exclusive: "achievement" },
+  { id: "title-jack", name: "Touche-à-tout", rarity: "rare", desc: "Joue avec les 7 personnages.", exclusive: "achievement" },
+  { id: "title-elite", name: "Élite", rarity: "legend", desc: "Atteins le rang Élite.", exclusive: "rank" },
+  { id: "title-diamond", name: "Diamant brut", rarity: "epic", desc: "Atteins le rang Diamant.", exclusive: "rank" },
+  { id: "title-lucky", name: "Chanceux", rarity: "rare", desc: "Trouvé uniquement dans les coffres.", exclusive: "chest" },
+  { id: "title-boom", name: "Boum Boum", rarity: "common", desc: "Trouvé uniquement dans les coffres.", exclusive: "chest" },
+  { id: "title-chaos", name: "Agent du chaos", rarity: "epic", desc: "Trouvé uniquement dans les coffres.", exclusive: "chest" },
+  { id: "title-king", name: "Roi de la mèche", rarity: "legend", desc: "Trouvé uniquement dans les coffres.", exclusive: "chest" },
+  ...CHARACTERS.flatMap((c) => [
+    { id: `title-m10-${c.id}`, name: `${c.name} confirmé`, rarity: "rare", desc: `Maîtrise ${c.name} niveau 10.`, exclusive: "mastery" },
+    { id: `title-m20-${c.id}`, name: `As de ${c.name}`, rarity: "epic", desc: `Maîtrise ${c.name} niveau 20.`, exclusive: "mastery" },
+    { id: `title-m50-${c.id}`, name: `Maître ${c.name}`, rarity: "legend", desc: `Maîtrise ${c.name} niveau 50.`, exclusive: "mastery" }
+  ])
+];
+var DEFAULT_TITLE = "title-rookie";
+var getTitle = (id) => TITLES.find((t) => t.id === id);
+var getTrail = (id) => TRAILS.find((t) => t.id === id) ?? TRAILS[0];
+var getEmote = (id) => EMOTES.find((e) => e.id === id);
+var DEFAULT_TRAIL = "fx-dust";
+var DEFAULT_EMOTES = ["emo-hello", "emo-gg"];
+var EMOTE_SLOTS = 4;
+
+// src/meta/progress-config.ts
+var LEVEL_MAX = 100;
+function levelXp(level) {
+  const k = level - 1;
+  return Math.round((100 + 20 * k + 0.9 * k * k) / 5) * 5;
+}
+var MASTERY_MAX = 50;
+function masteryXp(level) {
+  const k = level - 1;
+  return Math.round((60 + 8 * k + 0.35 * k * k) / 5) * 5;
+}
+var CHEST_ORDER = ["common", "rare", "epic", "legend"];
+var RANK_RULES = {
+  places: [20, 8, -4, -10],
+  difficulty: { easy: 0.5, normal: 1, hard: 1.5, expert: 2 },
+  perOpponent: 1 / 3,
+  protectedRanks: ["bronze"],
+  solo: true,
+  online: false,
+  historySize: 15
+};
+var A = (id, icon, name, desc, stat, goal, ...reward) => ({ id, icon, name, desc, stat, goal, reward });
+var C = (amount) => ({ kind: "coins", amount });
+var CH = (tier) => ({ kind: "chest", tier });
+var IT = (id) => ({ kind: "item", id });
+var ACHIEVEMENTS = [
+  A("first-game", "\uD83C\uDFAE", "Premier pas", "Joue ta première partie", "played", 1, C(50)),
+  A("played-25", "\uD83C\uDFAE", "On y prend goût", "Joue {n} parties", "played", 25, C(200)),
+  A("played-100", "\uD83C\uDFAE", "Habitué", "Joue {n} parties", "played", 100, IT("title-regular"), C(400)),
+  A("played-500", "\uD83C\uDFAE", "Pilier de l'arène", "Joue {n} parties", "played", 500, IT("boom-veteran"), CH("epic")),
+  A("first-win", "\uD83C\uDFC6", "Première victoire", "Gagne ta première partie", "wins", 1, C(100)),
+  A("wins-10", "\uD83C\uDFC6", "Gagnant", "Gagne {n} parties", "wins", 10, C(250)),
+  A("wins-50", "\uD83C\uDFC6", "Champion", "Gagne {n} parties", "wins", 50, IT("title-champion"), CH("rare")),
+  A("wins-200", "\uD83C\uDFC6", "Invincible", "Gagne {n} parties", "wins", 200, IT("title-unbeatable"), CH("legend")),
+  A("kills-25", "\uD83D\uDCA5", "Pas de pitié", "Élimine {n} adversaires", "kills", 25, C(150)),
+  A("kills-250", "\uD83D\uDCA5", "Chasseur", "Élimine {n} adversaires", "kills", 250, IT("title-hunter"), CH("rare")),
+  A("blocks-500", "\uD83E\uDDF1", "Bûcheron", "Détruis {n} blocs", "blocks", 500, C(150)),
+  A("blocks-5000", "\uD83E\uDDF1", "Démolisseur", "Détruis {n} blocs", "blocks", 5000, IT("title-demolisher"), CH("rare")),
+  A("bombs-1000", "\uD83D\uDCA3", "Artificier fou", "Pose {n} bombes", "bombs", 1000, CH("rare")),
+  A("bonus-200", "⭐", "Ramasse-tout", "Ramasse {n} bonus", "bonuses", 200, C(250)),
+  A("streak-3", "\uD83D\uDD25", "En forme", "Gagne {n} parties d'affilée", "bestStreak", 3, C(100)),
+  A("streak-5", "\uD83D\uDD25", "En feu", "Gagne {n} parties d'affilée", "bestStreak", 5, CH("rare")),
+  A("streak-10", "\uD83D\uDD25", "Inarrêtable", "Gagne {n} parties d'affilée", "bestStreak", 10, IT("title-unstoppable"), CH("epic")),
+  A("level-10", "⬆️", "Niveau 10", "Atteins le niveau {n}", "level", 10, C(200)),
+  A("level-25", "⬆️", "Niveau 25", "Atteins le niveau {n}", "level", 25, CH("epic")),
+  A("level-50", "⬆️", "Niveau 50", "Atteins le niveau {n}", "level", 50, CH("legend")),
+  A("mastery-10", "\uD83C\uDF96️", "Spécialiste", "Monte un personnage au niveau de maîtrise {n}", "bestMastery", 10, C(300)),
+  A("mastery-30", "\uD83C\uDF96️", "Virtuose", "Monte un personnage au niveau de maîtrise {n}", "bestMastery", 30, CH("epic")),
+  A("chars-7", "\uD83E\uDDD1‍\uD83E\uDD1D‍\uD83E\uDDD1", "Touche-à-tout", "Joue avec {n} personnages différents", "charsPlayed", 7, IT("title-jack"), C(300)),
+  A("owned-25", "\uD83C\uDF92", "Garde-robe", "Possède {n} objets", "owned", 25, C(300)),
+  A("owned-60", "\uD83C\uDF92", "Collectionneur", "Possède {n} objets", "owned", 60, IT("title-collector"), CH("epic")),
+  A("chests-10", "\uD83C\uDF81", "Chasseur de trésors", "Ouvre {n} coffres", "chests", 10, CH("rare")),
+  A("missions-20", "\uD83C\uDFAF", "Appliqué", "Récupère {n} missions", "missions", 20, C(400)),
+  A("expert-1", "\uD83D\uDC80", "Sans peur", "Gagne une partie en Expert", "expertWins", 1, C(300)),
+  A("expert-10", "\uD83D\uDC80", "Expert", "Gagne {n} parties en Expert", "expertWins", 10, IT("title-expert"), CH("epic")),
+  A("chaos-10", "\uD83C\uDF2A️", "Amateur de chaos", "Joue {n} parties en mode Chaos", "chaos", 10, C(250)),
+  A("online-5", "\uD83C\uDF10", "Entre amis", "Joue {n} parties privées en ligne", "online", 5, C(250)),
+  A("rank-or", "\uD83E\uDD47", "Doré", "Atteins le rang Or", "rank", 2, C(300)),
+  A("rank-diamant", "\uD83D\uDC8E", "Brillant", "Atteins le rang Diamant", "rank", 4, CH("epic")),
+  A("login-7", "\uD83D\uDCC5", "Fidèle", "Connecte-toi {n} jours", "loginDays", 7, C(200)),
+  A("login-30", "\uD83D\uDCC5", "Inséparable", "Connecte-toi {n} jours", "loginDays", 30, CH("epic")),
+  A("rich", "\uD83E\uDE99", "Fortune", "Gagne {n} pièces au total", "coinsEarned", 20000, CH("rare"))
+];
+
+// src/meta/economy.ts
+var PRICES = {
+  common: 500,
+  rare: 1500,
+  epic: 3000,
+  legend: 5000
+};
+var EMOTE_PRICES = {
+  common: 250,
+  rare: 600,
+  epic: 1200,
+  legend: 2500
+};
+var CHARACTER_PRICES = {
+  pingo: 4000
+};
+var BOMBER_PRICES = {
+  common: 50,
+  rare: 150,
+  epic: 300,
+  legend: 500
+};
+var BOMBER_EMOTE_PRICES = {
+  common: 25,
+  rare: 60,
+  epic: 120,
+  legend: 250
+};
+var BOMBER_CHARACTER_PRICES = {
+  pingo: 400
+};
+
+// src/meta/catalog.ts
+function build() {
+  const out = [];
+  for (const s of SKINS)
+    out.push({
+      id: s.id,
+      kind: "skin",
+      name: s.name,
+      rarity: s.rarity,
+      price: s.free || s.exclusive ? 0 : s.price ?? PRICES[s.rarity],
+      desc: s.desc ?? "",
+      free: !!s.free,
+      characterId: s.characterId,
+      theme: s.theme,
+      exclusive: s.exclusive
+    });
+  for (const a of ACCESSORIES)
+    out.push({ id: a.id, kind: "accessory", name: a.name, rarity: a.rarity, price: PRICES[a.rarity], desc: a.desc, free: false });
+  for (const t of TRAILS)
+    out.push({ id: t.id, kind: "trail", name: t.name, rarity: t.rarity, price: t.free ? 0 : PRICES[t.rarity], desc: t.desc, free: !!t.free });
+  for (const e of EMOTES)
+    out.push({ id: e.id, kind: "emote", name: e.name, rarity: e.rarity, price: e.free ? 0 : EMOTE_PRICES[e.rarity], desc: e.taunt ? `Moquerie ${e.emoji} « ${e.name} »` : `Emote ${e.emoji}`, free: !!e.free });
+  for (const b of BOOMS)
+    out.push({ id: b.id, kind: "boom", name: b.name, rarity: b.rarity, price: b.free || b.exclusive ? 0 : PRICES[b.rarity], desc: b.desc, free: !!b.free, exclusive: b.exclusive });
+  for (const t of TITLES)
+    out.push({ id: t.id, kind: "title", name: t.name, rarity: t.rarity, price: 0, desc: t.desc, free: !!t.free, exclusive: t.exclusive ?? (t.free ? undefined : "chest") });
+  for (const c of CHARACTERS)
+    out.push({
+      id: `chr-${c.id}`,
+      kind: "character",
+      name: c.name,
+      rarity: c.rarity ?? "common",
+      price: c.locked ? CHARACTER_PRICES[c.id] ?? PRICES.epic : 0,
+      desc: c.bio,
+      free: !c.locked,
+      characterId: c.id
+    });
+  return out;
+}
+function withBomberPrice(it) {
+  let bomberPrice = 0;
+  if (it.price > 0) {
+    const table = it.kind === "emote" ? BOMBER_EMOTE_PRICES : BOMBER_PRICES;
+    const standard = it.kind === "emote" ? EMOTE_PRICES[it.rarity] : PRICES[it.rarity];
+    if (it.kind === "character")
+      bomberPrice = BOMBER_CHARACTER_PRICES[it.characterId] ?? Math.round(it.price / 10);
+    else
+      bomberPrice = it.price === standard ? table[it.rarity] : Math.max(5, Math.round(it.price / 50) * 5);
+  }
+  return { ...it, bomberPrice };
+}
+var CATALOG = build().map(withBomberPrice);
+var byId = new Map(CATALOG.map((i) => [i.id, i]));
+function getItem(id) {
+  return id ? byId.get(id) : undefined;
+}
+
+// src/meta/profile.ts
+var DEFAULT_CHARACTERS = ["renard", "boulon", "rainette", "kage", "champi", "bruno"];
+function defaultProfile() {
+  return {
+    version: 3,
+    name: "Joueur",
+    named: false,
+    level: 1,
+    xp: 0,
+    coins: 0,
+    coinsEarned: 0,
+    bombers: 0,
+    bomberGift: false,
+    purchases: [],
+    wins: 0,
+    losses: 0,
+    played: 0,
+    kills: 0,
+    bombsPlaced: 0,
+    blocksDestroyed: 0,
+    bonusesPicked: 0,
+    bestSurvival: 0,
+    characterId: "renard",
+    equippedSkins: {},
+    equipped: { accessory: null, trail: DEFAULT_TRAIL, emotes: [...DEFAULT_EMOTES], boom: DEFAULT_BOOM, title: DEFAULT_TITLE },
+    owned: [],
+    ownedCharacters: [...DEFAULT_CHARACTERS],
+    daily: { last: null, streak: 0 },
+    missions: { day: "", list: [] },
+    weekly: { week: "", list: [] },
+    mastery: {},
+    achievements: {},
+    chests: { common: 0, rare: 0, epic: 0, legend: 0 },
+    rank: { points: 0, best: 0, rewarded: ["bronze"], history: [] },
+    stats: { bestWinStreak: 0, expertWins: 0, hardWins: 0, chaosPlayed: 0, onlinePlayed: 0, chestsOpened: 0, missionsClaimed: 0, loginDays: 0 },
+    levelRewardsUpTo: 1,
+    clock: { max: 0, offset: 0 },
+    ads: { day: "", coins: 0, freeChest: 0, doubled: [], lastAdAt: 0, gamesSinceAd: 0, personalized: null },
+    starterGift: false,
+    seen: [],
+    settled: [],
+    pending: null,
+    ledger: [],
+    winStreak: 0,
+    lastSetup: { botCount: 3, difficulty: "normal", mapId: "forest", modeId: "classic" },
+    settings: { music: true, sfx: true, vibration: true }
+  };
+}
+
+// src/meta/save.ts
+var memory = new Map;
+function migrate(data) {
+  const base = defaultProfile();
+  const p = {
+    ...base,
+    ...data,
+    version: 3,
+    settings: { ...base.settings, ...data.settings ?? {} },
+    lastSetup: { ...base.lastSetup, ...data.lastSetup ?? {} },
+    equippedSkins: { ...data.equippedSkins ?? {} },
+    equipped: { ...base.equipped, ...data.equipped ?? {} },
+    daily: { ...base.daily, ...data.daily ?? {} },
+    missions: data.missions && Array.isArray(data.missions.list) ? data.missions : base.missions,
+    weekly: data.weekly && Array.isArray(data.weekly.list) ? data.weekly : base.weekly,
+    mastery: { ...data.mastery ?? {} },
+    achievements: { ...data.achievements ?? {} },
+    chests: { ...base.chests, ...data.chests ?? {} },
+    rank: { ...base.rank, ...data.rank ?? {} },
+    stats: { ...base.stats, ...data.stats ?? {} },
+    clock: { ...base.clock, ...data.clock ?? {} },
+    ads: { ...base.ads, ...data.ads ?? {} }
+  };
+  const owned = new Set([...data.owned ?? [], ...data.ownedSkins ?? []]);
+  p.owned = [...owned].filter((id) => !!getItem(id));
+  delete p.ownedSkins;
+  const chars = new Set([...DEFAULT_CHARACTERS, ...data.ownedCharacters ?? []]);
+  p.ownedCharacters = [...chars].filter((id) => CHARACTERS.some((c) => c.id === id));
+  if (!p.ownedCharacters.includes(p.characterId))
+    p.characterId = base.characterId;
+  if (data.named === undefined)
+    p.named = !!p.name && p.name !== "Joueur" && !/^Joueur \d+$/.test(p.name);
+  const has = (id) => {
+    const it = getItem(id);
+    return !!it && (it.free || p.owned.includes(id));
+  };
+  for (const [cid, sid] of Object.entries(p.equippedSkins))
+    if (!has(sid) || getItem(sid)?.characterId !== cid)
+      delete p.equippedSkins[cid];
+  if (p.equipped.accessory && !has(p.equipped.accessory))
+    p.equipped.accessory = null;
+  if (!has(p.equipped.trail))
+    p.equipped.trail = getTrail(null).id;
+  p.equipped.emotes = (p.equipped.emotes ?? []).filter((id) => getEmote(id) && has(id)).slice(0, EMOTE_SLOTS);
+  if (!p.equipped.emotes.length)
+    p.equipped.emotes = [...base.equipped.emotes];
+  if (!getBoom(p.equipped.boom) || getBoom(p.equipped.boom).id !== p.equipped.boom || !has(p.equipped.boom))
+    p.equipped.boom = base.equipped.boom;
+  if (!getTitle(p.equipped.title) || !has(p.equipped.title))
+    p.equipped.title = base.equipped.title;
+  p.level = Math.min(LEVEL_MAX, Math.max(1, Math.floor(p.level)));
+  p.xp = Math.min(Math.floor(p.xp), levelXp(p.level) - 1);
+  if (!Number.isFinite(data.levelRewardsUpTo))
+    p.levelRewardsUpTo = p.level;
+  for (const [cid, m] of Object.entries(p.mastery)) {
+    if (!CHARACTERS.some((c) => c.id === cid) || !m || typeof m !== "object") {
+      delete p.mastery[cid];
+      continue;
+    }
+    const lvl = Math.min(MASTERY_MAX, Math.max(1, Math.floor(m.level || 1)));
+    p.mastery[cid] = { level: lvl, xp: Math.max(0, Math.min(Math.floor(m.xp || 0), masteryXp(lvl) - 1)), games: m.games | 0, kills: m.kills | 0, wins: m.wins | 0 };
+  }
+  for (const t of CHEST_ORDER)
+    p.chests[t] = Math.max(0, Math.floor(Number(p.chests[t]) || 0));
+  if (!Array.isArray(p.rank.history))
+    p.rank.history = [];
+  if (!Array.isArray(p.rank.rewarded))
+    p.rank.rewarded = ["bronze"];
+  p.rank.points = Math.max(0, Math.floor(Number(p.rank.points) || 0));
+  for (const k of Object.keys(base.stats))
+    p.stats[k] = Math.max(0, Math.floor(Number(p.stats[k]) || 0));
+  p.stats.bestWinStreak = Math.max(p.stats.bestWinStreak, Math.floor(Number(data.winStreak) || 0));
+  if (data.stats === undefined)
+    p.stats.loginDays = Math.max(p.stats.loginDays, Math.floor(Number(p.daily.streak) || 0));
+  if (!Number.isFinite(p.clock.max))
+    p.clock.max = 0;
+  if (!Array.isArray(p.ads.doubled))
+    p.ads.doubled = [];
+  for (const k of ["coins", "freeChest", "lastAdAt", "gamesSinceAd"])
+    if (!Number.isFinite(p.ads[k]) || p.ads[k] < 0)
+      p.ads[k] = 0;
+  if (p.ads.personalized !== true && p.ads.personalized !== false)
+    p.ads.personalized = null;
+  if (!Number.isFinite(p.clock.offset) || Math.abs(p.clock.offset) > 400 * 86400000)
+    p.clock.offset = 0;
+  for (const k of ["coins", "coinsEarned", "level", "xp"])
+    if (!Number.isFinite(p[k]) || p[k] < 0)
+      p[k] = base[k];
+  p.coins = Math.floor(p.coins);
+  p.bombers = Number.isFinite(p.bombers) && p.bombers > 0 ? Math.floor(p.bombers) : 0;
+  p.bomberGift = p.bomberGift === true;
+  p.purchases = Array.isArray(p.purchases) ? p.purchases.filter((x) => x && typeof x.token === "string").slice(-200) : [];
+  if (!Array.isArray(p.settled))
+    p.settled = [];
+  if (!Array.isArray(p.ledger))
+    p.ledger = [];
+  if (!p.pending || typeof p.pending.matchId !== "string")
+    p.pending = null;
+  if (!Number.isFinite(p.winStreak))
+    p.winStreak = 0;
+  if (!["easy", "normal", "hard", "expert"].includes(p.lastSetup.difficulty))
+    p.lastSetup.difficulty = "normal";
+  return p;
+}
+
 // server/index.ts
 var PORT = Number(process.env.PORT ?? 8787);
 var HERE = dirname(fileURLToPath(import.meta.url));
-var STATIC_DIR = process.env.STATIC_DIR ? resolve(process.env.STATIC_DIR) : existsSync(join(HERE, "www", "index.html")) ? join(HERE, "www") : existsSync(join(HERE, "index.html")) ? HERE : join(process.cwd(), "dist", "www");
+var STATIC_DIR = process.env.STATIC_DIR ? resolve(process.env.STATIC_DIR) : existsSync2(join2(HERE, "www", "index.html")) ? join2(HERE, "www") : existsSync2(join2(HERE, "index.html")) ? HERE : join2(process.cwd(), "dist", "www");
 var clients = new Map;
 var conns = new Map;
 var push = new PushService;
@@ -4761,10 +5528,10 @@ function onMessage(conn, raw, state) {
     return;
   }
   if (msg.t === "hello") {
-    const token = typeof msg.token === "string" && msg.token.length >= 16 ? msg.token.slice(0, 64) : randomBytes(16).toString("hex");
+    const token = typeof msg.token === "string" && msg.token.length >= 16 ? msg.token.slice(0, 64) : randomBytes2(16).toString("hex");
     let c = clients.get(token);
     if (!c) {
-      c = { token, id: randomBytes(5).toString("hex"), name: "", characterId: "renard", room: null, connected: true };
+      c = { token, id: randomBytes2(5).toString("hex"), name: "", characterId: "renard", room: null, connected: true };
       clients.set(token, c);
     }
     const old = conns.get(token);
@@ -4858,8 +5625,15 @@ var MIME = {
   ".apk": "application/vnd.android.package-archive",
   ".txt": "text/plain; charset=utf-8"
 };
+var accountStore = storeFromEnv();
+var googleClientIds = [process.env.GOOGLE_WEB_CLIENT_ID, ...(process.env.GOOGLE_EXTRA_CLIENT_IDS ?? "").split(",")].map((s) => s?.trim()).filter((s) => !!s);
+var accounts = accountStore && googleClientIds.length ? new Accounts(accountStore, new GoogleVerifier(googleClientIds, process.env.GOOGLE_JWKS_URL || undefined), (d) => migrate(d)) : null;
+var api = accountRoutes(accounts, process.env.GOOGLE_WEB_CLIENT_ID);
+console.log(accounts ? `Comptes : activés (stockage ${accountStore.kind})` : "Comptes : désactivés (GOOGLE_WEB_CLIENT_ID + stockage à configurer)");
 var server = createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", "http://x");
+  if (await api(req, res, url.pathname))
+    return;
   if (url.pathname === "/health") {
     res.writeHead(200, { "content-type": "application/json", "access-control-allow-origin": "*" });
     res.end(JSON.stringify({ ok: true, now: Date.now(), rooms: lobby.rooms.size, players: conns.size, push: push.enabled, v: PROTOCOL_VERSION }));
@@ -4879,7 +5653,7 @@ var server = createServer(async (req, res) => {
   let path = invite || url.pathname === "/" ? "/index.html" : url.pathname;
   path = normalize(path).replace(/^(\.\.[/\\])+/, "");
   try {
-    let data = await readFile(join(STATIC_DIR, path));
+    let data = await readFile(join2(STATIC_DIR, path));
     if (path === "/index.html") {
       const origin = `${req.headers["x-forwarded-proto"]?.split(",")[0] || "http"}://${req.headers.host}`;
       let html = data.toString("utf8").replaceAll("__ORIGIN__", origin);

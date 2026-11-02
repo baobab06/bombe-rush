@@ -9,6 +9,7 @@
  *   GET  /                 le jeu
  *   GET  /j/CODE           lien d'invitation (ouvre le jeu et rejoint la salle)
  *   GET  /health           état du serveur
+ *   /api/…                 comptes Google et sauvegarde en ligne (server/accounts.ts)
  *   GET  /.well-known/assetlinks.json   Android App Links (si ANDROID_* défini)
  *   WS   /ws               temps réel
  */
@@ -24,6 +25,8 @@ import { Lobby, type Client } from "./lobby";
 import { Matchmaker } from "./matchmaking";
 import { PushService } from "./push";
 import { acceptUpgrade, type WsConn } from "./ws";
+import { Accounts, GoogleVerifier, accountRoutes, storeFromEnv } from "./accounts";
+import { migrate } from "../src/meta/save";
 
 const PORT = Number(process.env.PORT ?? 8787);
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -178,8 +181,16 @@ const MIME: Record<string, string> = {
   ".txt": "text/plain; charset=utf-8",
 };
 
+// comptes Google + sauvegarde en ligne (désactivés tant que GOOGLE_WEB_CLIENT_ID et le stockage ne sont pas configurés)
+const accountStore = storeFromEnv();
+const googleClientIds = [process.env.GOOGLE_WEB_CLIENT_ID, ...(process.env.GOOGLE_EXTRA_CLIENT_IDS ?? "").split(",")].map((s) => s?.trim()).filter((s): s is string => !!s);
+const accounts = accountStore && googleClientIds.length ? new Accounts(accountStore, new GoogleVerifier(googleClientIds, process.env.GOOGLE_JWKS_URL || undefined), (d) => migrate(d as Parameters<typeof migrate>[0])) : null;
+const api = accountRoutes(accounts, process.env.GOOGLE_WEB_CLIENT_ID);
+console.log(accounts ? `Comptes : activés (stockage ${accountStore!.kind})` : "Comptes : désactivés (GOOGLE_WEB_CLIENT_ID + stockage à configurer)");
+
 const server = createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", "http://x");
+  if (await api(req, res, url.pathname)) return;
   if (url.pathname === "/health") {
     res.writeHead(200, { "content-type": "application/json", "access-control-allow-origin": "*" });
     res.end(JSON.stringify({ ok: true, now: Date.now(), rooms: lobby.rooms.size, players: conns.size, push: push.enabled, v: PROTOCOL_VERSION }));

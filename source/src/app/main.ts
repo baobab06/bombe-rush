@@ -1,4 +1,5 @@
 import { announceBombers, listenPurchases } from "./bank";
+import { AccountUI } from "./account-ui";
 import "../platform/polyfills";
 import { audio } from "../audio/audio";
 import { CHARACTERS, getCharacter, getSkin } from "../core/characters";
@@ -65,6 +66,8 @@ class App implements AppCtx {
   readonly fx = new UiFx($<HTMLCanvasElement>("uiFx"));
   readonly wallet = new Wallet(() => this._profile.coins, () => this._profile.bombers);
   readonly modal = new Modal();
+  /** compte Google + sauvegarde en ligne */
+  private account: AccountUI | null = null;
   private shop: ItemBrowser;
   private coll: ItemBrowser;
   private homeStage: Stage;
@@ -127,6 +130,7 @@ class App implements AppCtx {
     this.wire();
     this.wireOnline();
     this.wireHud();
+    this.wireAccount();
     this.renderHome();
     this.game.startDemo();
     this.wireIdent();
@@ -524,6 +528,8 @@ class App implements AppCtx {
     // succès : vérifiés à chaque sauvegarde (achat, coffre, mission, partie…)
     const fresh = checkAchievements(this._profile);
     this.save.save(this._profile);
+    // compte Google : envoi en ligne quelques secondes plus tard (rien si non connecté)
+    this.account?.cloud.markDirty();
     if (fresh.length && this.screen !== "game" && this.screen !== "boot")
       fresh.forEach((a, i) => window.setTimeout(() => this.toast(`🏅 Succès débloqué : ${a.name} — récupère ta récompense dans le Profil !`, "good"), 300 + i * 1300));
     if (fresh.length) this.renderBadges();
@@ -828,7 +834,43 @@ class App implements AppCtx {
   }
 
   // ---------------------------------------------------------------- réglages
+  /** Compte Google : connexion, synchronisation, progression récupérée. */
+  private wireAccount() {
+    this.account = new AccountUI({
+      modal: this.modal,
+      toast: (t, k) => this.toast(t, k),
+      profile: () => this._profile,
+      replaced: (p) => {
+        // progression du compte récupérée : on l'enregistre et on réaffiche tout
+        this._profile = p;
+        ensureMissions(this._profile);
+        ensureWeekly(this._profile);
+        this.save.save(this._profile);
+        this.applySettings();
+        this.wallet.sync();
+        this.renderHome();
+        this.renderBadges();
+        this.online.updateIdentity();
+        this.lookChanged();
+        if (this.screen === "welcome" && this._profile.named) this.go("home");
+        if (this.screen === "settings") this.renderSettings();
+      },
+    });
+    this.account.onChange = () => {
+      if (this.screen === "settings") this.account!.renderBox($("accountBox"));
+      $("btnWelcomeGoogle").hidden = !this.account!.cloud.enabled || this.account!.cloud.signedIn;
+    };
+    $("btnWelcomeGoogle").addEventListener("click", () => {
+      this.click();
+      this.account!.openSignIn(true, () => {
+        if (this._profile.named && this.screen === "welcome") this.go("home");
+      });
+    });
+    this.account.start();
+  }
+
   private renderSettings() {
+    if (this.account) this.account.renderBox($("accountBox"));
     const st = this._profile.settings;
     $<HTMLInputElement>("setMusic").checked = st.music;
     $<HTMLInputElement>("setSfx").checked = st.sfx;

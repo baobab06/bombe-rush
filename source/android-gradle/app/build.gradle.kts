@@ -23,8 +23,8 @@ android {
         applicationId = "com.bomberush.game"
         minSdk = 24
         targetSdk = 36
-        versionCode = 47
-        versionName = "1.10.1"
+        versionCode = 48
+        versionName = "1.11.0"
         manifestPlaceholders["admobAppId"] = admobAppId
     }
 
@@ -70,4 +70,8 @@ dependencies {
     implementation("com.google.android.ump:user-messaging-platform:3.2.0")
     // achats intégrés (bombers, pièces) — Google Play exige la version 8 depuis août 2026
     implementation("com.android.billingclient:billing:8.0.0")
+    // connexion Google officielle (Credential Manager + « Se connecter avec Google »)
+    implementation("androidx.credentials:credentials:1.5.0")
+    implementation("androidx.credentials:credentials-play-services-auth:1.5.0")
+    implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
 }

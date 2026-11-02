@@ -1367,3 +1367,33 @@ button:focus-visible, input:focus-visible + i { outline: 3px solid var(--coin); 
 .team-info span { color: var(--muted); margin: 0 .6em; }
 .team-info .ti-red { color: #ff6a6a; }
 .team-info .ti-blue { color: #6aa6ff; }
+
+/* ---------- compte Google ---------- */
+.acct-box { display: flex; flex-direction: column; gap: 1.4cqh; margin-top: 1cqh; }
+.acct-status { margin: 0; font-weight: 700; font-size: max(11px, .72em); line-height: 1.35; color: var(--muted); }
+.acct-status.ok { color: #7be08a; }
+.acct-status.warn { color: #ffc65c; }
+.acct-status.wait { color: #9fd0ff; }
+.acct-who { display: flex; align-items: center; gap: 1.2cqh; margin: 0; font-weight: 700; font-size: max(12px, .78em); word-break: break-all; }
+.acct-who svg { flex: none; background: #fff; border-radius: 50%; padding: 3px; }
+.acct-actions { display: flex; align-items: center; gap: 2.4cqh; flex-wrap: wrap; }
+.btn-google { display: inline-flex; align-items: center; justify-content: center; gap: 12px; align-self: flex-start; min-height: 44px; padding: 0 20px 0 12px; border-radius: 999px;
+  background: #fff; color: #1f1f1f; font: 700 max(14px, .85em) "Roboto", system-ui, sans-serif; border: 1px solid #dadce0; box-shadow: 0 .6cqh 0 rgba(0,0,0,.25); cursor: pointer; }
+.btn-google:active { transform: translateY(2px); box-shadow: 0 .2cqh 0 rgba(0,0,0,.25); }
+.btn-google.big { align-self: center; min-height: 52px; font-size: max(15px, .95em); padding: 0 26px 0 16px; }
+.btn-google:disabled { opacity: .6; }
+.acct-sheet { max-width: min(94cqw, 130cqh); }
+.acct-btn-slot { display: flex; justify-content: center; min-height: 52px; align-items: center; }
+.acct-btn-slot.busy { opacity: .5; pointer-events: none; }
+.acct-msg { margin: 0; text-align: center; font-weight: 700; font-size: max(12px, .78em); line-height: 1.35; display: flex; align-items: center; justify-content: center; gap: 1.2cqh; }
+.acct-msg.bad { color: #ff8a7a; }
+.acct-msg.wait { color: #9fd0ff; }
+.spin { display: inline-block; width: 16px; height: 16px; border-radius: 50%; border: 3px solid rgba(255,255,255,.25); border-top-color: #fff; animation: spin .8s linear infinite; flex: none; }
+.acct-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 2cqh; }
+.acct-card { background: rgba(0,0,0,.22); border-radius: 2.4cqh; padding: 2cqh 2.4cqh; display: flex; flex-direction: column; gap: .8cqh; font-size: max(12px, .78em); }
+.acct-card > b { font-family: var(--display); font-weight: 400; font-size: 1.15em; }
+.acct-card .acct-name { font-weight: 800; color: #ffd23f; }
+.acct-card ul { margin: 0; padding-left: 1.2em; line-height: 1.5; }
+.acct-card small { color: var(--muted); font-weight: 700; }
+.sheet-actions.wrap { flex-wrap: wrap; }
+.welcome-google { align-self: center; margin-top: .6cqh; }

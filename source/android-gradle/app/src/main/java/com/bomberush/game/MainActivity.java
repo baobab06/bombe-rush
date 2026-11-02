@@ -47,6 +47,7 @@ public class MainActivity extends Activity {
     /** Publicités AdMob (pont window.BombeRushAds pour le jeu). */
     private AdsBridge ads;
     private BillingBridge billing;
+    private AuthBridge auth;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -94,6 +95,8 @@ public class MainActivity extends Activity {
         web.addJavascriptInterface(ads, "BombeRushAds");
         billing = new BillingBridge(this, web);
         web.addJavascriptInterface(billing, "BombeRushBilling");
+        auth = new AuthBridge(this, web);
+        web.addJavascriptInterface(auth, "BombeRushAuth");
         web.setWebChromeClient(new WebChromeClient());
         web.setWebViewClient(new WebViewClient() {
             @Override
@@ -230,6 +233,7 @@ public class MainActivity extends Activity {
     protected void onDestroy() {
         if (ads != null) ads.destroy();
         if (billing != null) billing.destroy();
+        if (auth != null) auth.destroy();
         if (web != null) {
             web.destroy();
             web = null;
