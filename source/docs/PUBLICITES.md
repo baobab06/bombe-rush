@@ -23,8 +23,8 @@
   La récompense n'est donnée **que si la régie confirme que la vidéo a été vue jusqu'au bout**.
   Vidéo fermée, absente ou en échec : un message s'affiche et le jeu continue.
 - **Pub entre deux parties** : jamais pendant un combat. Elle ne s'affiche
-  qu'en quittant l'écran de fin, au plus une fois toutes les 3 parties et
-  toutes les 4 minutes, et jamais pendant les 2 premières parties de la session.
+  qu'en quittant l'écran de fin, au plus une fois toutes les 4 parties et
+  toutes les 3 minutes, et jamais pendant les 2 premières parties de la session.
 - **Consentement** : demandé avant la première pub (personnalisées ou non) et
   modifiable dans Paramètres. Ce choix est transmis à la régie.
 - **Aucune régie configurée = aucune pub et aucun bouton.** C'est l'état
@@ -32,6 +32,10 @@
 - Pour tester en local uniquement : `http://localhost:…/?ads=test` (fausse
   pub signalée « PUB DE TEST ») ou `?ads=test-none` (aucune pub disponible).
   Ce mode ne fonctionne pas sur le site en ligne.
+
+## État au 3 novembre 2026 (version 1.11.5)
+
+Bloc interstitiel « Entre deux parties » créé dans AdMob (`ca-app-pub-8702007304042641/7701337446`) : une pub toutes les 4 parties au plus (parties solo uniquement, jamais en ligne ni pendant un combat). Appli AdMob associée à la fiche Google Play le 3 novembre 2026 (examen AdMob en cours, diffusion limitée jusqu'à la fin).
 
 ## État au 16 octobre 2026 (version 1.1.1)
 

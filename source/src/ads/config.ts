@@ -22,8 +22,8 @@ export const ADS = {
   android: {
     appId: "ca-app-pub-8702007304042641~7500110205",
     rewarded: "ca-app-pub-8702007304042641/3808664243",
-    /** pas de bloc interstitiel pour l'instant (vide = aucune pub entre deux parties) */
-    interstitial: "",
+    /** bloc « Entre deux parties » (interstitiel, jamais pendant un combat) */
+    interstitial: "ca-app-pub-8702007304042641/7701337446",
   },
 
   /** Pubs récompensées (toujours au choix du joueur) */
@@ -39,9 +39,9 @@ export const ADS = {
   /** Pubs entre deux parties (jamais pendant un combat) */
   interstitial: {
     /** parties terminées au minimum entre deux pubs */
-    minGamesBetween: 3,
+    minGamesBetween: 4,
     /** secondes minimum entre deux pubs (toutes pubs confondues) */
-    minSecondsBetween: 240,
+    minSecondsBetween: 180,
     /** pas de pub avant d'avoir joué ce nombre de parties dans la session */
     graceGames: 2,
   },

@@ -295,10 +295,13 @@ console.log("Publicités (règles)");
   // pubs entre deux parties
   const q = defaultProfile();
   check(!interstitialDue(q, 1, 1e12), "pas de pub pendant les premières parties");
-  for (let i = 0; i < 3; i++) noteGamePlayed(q);
-  check(interstitialDue(q, 5, 1e12), "après 3 parties : pub possible");
+  const N = ADS.interstitial.minGamesBetween;
+  for (let i = 0; i < N - 1; i++) noteGamePlayed(q);
+  check(!interstitialDue(q, 5, 1e12), `après ${N - 1} parties : pas encore de pub`);
+  noteGamePlayed(q);
+  check(interstitialDue(q, 5, 1e12), `après ${N} parties : pub possible`);
   noteInterstitialShown(q, 1e12);
-  for (let i = 0; i < 3; i++) noteGamePlayed(q);
+  for (let i = 0; i < N; i++) noteGamePlayed(q);
   check(!interstitialDue(q, 8, 1e12 + 60000), "délai minimum entre deux pubs respecté");
   check(interstitialDue(q, 8, 1e12 + ADS.interstitial.minSecondsBetween * 1000), "… puis de nouveau possible");
   check(ADS.webPublisherId === "", "aucun faux identifiant de production dans le projet");
