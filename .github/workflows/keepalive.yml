@@ -1,0 +1,18 @@
+# Garde le serveur Render éveillé (offre gratuite : il s'endort après 15 min).
+# Sans ça, Google Play et AdMob tombent sur la page « Application loading »
+# au lieu de la politique de confidentialité ou du fichier app-ads.txt.
+name: keepalive
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Réveiller le serveur
+        run: |
+          for path in / /confidentialite.html /app-ads.txt; do
+            curl -fsS -o /dev/null --retry 5 --retry-delay 15 --max-time 90 "https://bombe-rush.onrender.com$path" && echo "ok $path"
+          done
