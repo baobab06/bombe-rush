@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 /**
  * Build Node (esbuild) : `npm run build`
  *  - dist/www/index.html : page autonome, utilisée par Capacitor pour l'APK
@@ -24,7 +25,11 @@ function assemble(js) {
   console.log(`dist/www/index.html — ${(size / 1024).toFixed(0)} Ko`);
 }
 
+// version du jeu (celle de l'appli Android) : vérification des mises à jour
+const APP_VERSION = /versionName\s*=\s*"([^"]+)"/.exec(readFileSync("android-gradle/app/build.gradle.kts", "utf8"))?.[1] ?? "0.0.0";
+
 const options = {
+  define: { __APP_VERSION__: JSON.stringify(APP_VERSION) },
   entryPoints: ["src/app/main.ts"],
   bundle: true,
   minify: true,

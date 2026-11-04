@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Bombe Rush — Mises à jour (admin)</title>
+<style>
+  :root { --bg:#0f0b2e; --panel:#2a287e; --panel2:#221f66; --ink:#140f3c; --muted:#b9b6f2; --yellow:#ffd23f; --green:#2fc24b; --red:#ff5a4f; --blue:#2f7dff; color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; background: radial-gradient(ellipse at 50% 0%, #3d3ca6, var(--bg) 70%); color: #fff; font: 15px/1.45 "Trebuchet MS", system-ui, sans-serif; padding: 24px 16px 60px; }
+  main { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+  h1 { margin: 0; font: 900 26px/1.1 "Arial Black", Impact, sans-serif; letter-spacing: .02em; text-shadow: 0 3px 0 var(--ink); }
+  h1 small { display: block; font: 700 13px system-ui; color: var(--muted); letter-spacing: 0; text-shadow: none; margin-top: 6px; }
+  section { background: linear-gradient(180deg, var(--panel), var(--panel2)); border: 3px solid var(--ink); border-radius: 18px; padding: 16px 18px; box-shadow: 0 5px 0 var(--ink); }
+  h2 { margin: 0 0 10px; font-size: 16px; color: var(--yellow); letter-spacing: .06em; text-transform: uppercase; }
+  label { display: block; font-weight: 700; margin: 10px 0 4px; }
+  label .hint { font-weight: 400; color: var(--muted); font-size: 13px; }
+  input[type=text], input[type=password], input[type=url], textarea, select { width: 100%; padding: 10px 12px; border-radius: 10px; border: 2px solid var(--ink); background: #15124a; color: #fff; font: inherit; }
+  textarea { min-height: 80px; resize: vertical; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .toggle { display: flex; align-items: center; gap: 10px; margin-top: 10px; font-weight: 700; cursor: pointer; }
+  .toggle input { width: 22px; height: 22px; accent-color: var(--green); }
+  button { cursor: pointer; font: 800 15px system-ui; border: 3px solid var(--ink); border-radius: 12px; padding: 10px 16px; color: var(--ink); background: var(--yellow); box-shadow: 0 4px 0 var(--ink); }
+  button:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--ink); }
+  button.green { background: #93f56c; } button.ghost { background: #5a58b8; color: #fff; } button.red { background: #ff8f86; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .notes { display: flex; flex-direction: column; gap: 8px; }
+  .note { display: grid; grid-template-columns: 150px 1fr auto; gap: 8px; }
+  .msg { padding: 10px 12px; border-radius: 10px; font-weight: 700; display: none; }
+  .msg.ok { display: block; background: rgba(47,194,75,.25); border: 2px solid var(--green); }
+  .msg.err { display: block; background: rgba(255,90,79,.2); border: 2px solid var(--red); }
+  .preview { display: grid; gap: 6px; }
+  .preview div { padding: 8px 12px; border-radius: 10px; background: #15124a; display: flex; justify-content: space-between; gap: 10px; }
+  .tag { font-weight: 900; font-size: 12px; padding: 2px 10px; border-radius: 99px; color: var(--ink); }
+  .tag.ok { background: #93f56c; } .tag.optional { background: var(--yellow); } .tag.mandatory { background: #ff8f86; }
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .muted { color: var(--muted); font-size: 13px; }
+  #editor[hidden] { display: none; }
+  @media (max-width: 560px) { .row { grid-template-columns: 1fr; } .note { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>💣 BOMBE RUSH — Mises à jour<small>Annonces de mise à jour envoyées aux joueurs au lancement du jeu. Aucune nouvelle version du jeu n'est nécessaire pour les changer.</small></h1>
+
+  <section>
+    <h2>🔑 Clé d'administration</h2>
+    <label for="token">Clé <span class="hint">(variable ADMIN_TOKEN du serveur Render)</span></label>
+    <input id="token" type="password" autocomplete="off" placeholder="colle ta clé ici">
+    <label class="toggle"><input type="checkbox" id="remember"> Se souvenir sur cet appareil</label>
+    <div class="actions" style="margin-top:12px"><button id="load">Ouvrir</button><span class="muted" id="loadInfo"></span></div>
+  </section>
+
+  <div class="msg" id="msg"></div>
+
+  <div id="editor" hidden>
+    <section>
+      <h2>📣 Annonce</h2>
+      <label class="toggle"><input type="checkbox" id="enabled"> Notifications de mise à jour activées</label>
+      <p class="muted">Désactivé : aucun message n'est affiché et aucune version n'est bloquée.</p>
+      <div class="row">
+        <div><label for="latest">Dernière version <span class="hint">(ex. 1.12.0)</span></label><input id="latest" type="text" inputmode="decimal"></div>
+        <div><label for="min">Version minimale acceptée <span class="hint">(en dessous : obligatoire)</span></label><input id="min" type="text" inputmode="decimal"></div>
+      </div>
+      <label class="toggle"><input type="checkbox" id="mandatory"> La dernière version est <b>obligatoire</b> pour tout le monde</label>
+      <label for="title">Titre</label><input id="title" type="text" maxlength="80">
+      <label for="desc">Description</label><textarea id="desc" maxlength="600"></textarea>
+      <label for="store">Lien Google Play</label><input id="store" type="url">
+    </section>
+
+    <section>
+      <h2>📝 Notes de version</h2>
+      <div class="notes" id="notes"></div>
+      <div class="actions" style="margin-top:10px"><button class="ghost" id="addNote">+ Ajouter une ligne</button></div>
+    </section>
+
+    <section>
+      <h2>👀 Ce que verront les joueurs</h2>
+      <div class="preview" id="preview"></div>
+    </section>
+
+    <div class="actions">
+      <button class="green" id="save">Publier l'annonce</button>
+      <span class="muted" id="saved"></span>
+    </div>
+  </div>
+</main>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const KEY = "bomberush.adminToken";
+  try { const t = localStorage.getItem(KEY); if (t) { $("token").value = t; $("remember").checked = true; } } catch {}
+  const msg = (text, ok) => { const m = $("msg"); m.textContent = text; m.className = "msg " + (ok ? "ok" : "err"); };
+  const headers = () => ({ "authorization": "Bearer " + $("token").value.trim(), "content-type": "application/json" });
+
+  const cmp = (a, b) => { const pa = a.split(".").map(Number), pb = b.split(".").map(Number); for (let i = 0; i < Math.max(pa.length, pb.length); i++) { const d = (pa[i] || 0) - (pb[i] || 0); if (d) return d; } return 0; };
+  const isV = (v) => /^\d{1,4}(\.\d{1,4}){0,3}$/.test(v);
+
+  function noteRow(n = { kind: "new", text: "" }) {
+    const d = document.createElement("div"); d.className = "note";
+    d.innerHTML = '<select><option value="new">✨ Nouveau</option><option value="improve">⚡ Amélioré</option><option value="fix">🛠️ Correction</option></select><input type="text" maxlength="160" placeholder="ex. Nouveau mode Domination"><button class="red" title="Supprimer">✕</button>';
+    d.querySelector("select").value = n.kind; d.querySelector("input").value = n.text;
+    d.querySelector("button").onclick = () => { d.remove(); preview(); };
+    d.querySelector("input").oninput = preview;
+    $("notes").appendChild(d);
+  }
+
+  function read() {
+    return {
+      enabled: $("enabled").checked, latestVersion: $("latest").value.trim(), minVersion: $("min").value.trim(), mandatory: $("mandatory").checked,
+      title: $("title").value, description: $("desc").value, storeUrl: $("store").value.trim(),
+      notes: [...$("notes").children].map((r) => ({ kind: r.querySelector("select").value, text: r.querySelector("input").value })).filter((n) => n.text.trim()),
+    };
+  }
+
+  function preview() {
+    const c = read(); const box = $("preview"); box.innerHTML = "";
+    if (!isV(c.latestVersion) || !isV(c.minVersion)) { box.innerHTML = '<div>Versions à compléter (ex. 1.12.0)</div>'; return; }
+    const req = c.mandatory && cmp(c.latestVersion, c.minVersion) > 0 ? c.latestVersion : c.minVersion;
+    const statusOf = (v) => !c.enabled ? "ok" : cmp(v, req) < 0 ? "mandatory" : cmp(v, c.latestVersion) < 0 ? "optional" : "ok";
+    const label = { ok: "rien (à jour)", optional: "fenêtre facultative (« PLUS TARD » possible)", mandatory: "BLOQUÉ jusqu'à la mise à jour" };
+    const rows = [["plus ancienne que " + req, statusOf("0.0.1")]];
+    for (const v of [...new Set([req, c.minVersion, c.latestVersion])].sort(cmp)) rows.push([v, statusOf(v)]);
+    for (const [v, st] of rows) {
+      const row = document.createElement("div");
+      row.innerHTML = `<span>Joueur en version <b>${v}</b></span><span class="tag ${st}">${label[st]}</span>`;
+      box.appendChild(row);
+    }
+  }
+
+  function fill(c) {
+    $("enabled").checked = !!c.enabled; $("latest").value = c.latestVersion; $("min").value = c.minVersion; $("mandatory").checked = !!c.mandatory;
+    $("title").value = c.title; $("desc").value = c.description; $("store").value = c.storeUrl;
+    $("notes").innerHTML = ""; (c.notes || []).forEach(noteRow);
+    $("saved").textContent = c.updatedAt ? "Dernière modification : " + new Date(c.updatedAt).toLocaleString("fr-FR") : "Jamais publiée";
+    preview();
+  }
+
+  for (const id of ["enabled", "latest", "min", "mandatory"]) $(id).addEventListener("input", preview);
+
+  $("load").onclick = async () => {
+    try { if ($("remember").checked) localStorage.setItem(KEY, $("token").value.trim()); else localStorage.removeItem(KEY); } catch {}
+    $("loadInfo").textContent = "Chargement…";
+    try {
+      const r = await fetch("/api/admin/update", { headers: headers(), cache: "no-store" });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "Erreur " + r.status);
+      fill(j); $("editor").hidden = false; $("loadInfo").textContent = ""; $("msg").className = "msg";
+    } catch (e) { $("loadInfo").textContent = ""; msg(e.message, false); }
+  };
+
+  $("addNote").onclick = () => noteRow();
+
+  $("save").onclick = async () => {
+    const c = read();
+    if (c.enabled && c.mandatory && !confirm("Rendre la version " + c.latestVersion + " OBLIGATOIRE ? Les joueurs avec une version plus ancienne ne pourront plus jouer avant de mettre à jour.")) return;
+    $("save").disabled = true;
+    try {
+      const r = await fetch("/api/admin/update", { method: "PUT", headers: headers(), body: JSON.stringify(c) });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "Erreur " + r.status);
+      fill(j); msg("✅ Annonce publiée. Les joueurs la verront à leur prochain lancement du jeu (ou au retour dans le jeu après 30 minutes).", true);
+    } catch (e) { msg(e.message, false); }
+    $("save").disabled = false;
+  };
+})();
+</script>
+</body>
+</html>

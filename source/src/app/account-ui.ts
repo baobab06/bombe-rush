@@ -2,6 +2,7 @@
  * Interface du COMPTE GOOGLE : bouton de connexion, chargement, erreurs,
  * choix en cas de conflit de progression, état de la sauvegarde en ligne.
  */
+import { appVersion } from "../platform/app-version";
 import { CloudSync, type ProfileSummary, type SignInResult } from "../meta/cloud";
 import { localBackend } from "../meta/save";
 import type { Profile } from "../meta/profile";
@@ -32,7 +33,7 @@ async function api(path: string, init: { method: string; body?: unknown; session
   try {
     const r = await fetch(base.replace(/\/$/, "") + path, {
       method: init.method,
-      headers: { ...(init.body !== undefined ? { "content-type": "application/json" } : {}), ...(init.session ? { authorization: `Bearer ${init.session}` } : {}) },
+      headers: { "x-bomberush-version": appVersion(), ...(init.body !== undefined ? { "content-type": "application/json" } : {}), ...(init.session ? { authorization: `Bearer ${init.session}` } : {}) },
       body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
       signal: ctrl.signal,
     });

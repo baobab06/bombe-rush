@@ -25,7 +25,8 @@ import { Lobby, type Client } from "./lobby";
 import { Matchmaker } from "./matchmaking";
 import { PushService } from "./push";
 import { acceptUpgrade, type WsConn } from "./ws";
-import { Accounts, GoogleVerifier, accountRoutes, storeFromEnv } from "./accounts";
+import { Accounts, GoogleVerifier, MemoryStore, accountRoutes, allowedOrigin, storeFromEnv } from "./accounts";
+import { UpdateService, updateRoutes } from "./updates";
 import { migrate } from "../src/meta/save";
 
 const PORT = Number(process.env.PORT ?? 8787);
@@ -86,6 +87,12 @@ function onMessage(conn: WsConn, raw: string, state: { token: string | null; win
     return;
   }
   if (msg.t === "hello") {
+    // version du jeu plus prise en charge : pas de multijoueur (le jeu affiche la mise à jour)
+    if (updates.statusOf(typeof msg.app === "string" ? msg.app.slice(0, 20) : null) === "mandatory") {
+      conn.send(JSON.stringify({ t: "error", code: "update_required", message: "Mise à jour obligatoire : mets le jeu à jour pour jouer en ligne." }));
+      setTimeout(() => conn.close(4010), 250);
+      return;
+    }
     const token = typeof msg.token === "string" && msg.token.length >= 16 ? msg.token.slice(0, 64) : randomBytes(16).toString("hex");
     let c = clients.get(token);
     if (!c) {
@@ -185,11 +192,16 @@ const MIME: Record<string, string> = {
 const accountStore = storeFromEnv();
 const googleClientIds = [process.env.GOOGLE_WEB_CLIENT_ID, ...(process.env.GOOGLE_EXTRA_CLIENT_IDS ?? "").split(",")].map((s) => s?.trim()).filter((s): s is string => !!s);
 const accounts = accountStore && googleClientIds.length ? new Accounts(accountStore, new GoogleVerifier(googleClientIds, process.env.GOOGLE_JWKS_URL || undefined), (d) => migrate(d as Parameters<typeof migrate>[0])) : null;
-const api = accountRoutes(accounts, process.env.GOOGLE_WEB_CLIENT_ID);
+// mises à jour du jeu (réglées depuis /admin-mises-a-jour.html, clé ADMIN_TOKEN)
+const updates = new UpdateService(accountStore ?? new MemoryStore());
+const updateApi = updateRoutes(updates, process.env.ADMIN_TOKEN, (req) => allowedOrigin(req.headers.origin, req.headers.host));
+const api = accountRoutes(accounts, process.env.GOOGLE_WEB_CLIENT_ID, (req) => updates.statusOf(String(req.headers["x-bomberush-version"] ?? "") || null) === "mandatory");
+console.log(process.env.ADMIN_TOKEN && process.env.ADMIN_TOKEN.length >= 24 ? "Mises à jour : administration activée" : "Mises à jour : administration désactivée (ADMIN_TOKEN à configurer)");
 console.log(accounts ? `Comptes : activés (stockage ${accountStore!.kind})` : "Comptes : désactivés (GOOGLE_WEB_CLIENT_ID + stockage à configurer)");
 
 const server = createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", "http://x");
+  if (await updateApi(req, res, url.pathname, url.searchParams)) return;
   if (await api(req, res, url.pathname)) return;
   if (url.pathname === "/health") {
     res.writeHead(200, { "content-type": "application/json", "access-control-allow-origin": "*" });

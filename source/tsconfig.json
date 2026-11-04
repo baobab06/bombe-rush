@@ -10,5 +10,5 @@
     "isolatedModules": true
   },
   "include": ["src", "tests"],
-  "exclude": ["tests/accounts.test.ts"]
+  "exclude": ["tests/accounts.test.ts", "tests/update.test.ts"]
 }

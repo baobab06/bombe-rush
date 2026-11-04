@@ -306,7 +306,7 @@ export class Accounts {
 // ------------------------------------------------------------ routes HTTP
 
 /** Origines autorisées à appeler l'API (le site, l'appli Android, le développement local). */
-function allowedOrigin(origin: string | undefined, host: string | undefined): string | null {
+export function allowedOrigin(origin: string | undefined, host: string | undefined): string | null {
   if (!origin) return null;
   if (origin === "https://appassets.androidplatform.net") return origin;
   if (/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return origin;
@@ -354,7 +354,7 @@ async function body(req: IncomingMessage, max = MAX_SAVE_BYTES + 4096): Promise<
  *   PUT  /api/profile        (Bearer) { data, baseRev, force? } → { rev } | 409 { cloud }
  *   POST /api/account/delete (Bearer)               → compte et sauvegarde en ligne supprimés
  */
-export function accountRoutes(accounts: Accounts | null, webClientId: string | undefined) {
+export function accountRoutes(accounts: Accounts | null, webClientId: string | undefined, outdated: (req: IncomingMessage) => boolean = () => false) {
   const authLimit = new RateLimit(20, 60_000);
   const saveLimit = new RateLimit(60, 60_000);
   return async (req: IncomingMessage, res: ServerResponse, path: string): Promise<boolean> => {
@@ -363,7 +363,7 @@ export function accountRoutes(accounts: Accounts | null, webClientId: string | u
     const headers: Record<string, string> = { "content-type": "application/json", "cache-control": "no-store" };
     if (origin) {
       headers["access-control-allow-origin"] = origin;
-      headers["access-control-allow-headers"] = "authorization, content-type";
+      headers["access-control-allow-headers"] = "authorization, content-type, x-bomberush-version";
       headers["access-control-allow-methods"] = "GET, POST, PUT, OPTIONS";
       headers["vary"] = "origin";
     }
@@ -378,6 +378,13 @@ export function accountRoutes(accounts: Accounts | null, webClientId: string | u
     }
     if (path === "/api/config" && req.method === "GET") {
       reply(200, { accounts: !!accounts && !!webClientId, googleClientId: webClientId ?? null });
+      return true;
+    }
+    // version du jeu plus prise en charge : pas de connexion ni d'envoi de sauvegarde
+    // (rien n'est effacé : la progression reste sur l'appareil et dans le compte)
+    const writes = (path === "/api/auth/google" && req.method === "POST") || (path === "/api/profile" && req.method === "PUT");
+    if (writes && outdated(req)) {
+      reply(426, { error: "Mise à jour obligatoire : mets le jeu à jour pour synchroniser ta progression.", code: "update_required" });
       return true;
     }
     if (!accounts || !webClientId) {

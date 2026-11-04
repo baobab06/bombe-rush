@@ -1,4 +1,5 @@
 import { Connection, type NetStatus } from "../net/connection";
+import { appVersion } from "../platform/app-version";
 import { serverBase, wsUrl } from "../net/config";
 import { OnlineSession } from "../net/onlineSession";
 import { PROTOCOL_VERSION, type ClientMsg, type RoomEventKind, type RoomView, type ServerMsg } from "../net/protocol";
@@ -81,14 +82,19 @@ export class OnlineController {
     }
   }
 
+  /** mise à jour obligatoire : plus aucune connexion au multijoueur */
+  blocked = false;
+  onUpdateRequired: (() => void) | null = null;
+
   connect() {
+    if (this.blocked) return;
     if (!this.base) {
       this.status = "unavailable";
       this.onStatus(this.status);
       return;
     }
     if (this.conn) return this.conn.open();
-    const conn = new Connection(wsUrl(this.base), () => ({ t: "hello", v: PROTOCOL_VERSION, token: this.token(), ...this.identity() }));
+    const conn = new Connection(wsUrl(this.base), () => ({ t: "hello", v: PROTOCOL_VERSION, token: this.token(), app: appVersion(), ...this.identity() }));
     conn.onStatus = (s) => {
       this.status = s;
       this.onStatus(s);
@@ -179,6 +185,10 @@ export class OnlineController {
         this.onKicked();
         break;
       case "error":
+        if (m.code === "update_required") {
+          this.onUpdateRequired?.();
+          break;
+        }
         this.onError(m.message);
         break;
       case "matchStart": {

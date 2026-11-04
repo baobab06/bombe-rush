@@ -40,7 +40,7 @@ export interface RoomView {
 }
 
 export type ClientMsg =
-  | { t: "hello"; v: number; token: string; name: string; characterId: string; skinId?: string; accessoryId?: string; trailId?: string; boomId?: string }
+  | { t: "hello"; v: number; token: string; name: string; characterId: string; skinId?: string; accessoryId?: string; trailId?: string; boomId?: string; app?: string }
   | { t: "ping" }
   | { t: "createRoom" }
   | { t: "peek"; code: string }

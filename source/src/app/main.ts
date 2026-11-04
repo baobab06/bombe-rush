@@ -47,9 +47,14 @@ import { setServerTime } from "../meta/clock";
 import { getTitle } from "../core/cosmetics";
 import { CHESTS, levelXp, masteryXp, MASTERY_MAX } from "../meta/progress-config";
 import { GameScreen, type GameResult, type StandingRow } from "./game";
+import { UpdateChecker } from "../meta/update-check";
+import { UpdateUI } from "./update-ui";
+import { appVersion } from "../platform/app-version";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
+/** écrans interdits tant qu'une mise à jour obligatoire n'est pas faite */
+const BLOCKED_BY_UPDATE: ScreenId[] = ["setup", "game", "pause", "private", "lobby", "invite"];
 const SCREENS: ScreenId[] = ["home", "setup", "settings", "pause", "results", "private", "lobby", "boot", "welcome", "invite", "shop", "collection", "missions", "profile", "rank", "chests"];
 const MENU_SCREENS: ScreenId[] = ["setup", "settings", "private", "lobby", "welcome", "invite", "shop", "collection", "missions", "profile", "rank", "chests"];
 
@@ -144,6 +149,7 @@ class App implements AppCtx {
     }
     // rechargement pendant une partie en ligne : on reprend sa place
     else if (this.online.available && this.online.wasInRoom) this.online.connect();
+    this.wireUpdates();
     this.boot();
     const capApp = (window as unknown as { Capacitor?: { Plugins?: { App?: { addListener(e: string, cb: (d: { url: string }) => void): void } } } })
       .Capacitor?.Plugins?.App;
@@ -180,6 +186,8 @@ class App implements AppCtx {
         this.startStages();
         // retour au premier plan : on vérifie tout de suite la connexion
         if (this.online.conn && this.online.status !== "online") this.online.connect();
+        // et, de temps en temps, s'il existe une nouvelle version du jeu
+        if (this.updates.due()) void this.updates.check().then((r) => this.applyUpdate(r));
       }
     });
     this.wallet.sync();
@@ -191,6 +199,9 @@ class App implements AppCtx {
   private wireAndroid() {
     const app = androidApp();
     (window as unknown as { __bombeRushBack: () => boolean }).__bombeRushBack = () => {
+      // mise à jour obligatoire : le bouton retour quitte l'appli (rien d'autre n'est accessible)
+      if (this.updateUI?.blocking) return false;
+      if (this.updateUI?.back()) return true;
       if (document.querySelector(".reveal")) return true;
       if (this.chestsScr.cinematicOpen) {
         this.chestsScr.closeCinematic();
@@ -246,6 +257,8 @@ class App implements AppCtx {
 
   // ------------------------------------------------------------ navigation
   go(id: ScreenId, push = true) {
+    // mise à jour obligatoire : pas de partie, de salle ni de multijoueur
+    if (this.updateUI?.blocking && BLOCKED_BY_UPDATE.includes(id)) return;
     if (push && this.screen !== id && this.screen !== "game" && this.screen !== "pause") this.history.push(this.screen);
     if (this.history.length > 12) this.history.splice(0, this.history.length - 12);
     const prev = this.screen;
@@ -276,6 +289,8 @@ class App implements AppCtx {
     if (id === "private") this.renderPrivate();
     if (id === "lobby") this.renderLobby();
     if (id === "welcome" || id === "invite") this.renderIdent(id);
+    if (this.deferredUpdate && id !== "game" && id !== "pause") this.applyUpdate(this.deferredUpdate);
+    if (id === "home") window.setTimeout(() => this.updateUI?.flush(), 600);
     $("netOverlay").hidden = !(this.game.online && (id === "game" || id === "pause") && this.online.status !== "online");
     // menu pause en ligne : la partie continue, pas de « Recommencer »
     $("btnRestart").hidden = this.game.online;
@@ -933,6 +948,42 @@ class App implements AppCtx {
   // ======================================== CHARGEMENT / PSEUDO / INVITATION
   private inviteCode: string | null = null;
   private peeked: Extract<import("../net/protocol").ServerMsg, { t: "peek" }> | null = null;
+
+  // ======================================== MISES À JOUR DU JEU
+  private updates!: UpdateChecker;
+  private updateUI!: UpdateUI;
+
+  /**
+   * Au lancement : décision immédiate avec la dernière réponse connue (une mise
+   * à jour obligatoire reste obligatoire hors ligne), puis vérification auprès
+   * du serveur. Revérifié au retour dans l'appli au plus toutes les 30 minutes.
+   */
+  private wireUpdates() {
+    this.updates = new UpdateChecker({ base: () => serverBase(), version: () => appVersion() });
+    this.updateUI = new UpdateUI($("modal").parentElement!, () => this.screen === "home" && !this.modal.isOpen && !this.chestsScr?.cinematicOpen);
+    this.updateUI.onBlockChange = (blocked) => {
+      this.online.blocked = blocked;
+      if (!blocked) return;
+      // salle privée : on la quitte (la progression est conservée)
+      if (this.online.room) this.online.leaveRoom();
+      this.online.disconnect();
+    };
+    this.online.onUpdateRequired = () => void this.updates.check().then((r) => this.applyUpdate(r));
+    const cached = this.updates.fromCache();
+    if (cached.status === "mandatory") this.applyUpdate(cached);
+    void this.updates.check().then((r) => this.applyUpdate(r));
+  }
+
+  /** une partie en cours n'est jamais interrompue : la fenêtre attend la fin */
+  private deferredUpdate: import("../meta/update-check").UpdateResult | null = null;
+  private applyUpdate(r: import("../meta/update-check").UpdateResult) {
+    if (r.status === "mandatory" && (this.screen === "game" || this.screen === "pause")) {
+      this.deferredUpdate = r;
+      return;
+    }
+    this.deferredUpdate = null;
+    this.updateUI.apply(r);
+  }
 
   /** Écran de chargement : polices, puis « touche pour jouer » (débloque son + plein écran). */
   private boot() {

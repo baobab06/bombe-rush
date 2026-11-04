@@ -5137,7 +5137,7 @@ async function body(req, max = MAX_SAVE_BYTES + 4096) {
   }
   return chunks.length ? JSON.parse(Buffer.concat(chunks).toString("utf8")) : {};
 }
-function accountRoutes(accounts, webClientId) {
+function accountRoutes(accounts, webClientId, outdated = () => false) {
   const authLimit = new RateLimit(20, 60000);
   const saveLimit = new RateLimit(60, 60000);
   return async (req, res, path) => {
@@ -5147,7 +5147,7 @@ function accountRoutes(accounts, webClientId) {
     const headers = { "content-type": "application/json", "cache-control": "no-store" };
     if (origin) {
       headers["access-control-allow-origin"] = origin;
-      headers["access-control-allow-headers"] = "authorization, content-type";
+      headers["access-control-allow-headers"] = "authorization, content-type, x-bomberush-version";
       headers["access-control-allow-methods"] = "GET, POST, PUT, OPTIONS";
       headers["vary"] = "origin";
     }
@@ -5162,6 +5162,11 @@ function accountRoutes(accounts, webClientId) {
     }
     if (path === "/api/config" && req.method === "GET") {
       reply(200, { accounts: !!accounts && !!webClientId, googleClientId: webClientId ?? null });
+      return true;
+    }
+    const writes = path === "/api/auth/google" && req.method === "POST" || path === "/api/profile" && req.method === "PUT";
+    if (writes && outdated(req)) {
+      reply(426, { error: "Mise à jour obligatoire : mets le jeu à jour pour synchroniser ta progression.", code: "update_required" });
       return true;
     }
     if (!accounts || !webClientId) {
@@ -5209,6 +5214,249 @@ function accountRoutes(accounts, webClientId) {
         return true;
       }
       reply(404, { error: "Introuvable" });
+    } catch (e) {
+      reply(400, { error: "Requête invalide (" + e.message + ")." });
+    }
+    return true;
+  };
+}
+
+// server/updates.ts
+import { createHash as createHash3, timingSafeEqual } from "node:crypto";
+
+// src/net/update-policy.ts
+var STORE_URL = "https://play.google.com/store/apps/details?id=com.bomberush.game";
+var LEGACY_VERSION = "1.11.5";
+var DEFAULT_UPDATE = {
+  enabled: false,
+  latestVersion: "1.0.0",
+  minVersion: "1.0.0",
+  mandatory: false,
+  title: "Nouvelle mise à jour !",
+  description: "Une nouvelle version de Bombe Rush est disponible.",
+  notes: [],
+  storeUrl: STORE_URL,
+  updatedAt: 0
+};
+var VERSION_RE = /^\d{1,4}(\.\d{1,4}){0,3}$/;
+function isVersion(v) {
+  return typeof v === "string" && VERSION_RE.test(v.trim());
+}
+function compareVersions(a, b) {
+  const pa = a.trim().split(".").map((n) => Number(n) || 0);
+  const pb = b.trim().split(".").map((n) => Number(n) || 0);
+  for (let i = 0;i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] ?? 0) - (pb[i] ?? 0);
+    if (d)
+      return d;
+  }
+  return 0;
+}
+function requiredVersion(c) {
+  return c.mandatory && compareVersions(c.latestVersion, c.minVersion) > 0 ? c.latestVersion : c.minVersion;
+}
+function updateStatus(c, version) {
+  if (!c.enabled)
+    return "ok";
+  const v = isVersion(version) ? version : LEGACY_VERSION;
+  if (compareVersions(v, requiredVersion(c)) < 0)
+    return "mandatory";
+  if (compareVersions(v, c.latestVersion) < 0)
+    return "optional";
+  return "ok";
+}
+var clip = (s, n) => typeof s === "string" ? s.replace(/[\u0000-\u0008\u000b-\u001f]/g, "").trim().slice(0, n) : "";
+function sanitizeUpdate(raw, now = Date.now()) {
+  const r = raw ?? {};
+  const latest = typeof r.latestVersion === "string" ? r.latestVersion.trim() : "";
+  const min = typeof r.minVersion === "string" ? r.minVersion.trim() : "";
+  if (!isVersion(latest))
+    return { ok: false, error: "Dernière version invalide (exemple : 1.12.0)." };
+  if (!isVersion(min))
+    return { ok: false, error: "Version minimale invalide (exemple : 1.11.0)." };
+  if (compareVersions(min, latest) > 0)
+    return { ok: false, error: "La version minimale ne peut pas dépasser la dernière version." };
+  let storeUrl = clip(r.storeUrl, 300) || STORE_URL;
+  try {
+    const u = new URL(storeUrl);
+    if (u.protocol !== "https:" || !/(^|\.)play\.google\.com$/.test(u.hostname))
+      return { ok: false, error: "Le lien doit pointer vers le Google Play Store (https://play.google.com/…)." };
+    storeUrl = u.toString();
+  } catch {
+    return { ok: false, error: "Lien Play Store invalide." };
+  }
+  const notes = [];
+  if (Array.isArray(r.notes)) {
+    for (const n of r.notes.slice(0, 60)) {
+      if (notes.length >= 20)
+        break;
+      const nn = n ?? {};
+      const kind = nn.kind === "fix" || nn.kind === "improve" ? nn.kind : "new";
+      const text = clip(nn.text, 160);
+      if (text)
+        notes.push({ kind, text });
+    }
+  }
+  return {
+    ok: true,
+    config: {
+      enabled: r.enabled === true,
+      latestVersion: latest,
+      minVersion: min,
+      mandatory: r.mandatory === true,
+      title: clip(r.title, 80) || DEFAULT_UPDATE.title,
+      description: clip(r.description, 600),
+      notes,
+      storeUrl,
+      updatedAt: now
+    }
+  };
+}
+
+// server/updates.ts
+var KEY = "cfg:update";
+var CACHE_MS = 30000;
+
+class UpdateService {
+  store;
+  now;
+  cache = { ...DEFAULT_UPDATE };
+  loadedAt = 0;
+  loading = null;
+  constructor(store = new MemoryStore, now = Date.now) {
+    this.store = store;
+    this.now = now;
+  }
+  async get() {
+    if (this.now() - this.loadedAt > CACHE_MS) {
+      this.loading ??= this.refresh().finally(() => this.loading = null);
+      await this.loading;
+    }
+    return this.cache;
+  }
+  get current() {
+    if (this.now() - this.loadedAt > CACHE_MS && !this.loading)
+      this.get();
+    return this.cache;
+  }
+  async refresh() {
+    try {
+      const raw = await this.store.get(KEY);
+      if (raw) {
+        const s = sanitizeUpdate(JSON.parse(raw), 0);
+        if (s.ok)
+          this.cache = { ...s.config, updatedAt: JSON.parse(raw).updatedAt ?? 0 };
+      }
+      this.loadedAt = this.now();
+    } catch (e) {
+      console.warn("mises à jour : lecture impossible", e.message);
+      this.loadedAt = this.now() - CACHE_MS + 5000;
+    }
+  }
+  async save(raw) {
+    const s = sanitizeUpdate(raw, this.now());
+    if (!s.ok)
+      return s;
+    await this.store.set(KEY, JSON.stringify(s.config));
+    this.cache = s.config;
+    this.loadedAt = this.now();
+    return s;
+  }
+  statusOf(version, config = this.current) {
+    return updateStatus(config, version);
+  }
+}
+
+class RateLimit2 {
+  max;
+  windowMs;
+  hits = new Map;
+  constructor(max, windowMs) {
+    this.max = max;
+    this.windowMs = windowMs;
+  }
+  allow(key) {
+    const now = Date.now();
+    const h = this.hits.get(key);
+    if (!h || h.until < now) {
+      if (this.hits.size > 5000)
+        this.hits.clear();
+      this.hits.set(key, { n: 1, until: now + this.windowMs });
+      return true;
+    }
+    return ++h.n <= this.max;
+  }
+}
+var digest = (s) => createHash3("sha256").update(s).digest();
+function adminOk(header, token) {
+  if (!token || token.length < 24)
+    return false;
+  const given = /^Bearer (.+)$/.exec(header ?? "")?.[1] ?? "";
+  return timingSafeEqual(digest(given), digest(token));
+}
+async function readJson(req, max = 32768) {
+  const chunks = [];
+  let n = 0;
+  for await (const c of req) {
+    n += c.length;
+    if (n > max)
+      throw new Error("trop gros");
+    chunks.push(c);
+  }
+  return chunks.length ? JSON.parse(Buffer.concat(chunks).toString("utf8")) : {};
+}
+function updateRoutes(svc, adminToken, corsOrigin) {
+  const checkLimit = new RateLimit2(30, 60000);
+  const adminLimit = new RateLimit2(20, 60000);
+  return async (req, res, path, query) => {
+    if (path !== "/api/update" && path !== "/api/admin/update")
+      return false;
+    const headers = { "content-type": "application/json", "cache-control": "no-store" };
+    const origin = corsOrigin(req);
+    if (origin) {
+      headers["access-control-allow-origin"] = origin;
+      headers["access-control-allow-headers"] = "authorization, content-type";
+      headers["access-control-allow-methods"] = "GET, PUT, OPTIONS";
+      headers["vary"] = "origin";
+    }
+    const reply = (status, obj) => {
+      res.writeHead(status, headers);
+      res.end(JSON.stringify(obj));
+    };
+    if (req.method === "OPTIONS") {
+      res.writeHead(origin ? 204 : 403, headers);
+      res.end();
+      return true;
+    }
+    const ip = (req.headers["x-forwarded-for"] ?? req.socket.remoteAddress ?? "?").split(",")[0].trim();
+    if (path === "/api/update") {
+      if (req.method !== "GET")
+        return reply(405, { error: "Méthode non autorisée" }), true;
+      if (!checkLimit.allow(ip))
+        return reply(429, { error: "Trop de requêtes" }), true;
+      const v = query.get("v");
+      const config = await svc.get();
+      const current = isVersion(v) ? v : "";
+      reply(200, { status: svc.statusOf(current || null, config), current, config });
+      return true;
+    }
+    if (!adminLimit.allow(ip))
+      return reply(429, { error: "Trop de tentatives, réessaie dans une minute." }), true;
+    if (!adminOk(req.headers.authorization, adminToken)) {
+      reply(adminToken && adminToken.length >= 24 ? 401 : 503, { error: adminToken && adminToken.length >= 24 ? "Clé d'administration incorrecte." : "Administration désactivée : variable ADMIN_TOKEN absente sur le serveur." });
+      return true;
+    }
+    try {
+      if (req.method === "GET")
+        return reply(200, await svc.get()), true;
+      if (req.method === "PUT") {
+        const r = await svc.save(await readJson(req));
+        if (!r.ok)
+          return reply(400, { error: r.error }), true;
+        console.log(`mises à jour : configuration enregistrée (dernière ${r.config.latestVersion}, minimum ${r.config.minVersion}, ${r.config.mandatory ? "obligatoire" : "facultative"}, ${r.config.enabled ? "active" : "désactivée"})`);
+        return reply(200, r.config), true;
+      }
+      reply(405, { error: "Méthode non autorisée" });
     } catch (e) {
       reply(400, { error: "Requête invalide (" + e.message + ")." });
     }
@@ -5665,6 +5913,11 @@ function onMessage(conn, raw, state) {
     return;
   }
   if (msg.t === "hello") {
+    if (updates.statusOf(typeof msg.app === "string" ? msg.app.slice(0, 20) : null) === "mandatory") {
+      conn.send(JSON.stringify({ t: "error", code: "update_required", message: "Mise à jour obligatoire : mets le jeu à jour pour jouer en ligne." }));
+      setTimeout(() => conn.close(4010), 250);
+      return;
+    }
     const token = typeof msg.token === "string" && msg.token.length >= 16 ? msg.token.slice(0, 64) : randomBytes2(16).toString("hex");
     let c = clients.get(token);
     if (!c) {
@@ -5765,10 +6018,15 @@ var MIME = {
 var accountStore = storeFromEnv();
 var googleClientIds = [process.env.GOOGLE_WEB_CLIENT_ID, ...(process.env.GOOGLE_EXTRA_CLIENT_IDS ?? "").split(",")].map((s) => s?.trim()).filter((s) => !!s);
 var accounts = accountStore && googleClientIds.length ? new Accounts(accountStore, new GoogleVerifier(googleClientIds, process.env.GOOGLE_JWKS_URL || undefined), (d) => migrate(d)) : null;
-var api = accountRoutes(accounts, process.env.GOOGLE_WEB_CLIENT_ID);
+var updates = new UpdateService(accountStore ?? new MemoryStore);
+var updateApi = updateRoutes(updates, process.env.ADMIN_TOKEN, (req) => allowedOrigin(req.headers.origin, req.headers.host));
+var api = accountRoutes(accounts, process.env.GOOGLE_WEB_CLIENT_ID, (req) => updates.statusOf(String(req.headers["x-bomberush-version"] ?? "") || null) === "mandatory");
+console.log(process.env.ADMIN_TOKEN && process.env.ADMIN_TOKEN.length >= 24 ? "Mises à jour : administration activée" : "Mises à jour : administration désactivée (ADMIN_TOKEN à configurer)");
 console.log(accounts ? `Comptes : activés (stockage ${accountStore.kind})` : "Comptes : désactivés (GOOGLE_WEB_CLIENT_ID + stockage à configurer)");
 var server = createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", "http://x");
+  if (await updateApi(req, res, url.pathname, url.searchParams))
+    return;
   if (await api(req, res, url.pathname))
     return;
   if (url.pathname === "/health") {
