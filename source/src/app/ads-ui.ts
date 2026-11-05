@@ -60,6 +60,7 @@ export function ensureAdConsent(ctx: AppCtx): Promise<void> {
 export async function watchRewarded(ctx: AppCtx, placement: RewardedPlacement, tx?: CoinTransaction | null): Promise<Granted[] | null> {
   await ensureAdConsent(ctx);
   audio.suspend();
+  ctx.toast("Chargement de la vidéo…", "");
   const status = await ads.rewarded(placement);
   audio.resume();
   if (status !== "completed") {

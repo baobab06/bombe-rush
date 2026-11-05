@@ -105,7 +105,7 @@ function androidProvider(native: NativeAds): AdProvider {
       }
     },
     async showRewarded() {
-      if (!native.isReady("rewarded")) return "unavailable";
+      // pas de pré-test : le pont natif charge la vidéo et attend jusqu'à 8 s si besoin
       const s = await call((id) => native.showRewarded(ADS.android.rewarded, id));
       return s === "completed" ? "completed" : s === "skipped" ? "skipped" : s === "unavailable" ? "unavailable" : "error";
     },

@@ -4,6 +4,8 @@ import android.app.Activity;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
@@ -16,6 +18,8 @@ import com.google.android.gms.ads.LoadAdError;
 import com.google.android.gms.ads.MobileAds;
 import com.google.android.gms.ads.interstitial.InterstitialAd;
 import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback;
+import com.google.android.gms.ads.rewarded.RewardedAd;
+import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback;
 import com.google.android.gms.ads.rewardedinterstitial.RewardedInterstitialAd;
 import com.google.android.gms.ads.rewardedinterstitial.RewardedInterstitialAdLoadCallback;
 import com.google.android.ump.ConsentInformation;
@@ -54,6 +58,12 @@ public class AdsBridge {
     private volatile String rewardedUnit = null;
     private volatile String interstitialUnit = null;
     private RewardedInterstitialAd rewarded;
+    /** bloc créé au format « Avec récompense » dans AdMob : on le charge avec RewardedAd */
+    private RewardedAd rewardedPlain;
+    /** format du bloc récompensé : null = inconnu, true = RewardedAd, false = RewardedInterstitialAd */
+    private Boolean plainFormat = null;
+    private int rewardedFails = 0, interstitialFails = 0;
+    private final Handler handler = new Handler(Looper.getMainLooper());
     private InterstitialAd interstitial;
     private boolean loadingRewarded = false;
     private boolean loadingInterstitial = false;
@@ -92,7 +102,9 @@ public class AdsBridge {
     void destroy() {
         destroyed = true;
         rewarded = null;
+        rewardedPlain = null;
         interstitial = null;
+        handler.removeCallbacksAndMessages(null);
     }
 
     private AdRequest request() {
@@ -106,20 +118,65 @@ public class AdsBridge {
     }
 
     // ------------------------------------------------------------ chargement
+    /** nouvel essai automatique après un échec : 15 s, 30 s, 60 s… jusqu'à 5 min */
+    private long backoff(int fails) {
+        return Math.min(300_000L, 15_000L << Math.min(5, Math.max(0, fails - 1)));
+    }
+
+    private boolean hasRewarded() {
+        return rewarded != null || rewardedPlain != null;
+    }
+
     private void loadRewarded() {
-        if (destroyed || rewardedUnit == null || rewarded != null || loadingRewarded || !started.get()) return;
+        if (destroyed || rewardedUnit == null || hasRewarded() || loadingRewarded || !started.get()) return;
         loadingRewarded = true;
+        if (Boolean.TRUE.equals(plainFormat)) loadRewardedPlain();
+        else loadRewardedInterstitial();
+    }
+
+    private void rewardedFailed(LoadAdError err) {
+        loadingRewarded = false;
+        rewardedFails++;
+        Log.w(TAG, "vidéo non chargée (" + err.getCode() + ") : " + err.getMessage());
+        handler.postDelayed(this::loadRewarded, backoff(rewardedFails));
+    }
+
+    private void loadRewardedInterstitial() {
         RewardedInterstitialAd.load(act, rewardedUnit, request(), new RewardedInterstitialAdLoadCallback() {
             @Override
             public void onAdLoaded(RewardedInterstitialAd ad) {
                 loadingRewarded = false;
+                rewardedFails = 0;
+                plainFormat = false;
                 rewarded = ad;
             }
 
             @Override
             public void onAdFailedToLoad(LoadAdError err) {
+                // format jamais confirmé : on essaie tout de suite l'autre format (« Avec récompense »)
+                if (plainFormat == null) {
+                    Log.w(TAG, "interstitiel avec récompense refusé (" + err.getCode() + "), essai au format récompensé");
+                    loadRewardedPlain();
+                    return;
+                }
+                rewardedFailed(err);
+            }
+        });
+    }
+
+    private void loadRewardedPlain() {
+        RewardedAd.load(act, rewardedUnit, request(), new RewardedAdLoadCallback() {
+            @Override
+            public void onAdLoaded(RewardedAd ad) {
                 loadingRewarded = false;
-                Log.w(TAG, "vidéo non chargée : " + err.getMessage());
+                rewardedFails = 0;
+                plainFormat = true;
+                rewardedPlain = ad;
+            }
+
+            @Override
+            public void onAdFailedToLoad(LoadAdError err) {
+                rewardedFailed(err);
             }
         });
     }
@@ -131,13 +188,16 @@ public class AdsBridge {
             @Override
             public void onAdLoaded(InterstitialAd ad) {
                 loadingInterstitial = false;
+                interstitialFails = 0;
                 interstitial = ad;
             }
 
             @Override
             public void onAdFailedToLoad(LoadAdError err) {
                 loadingInterstitial = false;
-                Log.w(TAG, "interstitiel non chargé : " + err.getMessage());
+                interstitialFails++;
+                Log.w(TAG, "interstitiel non chargé (" + err.getCode() + ") : " + err.getMessage());
+                handler.postDelayed(AdsBridge.this::loadInterstitial, backoff(interstitialFails));
             }
         });
     }
@@ -181,7 +241,7 @@ public class AdsBridge {
 
     @JavascriptInterface
     public boolean isReady(String kind) {
-        boolean ready = "rewarded".equals(kind) ? rewarded != null : "interstitial".equals(kind) && interstitial != null;
+        boolean ready = "rewarded".equals(kind) ? hasRewarded() : "interstitial".equals(kind) && interstitial != null;
         if (!ready) act.runOnUiThread(() -> {
             if ("rewarded".equals(kind)) loadRewarded();
             else loadInterstitial();
@@ -189,40 +249,71 @@ public class AdsBridge {
         return ready;
     }
 
+    /**
+     * Le joueur a appuyé sur « regarder une vidéo ». Si aucune vidéo n'est encore prête,
+     * on lance le chargement et on attend jusqu'à 8 s avant de répondre « indisponible ».
+     */
     @JavascriptInterface
     public void showRewarded(String unitId, String callbackId) {
         act.runOnUiThread(() -> {
-            final RewardedInterstitialAd ad = rewarded;
-            if (ad == null) {
-                reply(callbackId, "unavailable");
-                loadRewarded();
+            if (hasRewarded()) {
+                presentRewarded(callbackId);
                 return;
             }
-            rewarded = null;
-            final boolean[] earned = {false};
-            final boolean[] done = {false};
-            ad.setFullScreenContentCallback(new FullScreenContentCallback() {
+            rewardedFails = 0;
+            loadRewarded();
+            final long until = System.currentTimeMillis() + 8000;
+            handler.post(new Runnable() {
                 @Override
-                public void onAdDismissedFullScreenContent() {
-                    if (!done[0]) {
-                        done[0] = true;
-                        reply(callbackId, earned[0] ? "completed" : "skipped");
+                public void run() {
+                    if (destroyed) return;
+                    if (hasRewarded()) presentRewarded(callbackId);
+                    else if (System.currentTimeMillis() >= until) {
+                        reply(callbackId, "unavailable");
+                        if (!loadingRewarded) handler.postDelayed(AdsBridge.this::loadRewarded, backoff(1));
+                    } else {
+                        if (!loadingRewarded) loadRewarded();
+                        handler.postDelayed(this, 250);
                     }
-                    loadRewarded();
-                }
-
-                @Override
-                public void onAdFailedToShowFullScreenContent(AdError err) {
-                    if (!done[0]) {
-                        done[0] = true;
-                        reply(callbackId, "error");
-                    }
-                    loadRewarded();
                 }
             });
-            // la récompense n'est accordée que sur confirmation du SDK
-            ad.show(act, rewardItem -> earned[0] = true);
         });
+    }
+
+    private void presentRewarded(String callbackId) {
+        final boolean[] earned = {false};
+        final boolean[] done = {false};
+        FullScreenContentCallback cb = new FullScreenContentCallback() {
+            @Override
+            public void onAdDismissedFullScreenContent() {
+                if (!done[0]) {
+                    done[0] = true;
+                    reply(callbackId, earned[0] ? "completed" : "skipped");
+                }
+                loadRewarded();
+            }
+
+            @Override
+            public void onAdFailedToShowFullScreenContent(AdError err) {
+                if (!done[0]) {
+                    done[0] = true;
+                    reply(callbackId, "error");
+                }
+                loadRewarded();
+            }
+        };
+        // la récompense n'est accordée que sur confirmation du SDK
+        if (rewardedPlain != null) {
+            final RewardedAd ad = rewardedPlain;
+            rewardedPlain = null;
+            ad.setFullScreenContentCallback(cb);
+            ad.show(act, rewardItem -> earned[0] = true);
+        } else {
+            final RewardedInterstitialAd ad = rewarded;
+            rewarded = null;
+            ad.setFullScreenContentCallback(cb);
+            ad.show(act, rewardItem -> earned[0] = true);
+        }
     }
 
     @JavascriptInterface
