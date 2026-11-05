@@ -16,6 +16,8 @@ export interface VirtualBomb {
   toxic?: boolean;
   /** réaction en chaîne (bombe du bonus ou relais) : déclenche les bombes proches */
   chain?: boolean;
+  /** poseur (équipes : les bombes d'un coéquipier ne blessent pas) */
+  owner?: number;
 }
 
 /**
@@ -53,14 +55,20 @@ export function blastCells(
   }
 }
 
-export function computeDanger(m: Match, extra?: VirtualBomb): DangerMap {
+/**
+ * `viewer` : joueur pour qui la carte est calculée. En équipes, il n'y a pas
+ * de tir ami : le feu d'un coéquipier ne compte pas comme un danger (ses
+ * bombes déclenchent quand même les autres en chaîne, et ses propres bombes
+ * restent dangereuses). Sans `viewer`, toutes les bombes sont dangereuses.
+ */
+export function computeDanger(m: Match, extra?: VirtualBomb, viewer?: number): DangerMap {
   const g = m.grid;
   const n = g.w * g.h;
   const start = new Float32Array(n).fill(Infinity);
   const end = new Float32Array(n).fill(-Infinity);
 
   const list: VirtualBomb[] = [];
-  for (const b of m.bombs.values()) list.push({ tx: b.tx, ty: b.ty, fuse: b.remote ? Math.min(b.fuse, REMOTE_THREAT) : b.fuse, range: b.range, toxic: b.toxic, chain: b.chainDepth !== undefined && b.chainDepth < CHAIN.maxDepth && !b.flight });
+  for (const b of m.bombs.values()) list.push({ tx: b.tx, ty: b.ty, fuse: b.remote ? Math.min(b.fuse, REMOTE_THREAT) : b.fuse, range: b.range, toxic: b.toxic, chain: b.chainDepth !== undefined && b.chainDepth < CHAIN.maxDepth && !b.flight, owner: b.ownerId });
   if (extra) list.push(extra);
 
   const bombCells = new Set<number>(list.map((b) => g.idx(b.tx, b.ty)));
@@ -115,7 +123,9 @@ export function computeDanger(m: Match, extra?: VirtualBomb): DangerMap {
     }
   }
 
+  const harmless = (owner: number | undefined) => viewer !== undefined && owner !== undefined && m.sameTeam(viewer, owner);
   for (let a = 0; a < list.length; a++) {
+    if (harmless(list[a].owner)) continue;
     for (const c of blasts[a]) {
       if (t[a] < start[c]) start[c] = t[a];
       const e = t[a] + (list[a].toxic ? Math.max(m.bombRules.fireDuration, TOXIC.duration) : m.bombRules.fireDuration);
@@ -124,13 +134,14 @@ export function computeDanger(m: Match, extra?: VirtualBomb): DangerMap {
   }
   // flammes déjà présentes
   for (let i = 0; i < n; i++) {
-    if (g.fire[i] > 0) {
+    if (g.fire[i] > 0 && !harmless(g.fireOwner[i])) {
       start[i] = 0;
       end[i] = Math.max(end[i], g.fire[i]);
     }
   }
   // nuages toxiques en cours (on les évite comme du feu tant qu'ils durent)
   for (const z of m.toxicZones) {
+    if (harmless(z.owner)) continue;
     for (const i of z.cells) {
       start[i] = 0;
       end[i] = Math.max(end[i], z.timeLeft);

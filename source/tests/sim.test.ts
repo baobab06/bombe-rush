@@ -772,6 +772,179 @@ console.log("Bombe à lancer (Domination)");
   }
 }
 
+console.log("IA Domination : objectif, équipe, déplacements de zone");
+{
+  const { FACTORY } = await import("../src/maps/factory");
+  const { computeDanger } = await import("../src/ai/danger");
+  const bots = (d: Difficulty) => Array.from({ length: 4 }, (_, i) => ({ name: "B" + i, characterId: "pip", isBot: true, difficulty: d }));
+  const cellOf = (m: Match, id: number) => m.grid.idx(Math.floor(m.players[id].x), Math.floor(m.players[id].y));
+  const onZone = (m: Match, id: number) => m.players[id].alive && m.hill!.cellSet.has(cellOf(m, id));
+  const fresh = (seed: number, d: Difficulty = "normal") => {
+    const m = new Match({ seed, map: FACTORY, modeId: "koth", players: bots(d) });
+    m.phase = "playing";
+    return { m, brains: m.players.map((p) => new BotBrain(p.id, d, seed)) };
+  };
+  const tick = (m: Match, brains: BotBrain[], secs: number, each?: () => void) => {
+    for (let i = 0; i < Math.round(secs / DT) && m.phase !== "over"; i++) {
+      m.step(brains.map((b) => b.update(m, DT)));
+      each?.();
+    }
+  };
+
+  // 1. Les deux équipes attaquent : parties complètes, la zone est occupée et prise vite
+  for (const d of ["easy", "normal", "hard", "expert"] as Difficulty[]) {
+    let held = 0, total = 0, first = 0, ended = 0, stuck = 0, toWin = 0;
+    const N = 6;
+    for (let s = 1; s <= N; s++) {
+      const m = new Match({ seed: s * 7717 + 3, map: FACTORY, modeId: "koth", players: bots(d) });
+      const brains = m.players.map((p) => new BotBrain(p.id, d, s));
+      let firstAt = -1;
+      const still = m.players.map(() => 0);
+      let g = 0;
+      while (m.phase !== "over" && g++ < 60 * 400) {
+        m.step(brains.map((b) => b.update(m, DT)));
+        if (m.phase !== "playing") continue;
+        total++;
+        if (m.players.some((p) => onZone(m, p.id))) {
+          held++;
+          if (firstAt < 0) firstAt = m.time;
+        }
+        for (const p of m.players) if (p.alive && m.grid.blocksMove(Math.floor(p.x), Math.floor(p.y))) stuck++;
+      }
+      first += firstAt;
+      if (m.phase === "over") ended++;
+      if (m.hill!.reached) toWin++;
+    }
+    const pct = Math.round((held / total) * 100);
+    check(ended === N && stuck === 0, `${d} : ${N} parties de bots terminées, personne coincé`);
+    check(pct >= (d === "easy" ? 25 : 35), `${d} : la zone est occupée ${pct}% du temps (les bots jouent l'objectif)`);
+    check(first / N < 4, `${d} : premier joueur sur la zone après ${(first / N).toFixed(1)} s en moyenne`);
+    if (d !== "easy") check(toWin >= N / 2, `${d} : ${toWin}/${N} parties gagnées aux points (25) avant la fin du temps`);
+  }
+
+  // 2. Une équipe tient la zone, l'autre attaque : les attaquants foncent la disputer
+  {
+    let contested = 0, rushes = 0;
+    for (let s = 1; s <= 5; s++) {
+      const { m, brains } = fresh(100 + s);
+      m.hill!.moveIn = 1e9;
+      const [x, y] = m.hill!.center;
+      place(m, 0, x, y); place(m, 2, x - 1, y); // rouges sur et à côté de la zone
+      tick(m, brains, 0.3);
+      if (brains[1].role === "rush" || brains[3].role === "rush") rushes++;
+      let seen = false;
+      tick(m, brains, 8, () => { if (m.hill!.contested || [1, 3].some((id) => onZone(m, id))) seen = true; });
+      if (seen) contested++;
+    }
+    check(rushes === 5, `zone tenue par l'adversaire : les bleus passent en mode « foncer » (${rushes}/5)`);
+    check(contested >= 4, `zone tenue par l'adversaire : les bleus la disputent en moins de 8 s (${contested}/5)`);
+  }
+
+  // 3. Rôles : un bot prend la zone, son coéquipier la protège à côté (pas le même chemin)
+  {
+    let split = 0, guardNear = 0, samples = 0;
+    for (let s = 1; s <= 5; s++) {
+      const { m, brains } = fresh(200 + s);
+      m.hill!.moveIn = 1e9;
+      // bleus éliminés pour le test : les rouges sont tranquilles
+      for (const id of [1, 3]) { m.players[id].alive = false; m.hill!.respawnIn[id] = 1e9; }
+      tick(m, brains, 6);
+      const roles = [brains[0].role, brains[2].role].sort().join(",");
+      if (roles === "cap,rush" || roles === "rush,rush") continue; // (adversaires morts : tout le monde fonce)
+      if (roles === "cap,guard") split++;
+    }
+    for (let s = 1; s <= 5; s++) {
+      const { m, brains } = fresh(300 + s);
+      m.hill!.moveIn = 1e9;
+      tick(m, brains, 5);
+      tick(m, brains, 10, () => {
+        for (const b of brains) {
+          if (b.role !== "guard" || !m.players[b.playerId].alive) continue;
+          const [cx, cy] = m.hill!.center;
+          const p = m.players[b.playerId];
+          samples++;
+          if (Math.abs(Math.floor(p.x) - cx) + Math.abs(Math.floor(p.y) - cy) <= 4) guardNear++;
+        }
+      });
+    }
+    check(split === 5, `rouges : l'un prend la zone (« cap »), l'autre la protège (« guard ») (${split}/5)`);
+    check(samples > 0 && guardNear / samples > 0.6, `le protecteur reste près de la zone (${Math.round((guardNear / Math.max(1, samples)) * 100)}% du temps à 4 cases ou moins)`);
+  }
+
+  // 4. Changement de zone pendant le combat : tout le monde abandonne l'ancienne zone
+  {
+    let reached = 0, oldStay = 0, moves = 0, late = 0;
+    for (let s = 1; s <= 6; s++) {
+      const { m, brains } = fresh(400 + s, "hard");
+      tick(m, brains, 4);
+      m.hill!.moveIn = Math.min(m.hill!.moveIn, 3.2); // annonce imminente, en plein combat
+      let movedAt = -1, arrive = -1;
+      let before = m.hill!.cellSet, oldSet: Set<number> | null = null;
+      tick(m, brains, 12, () => {
+        for (const e of m.events) if (e.t === "hillMoved" && movedAt < 0) { movedAt = m.time; oldSet = before; }
+        before = m.hill!.cellSet;
+        if (movedAt >= 0 && arrive < 0 && m.players.some((p) => onZone(m, p.id))) arrive = m.time - movedAt;
+        // 2 s après le déplacement, plus personne ne campe sur l'ancienne zone
+        if (oldSet && m.time - movedAt > 2 && m.time - movedAt < 2 + DT * 1.5)
+          for (const p of m.players) if (p.alive && oldSet.has(cellOf(m, p.id)) && !m.hill!.cellSet.has(cellOf(m, p.id))) oldStay++;
+      });
+      if (movedAt < 0) continue;
+      moves++;
+      if (arrive >= 0) reached++;
+      if (arrive > 4) late++;
+    }
+    check(moves >= 5 && reached === moves && late === 0, `zone déplacée en plein combat : nouvelle zone occupée en moins de 4 s (${reached}/${moves})`);
+    check(oldStay === 0, "personne ne reste sur l'ancienne zone");
+  }
+
+  // 5. Coéquipiers séparés : chacun rejoint la zone par son côté, sans se bloquer
+  {
+    let ok = 0;
+    for (let s = 1; s <= 5; s++) {
+      const { m, brains } = fresh(500 + s);
+      m.hill!.moveIn = 1e9;
+      place(m, 0, 2, 1); place(m, 2, 2, 11); // rouges en haut et en bas, loin l'un de l'autre
+      for (const id of [1, 3]) { m.players[id].alive = false; m.hill!.respawnIn[id] = 1e9; }
+      let got = false;
+      tick(m, brains, 8, () => { if (onZone(m, 0) || onZone(m, 2)) got = true; });
+      if (got) ok++;
+    }
+    check(ok === 5, `coéquipiers séparés : la zone est prise en moins de 8 s (${ok}/5)`);
+  }
+
+  // 6. Obstacles et bombes : une bombe sur la route ne fait ni mourir ni renoncer
+  {
+    let ok = 0, died = 0;
+    for (let s = 1; s <= 5; s++) {
+      const { m, brains } = fresh(600 + s, "hard");
+      m.hill!.moveIn = 1e9;
+      const [x, y] = m.hill!.center;
+      for (const id of [1, 2, 3]) { m.players[id].alive = false; m.hill!.respawnIn[id] = 1e9; }
+      place(m, 0, x - 4, y);
+      // bombe adverse posée entre le bot et la zone
+      m.players[1].alive = true; place(m, 1, x - 2, y);
+      m.step(m.players.map((p) => ({ mx: 0, my: 0, bomb: p.id === 1, ability: false })));
+      m.players[1].alive = false;
+      let got = false;
+      tick(m, brains, 9, () => { if (onZone(m, 0)) got = true; });
+      if (!m.players[0].alive) died++;
+      if (got) ok++;
+    }
+    check(died === 0 && ok === 5, `bombe adverse sur le chemin : le bot l'évite puis prend la zone (${ok}/5, ${died} mort)`);
+  }
+
+  // 7. Pas de tir ami : le bot ne fuit pas la bombe de son coéquipier (il en fuit une adverse)
+  {
+    const { m } = fresh(700);
+    m.hill!.moveIn = 1e9;
+    place(m, 2, 4, 6); place(m, 0, 5, 6); place(m, 1, 12, 2); place(m, 3, 12, 10);
+    m.step(m.players.map((p) => ({ mx: 0, my: 0, bomb: p.id === 2, ability: false })));
+    const i = m.grid.idx(5, 6);
+    check(computeDanger(m, undefined, 0).start[i] === Infinity && computeDanger(m, undefined, 1).start[i] !== Infinity, "bombe d'un coéquipier : pas un danger pour moi, mais oui pour l'adversaire");
+    check(computeDanger(m, undefined, 2).start[m.grid.idx(4, 6)] !== Infinity, "sa propre bombe reste un danger");
+  }
+}
+
 console.log("Grosse bombe");
 {
   const { FACTORY } = await import("../src/maps/factory");

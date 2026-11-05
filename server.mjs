@@ -1815,14 +1815,14 @@ function blastCells(m, tx, ty, range, bombCells, out) {
     }
   }
 }
-function computeDanger(m, extra) {
+function computeDanger(m, extra, viewer) {
   const g = m.grid;
   const n = g.w * g.h;
   const start = new Float32Array(n).fill(Infinity);
   const end = new Float32Array(n).fill(-Infinity);
   const list = [];
   for (const b of m.bombs.values())
-    list.push({ tx: b.tx, ty: b.ty, fuse: b.remote ? Math.min(b.fuse, REMOTE_THREAT) : b.fuse, range: b.range, toxic: b.toxic, chain: b.chainDepth !== undefined && b.chainDepth < CHAIN.maxDepth && !b.flight });
+    list.push({ tx: b.tx, ty: b.ty, fuse: b.remote ? Math.min(b.fuse, REMOTE_THREAT) : b.fuse, range: b.range, toxic: b.toxic, chain: b.chainDepth !== undefined && b.chainDepth < CHAIN.maxDepth && !b.flight, owner: b.ownerId });
   if (extra)
     list.push(extra);
   const bombCells = new Set(list.map((b) => g.idx(b.tx, b.ty)));
@@ -1875,7 +1875,10 @@ function computeDanger(m, extra) {
       }
     }
   }
+  const harmless = (owner) => viewer !== undefined && owner !== undefined && m.sameTeam(viewer, owner);
   for (let a = 0;a < list.length; a++) {
+    if (harmless(list[a].owner))
+      continue;
     for (const c of blasts[a]) {
       if (t[a] < start[c])
         start[c] = t[a];
@@ -1885,12 +1888,14 @@ function computeDanger(m, extra) {
     }
   }
   for (let i = 0;i < n; i++) {
-    if (g.fire[i] > 0) {
+    if (g.fire[i] > 0 && !harmless(g.fireOwner[i])) {
       start[i] = 0;
       end[i] = Math.max(end[i], g.fire[i]);
     }
   }
   for (const z of m.toxicZones) {
+    if (harmless(z.owner))
+      continue;
     for (const i of z.cells) {
       start[i] = 0;
       end[i] = Math.max(end[i], z.timeLeft);
@@ -1931,11 +1936,12 @@ function computeDanger(m, extra) {
 
 // src/ai/bot.ts
 var PROFILES = {
-  easy: { think: 0.5, margin: 0.12, bonusRadius: 4, aggression: 0.25, mistake: 0.08, reflex: false, trapRadius: 0, shieldSense: 0.12, escapeRoom: 1 },
-  normal: { think: 0.22, margin: 0.22, bonusRadius: 7, aggression: 0.6, mistake: 0.012, reflex: true, trapRadius: 1, shieldSense: 0.25, escapeRoom: 2 },
-  hard: { think: 0.1, margin: 0.25, bonusRadius: 11, aggression: 0.9, mistake: 0, reflex: true, trapRadius: 2, shieldSense: 0.35, escapeRoom: 3 },
-  expert: { think: 0.06, margin: 0.28, bonusRadius: 14, aggression: 1, mistake: 0, reflex: true, trapRadius: 3, shieldSense: 0.45, escapeRoom: 3 }
+  easy: { think: 0.5, margin: 0.12, bonusRadius: 4, aggression: 0.25, mistake: 0.08, reflex: false, trapRadius: 0, shieldSense: 0.12, escapeRoom: 1, distract: 0.15, lead: 0 },
+  normal: { think: 0.22, margin: 0.22, bonusRadius: 7, aggression: 0.6, mistake: 0.012, reflex: true, trapRadius: 1, shieldSense: 0.25, escapeRoom: 2, distract: 0.008, lead: 0.6 },
+  hard: { think: 0.1, margin: 0.25, bonusRadius: 11, aggression: 0.9, mistake: 0, reflex: true, trapRadius: 2, shieldSense: 0.35, escapeRoom: 3, distract: 0, lead: 1 },
+  expert: { think: 0.06, margin: 0.28, bonusRadius: 14, aggression: 1, mistake: 0, reflex: true, trapRadius: 3, shieldSense: 0.45, escapeRoom: 3, distract: 0, lead: 1.3 }
 };
+var FIELDS = new WeakMap;
 
 class BotBrain {
   playerId;
@@ -2066,8 +2072,10 @@ class BotBrain {
   think(m, p) {
     const g = m.grid;
     const myIdx = g.idx(Math.floor(p.x), Math.floor(p.y));
-    const danger = computeDanger(m);
+    const danger = computeDanger(m, undefined, p.id);
     const sloppy = this.rng.chance(this.prof.mistake);
+    if (danger.start[myIdx] !== Infinity && m.hill && this.holdUnderFire(m, p, danger, myIdx))
+      return;
     if (danger.start[myIdx] !== Infinity) {
       if (this.path.length && this.pathSafe(m, p, danger, this.path)) {
         this.lastDecision = "flee";
@@ -2090,6 +2098,8 @@ class BotBrain {
       this.path = [];
     if (this.planThrow(m, p))
       return;
+    if (m.hill && this.playDomination(m, p, danger, sloppy))
+      return;
     const bonusPath = this.findTarget(m, p, danger, this.prof.bonusRadius, (i) => g.bonusAt[i] >= 0);
     if (bonusPath && bonusPath.length > 0) {
       this.path = bonusPath;
@@ -2111,8 +2121,6 @@ class BotBrain {
       }
     }
     if (this.path.length)
-      return;
-    if (m.hill && this.playHill(m, p, danger))
       return;
     if (this.prof.aggression < 0.5 && this.rng.chance(0.25)) {
       const wander = this.findTarget(m, p, danger, 3, () => this.rng.chance(0.3));
@@ -2141,96 +2149,316 @@ class BotBrain {
     if (chase)
       this.path = chase;
   }
-  playHill(m, p, danger) {
-    const hill = m.hill;
+  role = "";
+  goalKey = "";
+  distractedUntil = -1;
+  progress = { key: "", best: 1e9, since: 0 };
+  playDomination(m, p, danger, sloppy) {
+    const h = m.hill;
     const g = m.grid;
-    const [px, py] = [Math.floor(p.x), Math.floor(p.y)];
+    const px = Math.floor(p.x);
+    const py = Math.floor(p.y);
     const here = g.idx(px, py);
-    const lead = 1.5 + this.prof.aggression * 2.5;
-    const goNext = hill.nextSet && hill.moveIn < lead;
-    const target = goNext ? hill.nextSet : hill.cellSet;
-    if (target.has(here)) {
-      if (!goNext && hill.contested) {
-        if (p.activeBombs < p.maxBombs && g.bombAt[here] < 0 && this.enemyInLine(m, p, px, py, m.nextBombRange(p)) && this.rng.chance(0.35 + this.prof.aggression * 0.55)) {
-          if (this.placeIfEscapable(m, p, false))
-            return true;
-        }
-        if (!this.enemyInLine(m, p, px, py, m.nextBombRange(p)) && this.rng.chance(0.3 + this.prof.aggression * 0.5)) {
-          const aim = this.findTarget(m, p, danger, 4, (i) => {
-            if (g.bombAt[i] >= 0)
-              return false;
-            const x = i % g.w;
-            const y = Math.floor(i / g.w);
-            return this.enemyInLine(m, p, x, y, m.nextBombRange(p));
-          });
-          if (aim && aim.length) {
-            this.path = aim;
-            this.lastDecision = "hill-fight";
-            return true;
-          }
-        }
+    const cellOf = (o) => g.idx(Math.floor(o.x), Math.floor(o.y));
+    if (m.time < this.distractedUntil)
+      return false;
+    if (this.prof.distract > 0 && this.rng.chance(this.prof.distract)) {
+      this.distractedUntil = m.time + 1 + this.rng.next() * 1.5;
+      this.goalKey = "";
+      return false;
+    }
+    const speed = this.speedNow > 0 ? this.speedNow : p.speed;
+    let target = h.cellSet;
+    let next = false;
+    const nextSet = h.nextSet;
+    if (nextSet) {
+      const etaNext = this.zoneField(m, nextSet)[here] / speed;
+      const onCur = target.has(here);
+      const holding = onCur && !h.contested && h.holder >= 0;
+      const leaveAt = holding ? etaNext - 0.5 : etaNext + this.prof.lead;
+      const curEta = this.zoneField(m, target)[here] / speed;
+      if (h.moveIn <= Math.max(0.15, leaveAt) || !onCur && curEta >= h.moveIn - 0.3) {
+        target = nextSet;
+        next = true;
+      }
+    }
+    const field = this.zoneField(m, target);
+    const myD = field[here];
+    const onZone = target.has(here);
+    const team = m.teamOf(p.id);
+    const mates = m.players.filter((o) => o.alive && m.sameTeam(p.id, o.id));
+    const foes = m.players.filter((o) => m.isFoe(p, o));
+    const mySlot = h.slot(p.id);
+    const myPts = h.scores[mySlot] ?? 0;
+    const foePts = Math.max(0, ...h.scores.filter((_, k) => k !== mySlot));
+    const foesOnZone = foes.filter((o) => target.has(cellOf(o)));
+    const matesOnZone = mates.filter((o) => target.has(cellOf(o)));
+    const enemyHolds = !next && h.holder >= 0 && h.slot(h.holder) !== mySlot;
+    const late = m.timeLeft < 35 && myPts <= foePts;
+    const danger2win = foePts >= HILL_RULES.target - 6;
+    let role;
+    if (team < 0 || !mates.length)
+      role = "rush";
+    else if (enemyHolds || foesOnZone.length && !matesOnZone.length || late || danger2win)
+      role = "rush";
+    else {
+      const mate = mates.reduce((a, b) => field[cellOf(a)] <= field[cellOf(b)] ? a : b);
+      const mateD = field[cellOf(mate)];
+      const meFirst = matesOnZone.length ? false : myD < mateD || myD === mateD && p.id < mate.id;
+      role = onZone && !matesOnZone.length ? "cap" : meFirst ? "cap" : "guard";
+      if (onZone && matesOnZone.length && p.id < matesOnZone[0].id)
+        role = "cap";
+    }
+    if (role !== this.role)
+      this.goalKey = "";
+    this.role = role;
+    const range = m.nextBombRange(p);
+    const canBomb = p.activeBombs < p.maxBombs && g.bombAt[here] < 0 && p.bombCooldown <= 0;
+    const bombVal = canBomb ? this.bombValue(m, p) : { blocks: 0, enemy: false };
+    const hurtsHold = (() => {
+      if (foesOnZone.length)
+        return false;
+      const cells = [];
+      const bombCells = new Set;
+      for (const b of m.bombs.values())
+        bombCells.add(g.idx(b.tx, b.ty));
+      blastCells(m, px, py, range, bombCells, cells);
+      if (!cells.some((c) => target.has(c)))
+        return false;
+      return matesOnZone.length > 0 || myPts >= foePts || !this.rng.chance(0.25);
+    })();
+    const attack = (chance) => canBomb && bombVal.enemy && !hurtsHold && this.rng.chance(chance) && this.placeIfEscapable(m, p, sloppy);
+    if (onZone && role !== "guard") {
+      if (h.contested || foesOnZone.length) {
+        if (attack(0.45 + this.prof.aggression * 0.5))
+          return this.mark("zone-fight");
+      } else if (!mates.length && foes.some((o) => field[cellOf(o)] <= 2) && attack(0.2 + this.prof.aggression * 0.4)) {
+        return this.mark("zone-defend");
       }
       this.path = [];
-      this.lastDecision = "hill";
-      return true;
+      this.goalKey = "hold";
+      return this.mark("hold");
     }
-    if (this.prof.aggression < 0.5 && this.rng.chance(0.35))
-      return false;
-    const toHill = this.findTarget(m, p, danger, 40, (i) => target.has(i) && g.bombAt[i] < 0);
-    if (toHill && toHill.length) {
-      this.path = toHill;
-      this.lastDecision = "hill";
-      return true;
+    if (role === "guard") {
+      const threat = foes.filter((o) => field[cellOf(o)] <= 5).sort((a, b) => field[cellOf(a)] - field[cellOf(b)]);
+      if (threat.length && attack(0.5 + this.prof.aggression * 0.5))
+        return this.mark("guard-bomb");
+      if (onZone && matesOnZone.some((o) => o.id !== p.id)) {
+        this.goalKey = "";
+      }
+      if (threat.length && canBomb) {
+        const foe = threat[0];
+        const aim = this.findTarget(m, p, danger, 6, (i) => {
+          if (g.bombAt[i] >= 0 || target.has(i))
+            return false;
+          const x = i % g.w;
+          const y = Math.floor(i / g.w);
+          return this.inLineWith(m, foe, x, y, range) && field[i] <= 4;
+        });
+        if (aim && aim.length)
+          return this.go(aim, "guard-aim:" + foe.id, "guard-intercept");
+      }
+      if (this.grabBonus(m, p, danger, 3))
+        return true;
+      const mateCells = new Set(mates.map(cellOf));
+      const post = this.bestPost(m, p, danger, target, field, foes, mateCells);
+      if (post) {
+        if (post.length === 0) {
+          this.path = [];
+          return this.mark("guard-post");
+        }
+        return this.go(post, "post:" + post[post.length - 1], "guard-post");
+      }
     }
-    const dist = this.hillDistance(m, target);
-    const mine = dist[here];
-    const goal = this.findTarget(m, p, danger, 30, (i) => {
+    if (role === "cap" && !next && !h.contested && this.grabBonus(m, p, danger, 2))
+      return true;
+    if (bombVal.enemy && attack(role === "rush" ? 0.35 + this.prof.aggression * 0.4 : 0.2 + this.prof.aggression * 0.3))
+      return this.mark("rush-bomb");
+    const key = (next ? "next:" : "cur:") + [...target][0];
+    this.trackProgress(m, key, myD);
+    const toZone = this.bfs(m, p, danger, this.prof.margin, 40, (i, node) => target.has(i) && g.bombAt[i] < 0 && (danger.start[i] === Infinity || danger.start[i] - this.eta(p, node.dist) > 1.4 + this.prof.think * 2));
+    if (toZone && toZone.length && !this.stalled(m))
+      return this.go(toZone, key, role + (next ? "-next" : ""));
+    const wait = this.findTarget(m, p, danger, 12, (i) => field[i] <= 2 && !target.has(i) && g.bombAt[i] < 0 && this.exits(m, i) >= 2);
+    if (wait && !this.stalled(m) && field[here] > 2)
+      return this.go(wait, key + ":wait", "zone-wait");
+    if (field[here] <= 2 && !this.stalled(m)) {
+      this.path = [];
+      return this.mark("zone-wait");
+    }
+    const mine = field[here];
+    if (canBomb && bombVal.blocks > 0) {
+      const cells = [];
+      blastCells(m, px, py, range, new Set, cells);
+      if (cells.some((c) => g.tiles[c] === TILE.BLOCK && field[c] < mine) && this.placeIfEscapable(m, p, sloppy))
+        return this.mark("zone-break");
+    }
+    const brk = this.findTarget(m, p, danger, 30, (i) => {
       if (g.bombAt[i] >= 0)
         return false;
       const x = i % g.w;
       const y = Math.floor(i / g.w);
       for (const [dx, dy] of DIRS) {
         const n = g.idx(x + dx, y + dy);
-        if (g.tile(x + dx, y + dy) === TILE.BLOCK && dist[n] < mine)
+        if (g.tile(x + dx, y + dy) === TILE.BLOCK && field[n] < mine)
           return true;
       }
       return false;
     });
-    if (goal && goal.length) {
-      this.path = goal;
-      this.lastDecision = "hill";
-      return true;
-    }
+    if (brk && brk.length)
+      return this.go(brk, key + ":break", "zone-break");
+    this.progress.since = m.time;
     return false;
   }
-  hillCache = null;
-  hillDistance(m, target) {
-    if (this.hillCache && this.hillCache.set === target && m.tick - this.hillCache.tick < 30)
-      return this.hillCache.dist;
+  holdUnderFire(m, p, danger, myIdx) {
+    if (!m.hill.cellSet.has(myIdx) || this.prof.distract > 0.02)
+      return false;
+    for (const b of m.bombs.values())
+      if (b.ownerId === p.id && m.blastCells(b.tx, b.ty, b.range).includes(myIdx))
+        return false;
+    const escape = this.findSafe(m, p, danger, this.prof.margin);
+    if (!escape)
+      return false;
+    const need = this.eta(p, escape.length) + this.prof.margin;
+    const buffer = this.prof.think * 2 + 0.4;
+    if (danger.start[myIdx] - need <= buffer)
+      return false;
+    this.path = [];
+    this.goalKey = "hold";
+    this.lastDecision = "hold-risk";
+    return true;
+  }
+  exits(m, i) {
+    const g = m.grid;
+    const x = i % g.w;
+    const y = Math.floor(i / g.w);
+    let n = 0;
+    for (const [dx, dy] of DIRS)
+      if (!g.blocksMove(x + dx, y + dy) && g.bombAt[g.idx(x + dx, y + dy)] < 0)
+        n++;
+    return n;
+  }
+  mark(d) {
+    this.lastDecision = d;
+    return true;
+  }
+  go(path, key, decision) {
+    const keep = this.goalKey === key && this.path.length > 0 && this.path[this.path.length - 1] === path[path.length - 1];
+    if (!keep)
+      this.path = path;
+    this.goalKey = key;
+    this.lastDecision = decision;
+    return true;
+  }
+  grabBonus(m, p, danger, radius) {
+    const bonusPath = this.findTarget(m, p, danger, radius, (i) => m.grid.bonusAt[i] >= 0);
+    if (!bonusPath || !bonusPath.length)
+      return false;
+    return this.go(bonusPath, "bonus:" + bonusPath[bonusPath.length - 1], "bonus");
+  }
+  trackProgress(m, key, d) {
+    const pr = this.progress;
+    if (pr.key !== key || d < pr.best) {
+      pr.key = key;
+      pr.best = d;
+      pr.since = m.time;
+    }
+  }
+  stalled(m) {
+    return m.time - this.progress.since > 2.5;
+  }
+  inLineWith(m, o, x, y, r) {
+    const g = m.grid;
+    const ox = Math.floor(o.x);
+    const oy = Math.floor(o.y);
+    if (ox !== x && oy !== y)
+      return false;
+    const d = Math.abs(ox - x) + Math.abs(oy - y);
+    if (d === 0 || d > r)
+      return false;
+    const sx = Math.sign(ox - x);
+    const sy = Math.sign(oy - y);
+    for (let k = 1;k < d; k++)
+      if (g.isSolid(x + sx * k, y + sy * k))
+        return false;
+    return true;
+  }
+  bestPost(m, p, danger, target, field, foes, mateCells) {
+    const g = m.grid;
+    const here = g.idx(Math.floor(p.x), Math.floor(p.y));
+    const foeCells = foes.map((o) => [Math.floor(o.x), Math.floor(o.y)]);
+    let best = -1;
+    let bestScore = Infinity;
+    const score = (i) => {
+      const x = i % g.w;
+      const y = Math.floor(i / g.w);
+      let near = 20;
+      for (const [fx, fy] of foeCells)
+        near = Math.min(near, Math.abs(fx - x) + Math.abs(fy - y));
+      return field[i] * 1.5 + near + (i === here ? -0.8 : 0);
+    };
+    this.bfs(m, p, danger, this.prof.margin, 10, (i) => {
+      if (target.has(i) || mateCells.has(i) || g.bombAt[i] >= 0 || danger.start[i] !== Infinity)
+        return false;
+      if (field[i] < 1 || field[i] > 3)
+        return false;
+      const s = score(i);
+      if (s < bestScore) {
+        bestScore = s;
+        best = i;
+      }
+      return false;
+    });
+    if (best < 0)
+      return null;
+    if (best === here)
+      return [];
+    return this.findTarget(m, p, danger, 12, (i) => i === best);
+  }
+  zoneField(m, target) {
+    let per = FIELDS.get(m);
+    if (!per || per.tick !== m.tick) {
+      per = { tick: m.tick, map: new Map };
+      FIELDS.set(m, per);
+    }
+    const hit = per.map.get(target);
+    if (hit)
+      return hit;
     const g = m.grid;
     const dist = new Int16Array(g.w * g.h).fill(32000);
-    const q = [];
+    const buckets = [[]];
     for (const c of target) {
       dist[c] = 0;
-      q.push(c);
+      buckets[0].push(c);
     }
-    for (let k = 0;k < q.length; k++) {
-      const c = q[k];
-      const x = c % g.w;
-      const y = Math.floor(c / g.w);
-      for (const [dx, dy] of DIRS) {
-        const nx = x + dx;
-        const ny = y + dy;
-        if (g.tile(nx, ny) === TILE.WALL || g.isHazard(nx, ny))
+    for (let d = 0;d < buckets.length; d++) {
+      const bucket = buckets[d];
+      if (!bucket)
+        continue;
+      for (let k = 0;k < bucket.length; k++) {
+        const c = bucket[k];
+        if (dist[c] !== d)
           continue;
-        const n = g.idx(nx, ny);
-        if (dist[n] > dist[c] + 1) {
-          dist[n] = dist[c] + 1;
-          q.push(n);
+        const x = c % g.w;
+        const y = Math.floor(c / g.w);
+        for (const [dx, dy] of DIRS) {
+          const nx = x + dx;
+          const ny = y + dy;
+          const t = g.tile(nx, ny);
+          if (t === TILE.WALL || g.isHazard(nx, ny))
+            continue;
+          if (t !== TILE.FLOOR && t !== TILE.BLOCK)
+            continue;
+          const n = g.idx(nx, ny);
+          const nd = d + (t === TILE.BLOCK ? 4 : 1);
+          if (nd < dist[n]) {
+            dist[n] = nd;
+            (buckets[nd] ??= []).push(n);
+          }
         }
       }
     }
-    this.hillCache = { tick: m.tick, set: target, dist };
+    per.map.set(target, dist);
     return dist;
   }
   blocksLeft(m) {
@@ -2289,7 +2517,7 @@ class BotBrain {
     const tx = Math.floor(p.x);
     const ty = Math.floor(p.y);
     if (!sloppy) {
-      const danger = computeDanger(m, { tx, ty, fuse: m.bombRules.fuse * m.fuseMul, range: m.nextBombRange(p), toxic: p.toxicCharges > 0, chain: p.chainCharges > 0 });
+      const danger = computeDanger(m, { tx, ty, fuse: m.bombRules.fuse * m.fuseMul, range: m.nextBombRange(p), toxic: p.toxicCharges > 0, chain: p.chainCharges > 0, owner: p.id }, p.id);
       const escape = this.findSafe(m, p, danger, this.prof.margin + 0.15, true);
       if (!escape)
         return false;

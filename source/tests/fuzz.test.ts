@@ -207,7 +207,7 @@ console.log("Redémarrage d'une manche");
     let g = 0;
     while (m.phase !== "over" && g++ < 60 * 200) {
       m.step(brains.map((b) => b.update(m, DT)));
-      if (g < 60 * 20) for (const e of m.events) log.push(`${m.tick}:${e.t}`);
+      if (g < 60 * 45) for (const e of m.events) log.push(`${m.tick}:${e.t}`);
     }
     return { m, log };
   };

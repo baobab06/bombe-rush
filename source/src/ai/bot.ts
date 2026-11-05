@@ -3,6 +3,7 @@ import { DIRS } from "../core/grid";
 import { RULES } from "../core/rules";
 import { TILE, type Difficulty, type InputCmd, type PlayerState } from "../core/types";
 import { Rng } from "../core/rng";
+import { HILL_RULES } from "../core/hill";
 import { blastCells, computeDanger, type DangerMap } from "./danger";
 
 interface Profile {
@@ -15,14 +16,21 @@ interface Profile {
   trapRadius: number; // distance à laquelle il tente de piéger
   shieldSense: number; // seuil de danger pour activer le bouclier
   escapeRoom: number; // nb de cases sûres exigées avant de poser (évite les culs-de-sac)
+  /** Domination : probabilité, à chaque réflexion, d'oublier un moment l'objectif (bots faciles) */
+  distract: number;
+  /** Domination : avance (s) prise pour rejoindre la prochaine zone annoncée */
+  lead: number;
 }
 
 const PROFILES: Record<Difficulty, Profile> = {
-  easy: { think: 0.5, margin: 0.12, bonusRadius: 4, aggression: 0.25, mistake: 0.08, reflex: false, trapRadius: 0, shieldSense: 0.12, escapeRoom: 1 },
-  normal: { think: 0.22, margin: 0.22, bonusRadius: 7, aggression: 0.6, mistake: 0.012, reflex: true, trapRadius: 1, shieldSense: 0.25, escapeRoom: 2 },
-  hard: { think: 0.1, margin: 0.25, bonusRadius: 11, aggression: 0.9, mistake: 0, reflex: true, trapRadius: 2, shieldSense: 0.35, escapeRoom: 3 },
-  expert: { think: 0.06, margin: 0.28, bonusRadius: 14, aggression: 1, mistake: 0, reflex: true, trapRadius: 3, shieldSense: 0.45, escapeRoom: 3 },
+  easy: { think: 0.5, margin: 0.12, bonusRadius: 4, aggression: 0.25, mistake: 0.08, reflex: false, trapRadius: 0, shieldSense: 0.12, escapeRoom: 1, distract: 0.15, lead: 0 },
+  normal: { think: 0.22, margin: 0.22, bonusRadius: 7, aggression: 0.6, mistake: 0.012, reflex: true, trapRadius: 1, shieldSense: 0.25, escapeRoom: 2, distract: 0.008, lead: 0.6 },
+  hard: { think: 0.1, margin: 0.25, bonusRadius: 11, aggression: 0.9, mistake: 0, reflex: true, trapRadius: 2, shieldSense: 0.35, escapeRoom: 3, distract: 0, lead: 1 },
+  expert: { think: 0.06, margin: 0.28, bonusRadius: 14, aggression: 1, mistake: 0, reflex: true, trapRadius: 3, shieldSense: 0.45, escapeRoom: 3, distract: 0, lead: 1.3 },
 };
+
+/** Domination : cartes de distance à la zone, partagées par les bots d'une partie (une fois par tick). */
+const FIELDS = new WeakMap<Match, { tick: number; map: Map<Set<number>, Int16Array> }>();
 
 interface Node {
   idx: number;
@@ -175,10 +183,13 @@ export class BotBrain {
   private think(m: Match, p: PlayerState): void {
     const g = m.grid;
     const myIdx = g.idx(Math.floor(p.x), Math.floor(p.y));
-    const danger = computeDanger(m);
+    // en équipes : le feu d'un coéquipier ne blesse pas, on ne le fuit pas
+    const danger = computeDanger(m, undefined, p.id);
     const sloppy = this.rng.chance(this.prof.mistake);
 
     // 1. Danger sur ma case : fuir
+    // (Domination : sur la zone, on tient jusqu'au dernier moment où la fuite reste sûre)
+    if (danger.start[myIdx] !== Infinity && m.hill && this.holdUnderFire(m, p, danger, myIdx)) return;
     if (danger.start[myIdx] !== Infinity) {
       // on s'engage sur une fuite tant qu'elle reste valable (pas d'hésitation)
       if (this.path.length && this.pathSafe(m, p, danger, this.path)) {
@@ -206,6 +217,9 @@ export class BotBrain {
     // 2 bis. Bombe à lancer : un adversaire à portée de lancer ?
     if (this.planThrow(m, p)) return;
 
+    // 2 ter. Domination : l'objectif passe avant tout le reste (voir playDomination)
+    if (m.hill && this.playDomination(m, p, danger, sloppy)) return;
+
     // 3. Bonus proche
     const bonusPath = this.findTarget(m, p, danger, this.prof.bonusRadius, (i) => g.bonusAt[i] >= 0);
     if (bonusPath && bonusPath.length > 0) {
@@ -228,9 +242,6 @@ export class BotBrain {
     }
 
     if (this.path.length) return;
-
-    // 4 bis. Roi de la colline : tenir la colline, sinon y aller
-    if (m.hill && this.playHill(m, p, danger)) return;
 
     // 5. Les bots faciles flânent parfois
     if (this.prof.aggression < 0.5 && this.rng.chance(0.25)) {
@@ -258,100 +269,355 @@ export class BotBrain {
     if (chase) this.path = chase;
   }
 
+  // ------------------------------------------------------------ Domination
+  /** rôle actuel en Domination (débogage, tests) */
+  role: "" | "cap" | "guard" | "rush" = "";
+  /** objectif du chemin en cours (on garde le chemin tant que l'objectif ne change pas) */
+  private goalKey = "";
+  /** distraction volontaire (bots faciles) jusqu'à ce moment */
+  private distractedUntil = -1;
+  /** progression vers la zone : meilleure distance et depuis quand */
+  private progress = { key: "", best: 1e9, since: 0 };
+
   /**
-   * Roi de la colline : sur la colline, on reste (les bombes se décident plus
-   * haut, comme d'habitude). Sinon on y va ; si le chemin est bouché, on casse
-   * le bloc qui en rapproche le plus. Les bots faciles s'y intéressent moins.
+   * Domination (2 contre 2) : tenir la zone est la seule façon de gagner.
+   *
+   * - Objectif : la zone actuelle, ou la prochaine dès qu'elle est annoncée et
+   *   qu'il est temps d'y aller (arrivée calculée sur le temps de marche).
+   * - Rôles dans l'équipe : le plus proche de la zone la PREND (« cap ») ; l'autre
+   *   la PROTÈGE (« guard ») : il se place entre la zone et les adversaires et
+   *   les bombarde quand ils approchent. Les deux FONCENT (« rush ») quand la
+   *   zone est prise ou disputée par l'adversaire, quand le coéquipier est mort,
+   *   ou quand l'équipe est menée en fin de partie.
+   * - Survie : la fuite (danger sur sa case) reste prioritaire (think, étape 1).
+   * Renvoie false pour laisser la logique générale décider (bot distrait).
    */
-  private playHill(m: Match, p: PlayerState, danger: DangerMap): boolean {
-    const hill = m.hill!;
+  private playDomination(m: Match, p: PlayerState, danger: DangerMap, sloppy: boolean): boolean {
+    const h = m.hill!;
     const g = m.grid;
-    const [px, py] = [Math.floor(p.x), Math.floor(p.y)];
+    const px = Math.floor(p.x);
+    const py = Math.floor(p.y);
     const here = g.idx(px, py);
-    // zone annoncée : les bots partent en avance (les plus malins plus tôt)
-    const lead = 1.5 + this.prof.aggression * 2.5;
-    const goNext = hill.nextSet && hill.moveIn < lead;
-    const target = goNext ? hill.nextSet! : hill.cellSet;
-    if (target.has(here)) {
-      // zone disputée : on se bat au lieu d'attendre
-      if (!goNext && hill.contested) {
-        if (p.activeBombs < p.maxBombs && g.bombAt[here] < 0 && this.enemyInLine(m, p, px, py, m.nextBombRange(p)) && this.rng.chance(0.35 + this.prof.aggression * 0.55)) {
-          if (this.placeIfEscapable(m, p, false)) return true;
-        }
-        // se placer dans l'axe d'un adversaire (dans la zone ou juste à côté)
-        if (!this.enemyInLine(m, p, px, py, m.nextBombRange(p)) && this.rng.chance(0.3 + this.prof.aggression * 0.5)) {
-          const aim = this.findTarget(m, p, danger, 4, (i) => {
-            if (g.bombAt[i] >= 0) return false;
-            const x = i % g.w;
-            const y = Math.floor(i / g.w);
-            return this.enemyInLine(m, p, x, y, m.nextBombRange(p));
-          });
-          if (aim && aim.length) {
-            this.path = aim;
-            this.lastDecision = "hill-fight";
-            return true;
-          }
-        }
+    const cellOf = (o: PlayerState) => g.idx(Math.floor(o.x), Math.floor(o.y));
+
+    // bots faciles : parfois distraits (on s'y tient un moment, pas de va-et-vient)
+    if (m.time < this.distractedUntil) return false;
+    if (this.prof.distract > 0 && this.rng.chance(this.prof.distract)) {
+      this.distractedUntil = m.time + 1 + this.rng.next() * 1.5;
+      this.goalKey = "";
+      return false;
+    }
+
+    // ---- 1. Quelle zone viser ?
+    const speed = this.speedNow > 0 ? this.speedNow : p.speed;
+    let target = h.cellSet;
+    let next = false;
+    const nextSet = h.nextSet;
+    if (nextSet) {
+      const etaNext = this.zoneField(m, nextSet)[here] / speed;
+      const onCur = target.has(here);
+      const holding = onCur && !h.contested && h.holder >= 0;
+      // on tient la zone : on y reste jusqu'au dernier moment utile ; sinon on part en avance
+      const leaveAt = holding ? etaNext - 0.5 : etaNext + this.prof.lead;
+      const curEta = this.zoneField(m, target)[here] / speed;
+      if (h.moveIn <= Math.max(0.15, leaveAt) || (!onCur && curEta >= h.moveIn - 0.3)) {
+        target = nextSet;
+        next = true;
+      }
+    }
+    const field = this.zoneField(m, target);
+    const myD = field[here];
+    const onZone = target.has(here);
+
+    // ---- 2. Situation de l'équipe
+    const team = m.teamOf(p.id);
+    const mates = m.players.filter((o) => o.alive && m.sameTeam(p.id, o.id));
+    const foes = m.players.filter((o) => m.isFoe(p, o));
+    const mySlot = h.slot(p.id);
+    const myPts = h.scores[mySlot] ?? 0;
+    const foePts = Math.max(0, ...h.scores.filter((_, k) => k !== mySlot));
+    const foesOnZone = foes.filter((o) => target.has(cellOf(o)));
+    const matesOnZone = mates.filter((o) => target.has(cellOf(o)));
+    const enemyHolds = !next && h.holder >= 0 && h.slot(h.holder) !== mySlot;
+    const late = m.timeLeft < 35 && myPts <= foePts;
+    const danger2win = foePts >= HILL_RULES.target - 6; // l'adversaire est proche de la victoire
+
+    let role: "cap" | "guard" | "rush";
+    if (team < 0 || !mates.length) role = "rush";
+    else if (enemyHolds || (foesOnZone.length && !matesOnZone.length) || late || danger2win) role = "rush";
+    else {
+      // le plus proche de la zone la prend (égalité : le plus petit numéro)
+      const mate = mates.reduce((a, b) => (field[cellOf(a)] <= field[cellOf(b)] ? a : b));
+      const mateD = field[cellOf(mate)];
+      const meFirst = matesOnZone.length ? false : myD < mateD || (myD === mateD && p.id < mate.id);
+      role = onZone && !matesOnZone.length ? "cap" : meFirst ? "cap" : "guard";
+      if (onZone && matesOnZone.length && p.id < matesOnZone[0].id) role = "cap";
+    }
+    if (role !== this.role) this.goalKey = "";
+    this.role = role;
+
+    const range = m.nextBombRange(p);
+    const canBomb = p.activeBombs < p.maxBombs && g.bombAt[here] < 0 && p.bombCooldown <= 0;
+    const bombVal = canBomb ? this.bombValue(m, p) : { blocks: 0, enemy: false };
+    // Une bombe dont l'explosion couvre la zone la rend intenable ~3 s pour TOUT
+    // le monde (et chasse un coéquipier qui la tient). On ne le fait que pour
+    // déloger un adversaire qui est dessus, ou, rarement, quand on est mené.
+    const hurtsHold = (() => {
+      if (foesOnZone.length) return false;
+      const cells: number[] = [];
+      const bombCells = new Set<number>();
+      for (const b of m.bombs.values()) bombCells.add(g.idx(b.tx, b.ty));
+      blastCells(m, px, py, range, bombCells, cells);
+      if (!cells.some((c) => target.has(c))) return false;
+      return matesOnZone.length > 0 || myPts >= foePts || !this.rng.chance(0.25);
+    })();
+    const attack = (chance: number): boolean =>
+      canBomb && bombVal.enemy && !hurtsHold && this.rng.chance(chance) && this.placeIfEscapable(m, p, sloppy);
+
+    // ---- 3. Sur la zone : on la tient
+    if (onZone && role !== "guard") {
+      if (h.contested || foesOnZone.length) {
+        // disputée : rester empêche l'adversaire de marquer ; on bombarde s'il est dans l'axe
+        if (attack(0.45 + this.prof.aggression * 0.5)) return this.mark("zone-fight");
+      } else if (!mates.length && foes.some((o) => field[cellOf(o)] <= 2) && attack(0.2 + this.prof.aggression * 0.4)) {
+        // seul : un adversaire arrive au contact, on le repousse
+        return this.mark("zone-defend");
       }
       this.path = [];
-      this.lastDecision = "hill";
-      return true;
+      this.goalKey = "hold";
+      return this.mark("hold");
     }
-    if (this.prof.aggression < 0.5 && this.rng.chance(0.35)) return false;
-    const toHill = this.findTarget(m, p, danger, 40, (i) => target.has(i) && g.bombAt[i] < 0);
-    if (toHill && toHill.length) {
-      this.path = toHill;
-      this.lastDecision = "hill";
-      return true;
+
+    // ---- 4. Protecteur : entre la zone et les adversaires
+    if (role === "guard") {
+      // un adversaire près de la zone dans l'axe : bombe
+      const threat = foes.filter((o) => field[cellOf(o)] <= 5).sort((a, b) => field[cellOf(a)] - field[cellOf(b)]);
+      if (threat.length && attack(0.5 + this.prof.aggression * 0.5)) return this.mark("guard-bomb");
+      if (onZone && matesOnZone.some((o) => o.id !== p.id)) {
+        // deux sur la zone : je laisse la place et je me poste à côté
+        this.goalKey = "";
+      }
+      // se placer dans l'axe de l'adversaire le plus menaçant (sans gêner la zone)
+      if (threat.length && canBomb) {
+        const foe = threat[0];
+        const aim = this.findTarget(m, p, danger, 6, (i) => {
+          if (g.bombAt[i] >= 0 || target.has(i)) return false;
+          const x = i % g.w;
+          const y = Math.floor(i / g.w);
+          return this.inLineWith(m, foe, x, y, range) && field[i] <= 4;
+        });
+        if (aim && aim.length) return this.go(aim, "guard-aim:" + foe.id, "guard-intercept");
+      }
+      // bonus tout proche : on le prend (le protecteur a le temps)
+      if (this.grabBonus(m, p, danger, 3)) return true;
+      // poste de garde : près de la zone, du côté des adversaires, pas sur le coéquipier
+      const mateCells = new Set(mates.map(cellOf));
+      const post = this.bestPost(m, p, danger, target, field, foes, mateCells);
+      if (post) {
+        if (post.length === 0) {
+          this.path = [];
+          return this.mark("guard-post");
+        }
+        return this.go(post, "post:" + post[post.length - 1], "guard-post");
+      }
+      // aucun poste accessible : on rejoint la zone quand même
     }
-    // zone inaccessible pour l'instant : casser vers elle
-    const dist = this.hillDistance(m, target);
-    const mine = dist[here];
-    const goal = this.findTarget(m, p, danger, 30, (i) => {
+
+    // ---- 5. Prendre la zone (cap / rush)
+    // petit bonus sur la route seulement, et jamais quand ça presse
+    if (role === "cap" && !next && !h.contested && this.grabBonus(m, p, danger, 2)) return true;
+    // un adversaire dans l'axe en chemin : on tente la bombe (plus volontiers en « rush »)
+    if (bombVal.enemy && attack(role === "rush" ? 0.35 + this.prof.aggression * 0.4 : 0.2 + this.prof.aggression * 0.3)) return this.mark("rush-bomb");
+    const key = (next ? "next:" : "cur:") + [...target][0];
+    this.trackProgress(m, key, myD);
+    // zone menacée plus tard : on y va quand même s'il reste du temps à y passer
+    const toZone = this.bfs(m, p, danger, this.prof.margin, 40, (i, node) => target.has(i) && g.bombAt[i] < 0 && (danger.start[i] === Infinity || danger.start[i] - this.eta(p, node.dist) > 1.4 + this.prof.think * 2));
+    if (toZone && toZone.length && !this.stalled(m)) return this.go(toZone, key, role + (next ? "-next" : ""));
+    // zone en feu ou bloquée par une bombe : attendre sur la case sûre la plus proche
+    const wait = this.findTarget(m, p, danger, 12, (i) => field[i] <= 2 && !target.has(i) && g.bombAt[i] < 0 && this.exits(m, i) >= 2);
+    if (wait && !this.stalled(m) && field[here] > 2) return this.go(wait, key + ":wait", "zone-wait");
+    if (field[here] <= 2 && !this.stalled(m)) {
+      this.path = [];
+      return this.mark("zone-wait");
+    }
+    // chemin bouché par des caisses : casser celle qui rapproche le plus de la zone
+    const mine = field[here];
+    if (canBomb && bombVal.blocks > 0) {
+      const cells: number[] = [];
+      blastCells(m, px, py, range, new Set<number>(), cells);
+      if (cells.some((c) => g.tiles[c] === TILE.BLOCK && field[c] < mine) && this.placeIfEscapable(m, p, sloppy)) return this.mark("zone-break");
+    }
+    const brk = this.findTarget(m, p, danger, 30, (i) => {
       if (g.bombAt[i] >= 0) return false;
       const x = i % g.w;
       const y = Math.floor(i / g.w);
       for (const [dx, dy] of DIRS) {
         const n = g.idx(x + dx, y + dy);
-        if (g.tile(x + dx, y + dy) === TILE.BLOCK && dist[n] < mine) return true;
+        if (g.tile(x + dx, y + dy) === TILE.BLOCK && field[n] < mine) return true;
       }
       return false;
     });
-    if (goal && goal.length) {
-      this.path = goal;
-      this.lastDecision = "hill";
-      return true;
-    }
+    if (brk && brk.length) return this.go(brk, key + ":break", "zone-break");
+    this.progress.since = m.time; // on repart de zéro au prochain essai
     return false;
   }
 
-  /** Distance (en cases) de chaque case à la zone visée, blocs considérés franchissables. */
-  private hillCache: { tick: number; set: Set<number>; dist: Int16Array } | null = null;
-  private hillDistance(m: Match, target: Set<number>): Int16Array {
-    if (this.hillCache && this.hillCache.set === target && m.tick - this.hillCache.tick < 30) return this.hillCache.dist;
+  /**
+   * Sur la zone avec une explosion annoncée : chaque seconde sur la zone vaut
+   * un point (ou empêche l'adversaire de marquer). On reste tant qu'il reste
+   * le temps de fuir avec une bonne marge (temps de réflexion compris).
+   */
+  private holdUnderFire(m: Match, p: PlayerState, danger: DangerMap, myIdx: number): boolean {
+    if (!m.hill!.cellSet.has(myIdx) || this.prof.distract > 0.02) return false;
+    // sa propre bombe : on a choisi de fuir, on fuit
+    for (const b of m.bombs.values()) if (b.ownerId === p.id && m.blastCells(b.tx, b.ty, b.range).includes(myIdx)) return false;
+    const escape = this.findSafe(m, p, danger, this.prof.margin);
+    if (!escape) return false;
+    const need = this.eta(p, escape.length) + this.prof.margin;
+    const buffer = this.prof.think * 2 + 0.4;
+    if (danger.start[myIdx] - need <= buffer) return false;
+    this.path = [];
+    this.goalKey = "hold";
+    this.lastDecision = "hold-risk";
+    return true;
+  }
+
+  /** Nombre de cases libres autour (une attente dans un cul-de-sac finit mal). */
+  private exits(m: Match, i: number): number {
+    const g = m.grid;
+    const x = i % g.w;
+    const y = Math.floor(i / g.w);
+    let n = 0;
+    for (const [dx, dy] of DIRS) if (!g.blocksMove(x + dx, y + dy) && g.bombAt[g.idx(x + dx, y + dy)] < 0) n++;
+    return n;
+  }
+
+  private mark(d: string): boolean {
+    this.lastDecision = d;
+    return true;
+  }
+
+  /** Suit `path` ; si l'objectif n'a pas changé et que l'ancien chemin reste valable, on le garde (pas d'hésitation). */
+  private go(path: number[], key: string, decision: string): boolean {
+    const keep = this.goalKey === key && this.path.length > 0 && this.path[this.path.length - 1] === path[path.length - 1];
+    if (!keep) this.path = path;
+    this.goalKey = key;
+    this.lastDecision = decision;
+    return true;
+  }
+
+  /** Prend un bonus à `radius` pas au plus. */
+  private grabBonus(m: Match, p: PlayerState, danger: DangerMap, radius: number): boolean {
+    const bonusPath = this.findTarget(m, p, danger, radius, (i) => m.grid.bonusAt[i] >= 0);
+    if (!bonusPath || !bonusPath.length) return false;
+    return this.go(bonusPath, "bonus:" + bonusPath[bonusPath.length - 1], "bonus");
+  }
+
+  /** Bloqué : la distance à la zone ne baisse plus depuis 2,5 s alors qu'on essaie d'y aller. */
+  private trackProgress(m: Match, key: string, d: number): void {
+    const pr = this.progress;
+    if (pr.key !== key || d < pr.best) {
+      pr.key = key;
+      pr.best = d;
+      pr.since = m.time;
+    }
+  }
+  private stalled(m: Match): boolean {
+    return m.time - this.progress.since > 2.5;
+  }
+
+  /** L'adversaire o est-il dans l'axe de (x, y), à portée, sans obstacle ? */
+  private inLineWith(m: Match, o: PlayerState, x: number, y: number, r: number): boolean {
+    const g = m.grid;
+    const ox = Math.floor(o.x);
+    const oy = Math.floor(o.y);
+    if (ox !== x && oy !== y) return false;
+    const d = Math.abs(ox - x) + Math.abs(oy - y);
+    if (d === 0 || d > r) return false;
+    const sx = Math.sign(ox - x);
+    const sy = Math.sign(oy - y);
+    for (let k = 1; k < d; k++) if (g.isSolid(x + sx * k, y + sy * k)) return false;
+    return true;
+  }
+
+  /**
+   * Poste de garde : une case sûre à 1-3 pas de la zone (hors zone), du côté
+   * des adversaires, jamais sur un coéquipier. Renvoie le chemin ([] = on y est).
+   */
+  private bestPost(m: Match, p: PlayerState, danger: DangerMap, target: Set<number>, field: Int16Array, foes: PlayerState[], mateCells: Set<number>): number[] | null {
+    const g = m.grid;
+    const here = g.idx(Math.floor(p.x), Math.floor(p.y));
+    const foeCells = foes.map((o) => [Math.floor(o.x), Math.floor(o.y)]);
+    let best = -1;
+    let bestScore = Infinity;
+    const score = (i: number) => {
+      const x = i % g.w;
+      const y = Math.floor(i / g.w);
+      // proche de l'adversaire le plus proche = on lui barre la route
+      let near = 20;
+      for (const [fx, fy] of foeCells) near = Math.min(near, Math.abs(fx - x) + Math.abs(fy - y));
+      return field[i] * 1.5 + near + (i === here ? -0.8 : 0);
+    };
+    this.bfs(m, p, danger, this.prof.margin, 10, (i) => {
+      if (target.has(i) || mateCells.has(i) || g.bombAt[i] >= 0 || danger.start[i] !== Infinity) return false;
+      if (field[i] < 1 || field[i] > 3) return false;
+      const s = score(i);
+      if (s < bestScore) {
+        bestScore = s;
+        best = i;
+      }
+      return false;
+    });
+    if (best < 0) return null;
+    if (best === here) return [];
+    return this.findTarget(m, p, danger, 12, (i) => i === best);
+  }
+
+  /**
+   * Distance de marche (en pas) de chaque case à la zone. Une caisse coûte 4
+   * pas (il faut la casser), les murs et obstacles sont infranchissables.
+   * Partagé entre les bots d'une même partie (calculé une fois par tick et par zone).
+   */
+  private zoneField(m: Match, target: Set<number>): Int16Array {
+    let per = FIELDS.get(m);
+    if (!per || per.tick !== m.tick) {
+      per = { tick: m.tick, map: new Map() };
+      FIELDS.set(m, per);
+    }
+    const hit = per.map.get(target);
+    if (hit) return hit;
     const g = m.grid;
     const dist = new Int16Array(g.w * g.h).fill(32000);
-    const q: number[] = [];
+    // file à seaux (coûts 1 et 4)
+    const buckets: number[][] = [[]];
     for (const c of target) {
       dist[c] = 0;
-      q.push(c);
+      buckets[0].push(c);
     }
-    for (let k = 0; k < q.length; k++) {
-      const c = q[k];
-      const x = c % g.w;
-      const y = Math.floor(c / g.w);
-      for (const [dx, dy] of DIRS) {
-        const nx = x + dx;
-        const ny = y + dy;
-        if (g.tile(nx, ny) === TILE.WALL || g.isHazard(nx, ny)) continue;
-        const n = g.idx(nx, ny);
-        if (dist[n] > dist[c] + 1) {
-          dist[n] = dist[c] + 1;
-          q.push(n);
+    for (let d = 0; d < buckets.length; d++) {
+      const bucket = buckets[d];
+      if (!bucket) continue;
+      for (let k = 0; k < bucket.length; k++) {
+        const c = bucket[k];
+        if (dist[c] !== d) continue;
+        const x = c % g.w;
+        const y = Math.floor(c / g.w);
+        for (const [dx, dy] of DIRS) {
+          const nx = x + dx;
+          const ny = y + dy;
+          const t = g.tile(nx, ny);
+          if (t === TILE.WALL || g.isHazard(nx, ny)) continue;
+          if (t !== TILE.FLOOR && t !== TILE.BLOCK) continue;
+          const n = g.idx(nx, ny);
+          const nd = d + (t === TILE.BLOCK ? 4 : 1);
+          if (nd < dist[n]) {
+            dist[n] = nd;
+            (buckets[nd] ??= []).push(n);
+          }
         }
       }
     }
-    this.hillCache = { tick: m.tick, set: target, dist };
+    per.map.set(target, dist);
     return dist;
   }
 
@@ -406,7 +672,7 @@ export class BotBrain {
     const tx = Math.floor(p.x);
     const ty = Math.floor(p.y);
     if (!sloppy) {
-      const danger = computeDanger(m, { tx, ty, fuse: m.bombRules.fuse * m.fuseMul, range: m.nextBombRange(p), toxic: p.toxicCharges > 0, chain: p.chainCharges > 0 });
+      const danger = computeDanger(m, { tx, ty, fuse: m.bombRules.fuse * m.fuseMul, range: m.nextBombRange(p), toxic: p.toxicCharges > 0, chain: p.chainCharges > 0, owner: p.id }, p.id);
       const escape = this.findSafe(m, p, danger, this.prof.margin + 0.15, true);
       if (!escape) return false;
       let room = 0;
