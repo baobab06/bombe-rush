@@ -9,6 +9,8 @@ import { DT, RULES } from "../core/rules";
 import { NO_INPUT, type Difficulty, type PlayerSlot, type SimEvent } from "../core/types";
 import { Controls } from "../input/controls";
 import { getMap, pickMap, RANDOM_MAP } from "../maps";
+import { TRAINING } from "../maps/training";
+import type { Match } from "../core/match";
 import { LocalSession, type GameSession } from "../net/session";
 import { haptics } from "../platform/haptics";
 import { Renderer, type Rect } from "../render/renderer";
@@ -89,6 +91,10 @@ export class GameScreen {
   session: GameSession | null = null;
   setup: GameSetup | null = null;
   demo = false;
+  /** entraînement du tutoriel : pas de fin, pas de résultat, pas de mise */
+  training = false;
+  /** appelé après chaque mise à jour pendant l'entraînement (objectifs du tutoriel) */
+  onTraining: ((m: Match) => void) | null = null;
   paused = false;
 
   onFinished: ((r: GameResult) => void) | null = null;
@@ -175,6 +181,7 @@ export class GameScreen {
   // ------------------------------------------------------------- parties
   startDemo() {
     this.demo = true;
+    this.training = false;
     const ids = [...CHARACTERS].sort(() => Math.random() - 0.5).slice(0, 4).map((c) => c.id);
     // démo : skins tirés au hasard, pour montrer la variété
     const players: PlayerSlot[] = ids.map((id) => ({ name: getCharacter(id).name, characterId: id, ...randomLook(id, true), isBot: true, difficulty: "normal" }));
@@ -184,6 +191,7 @@ export class GameScreen {
 
   start(setup: GameSetup) {
     this.demo = false;
+    this.training = false;
     this.setup = setup;
     const others = CHARACTERS.filter((c) => c.id !== setup.characterId)
       .map((c) => c.id)
@@ -200,7 +208,27 @@ export class GameScreen {
   }
 
   restart() {
-    if (this.setup) this.start(this.setup);
+    if (this.training && this.trainingSlot) this.startTraining(this.trainingSlot);
+    else if (this.setup) this.start(this.setup);
+  }
+
+  private trainingSlot: PlayerSlot | null = null;
+  /**
+   * Terrain d'entraînement (tutoriel) : le joueur et un mannequin immobile,
+   * les vraies règles du jeu (mode « training », core/training.ts).
+   */
+  startTraining(me: PlayerSlot) {
+    this.demo = false;
+    this.training = true;
+    this.setup = null;
+    this.trainingSlot = me;
+    const dummy = CHARACTERS.find((c) => c.id !== me.characterId) ?? CHARACTERS[0];
+    const players: PlayerSlot[] = [
+      { ...me, isBot: false },
+      { name: "Mannequin", characterId: dummy.id, isBot: false },
+    ];
+    this.attach(new LocalSession({ seed: (Math.random() * 1e9) | 0, map: TRAINING, modeId: "training", players }, 0), 0);
+    this.session!.match.countdown = 0.6;
   }
 
   private begin(players: PlayerSlot[], mapId: string, modeId: string, local: number, seed: number) {
@@ -210,6 +238,7 @@ export class GameScreen {
   /** Partie en ligne : la simulation fait autorité sur le serveur. */
   startOnline(session: GameSession) {
     this.demo = false;
+    this.training = false;
     this.setup = null;
     this.attach(session, session.localPlayer);
   }
@@ -237,7 +266,7 @@ export class GameScreen {
     this.spectateDelay = 1.6;
     this.killedBy = -1;
     this.onSpectate?.();
-    this.matchKey = this.demo ? "" : session instanceof LocalSession ? `L-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e9).toString(36)}` : `O-${session.match.config.seed}-${(session as { matchId?: number }).matchId ?? 0}`;
+    this.matchKey = this.demo || this.training ? "" : session instanceof LocalSession ? `L-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e9).toString(36)}` : `O-${session.match.config.seed}-${(session as { matchId?: number }).matchId ?? 0}`;
     this.countdownShown = -1;
     this.paused = false;
     if (this.demo) this.session.match.countdown = 0;
@@ -410,6 +439,16 @@ export class GameScreen {
     }
     audio.setIntensity(m.suddenDeath ? 1 : m.aliveCount <= 2 ? 0.5 : 0);
 
+    // entraînement : pas de fin de partie, seulement les objectifs du tutoriel
+    if (this.training) {
+      this.onTraining?.(m);
+      this.hudTimer -= dt;
+      if (this.hudTimer <= 0) {
+        this.hudTimer = 0.25;
+        this.onHud?.();
+      }
+      return;
+    }
     // fin de partie pour le joueur local
     const me = m.players[s.localPlayer];
     if (!this.endingSignaled && !this.result && me.alive && m.phase === "ending") {
@@ -477,7 +516,7 @@ export class GameScreen {
 
   /** Partie réelle en cours dont l'issue n'est pas encore connue. */
   get live(): boolean {
-    return !!this.session && !this.demo && !this.result;
+    return !!this.session && !this.demo && !this.training && !this.result;
   }
 
   /** Identifiant unique de la partie (sert à ne la régler qu'une fois). */

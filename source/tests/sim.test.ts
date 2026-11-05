@@ -3288,5 +3288,43 @@ console.log("Classement réel");
   check(z.winnerId === -1 && z.players.every((p) => p.place === 1), "tout le monde saute ensemble : égalité, pas de vainqueur");
 }
 
+console.log("Entraînement du tutoriel (mode training)");
+{
+  const { TRAINING } = await import("../src/maps/training");
+  const { TRAINING_CRATES, TRAINING_SPAWNS } = await import("../src/core/training");
+  const { MAPS } = await import("../src/maps/index");
+  const { MODES } = await import("../src/core/modes");
+  const mk = () => {
+    const m = new Match({ seed: 9, map: TRAINING, modeId: "training", players: [{ name: "Toi", characterId: "renard", isBot: false }, { name: "Mannequin", characterId: "boulon", isBot: false }] });
+    m.phase = "playing";
+    return m;
+  };
+  const m = mk();
+  check(m.players.every((p, i) => Math.floor(p.x) === TRAINING_SPAWNS[i][0] && Math.floor(p.y) === TRAINING_SPAWNS[i][1]), "joueur et mannequin à leur place");
+  check(TRAINING_CRATES.every(([x, y]) => m.grid.tile(x, y) === TILE.BLOCK), `${TRAINING_CRATES.length} caisses posées, toujours aux mêmes places`);
+  check(TRAINING_CRATES.filter(([, , b]) => b).every(([x, y, b]) => m.grid.hiddenBonus[m.grid.idx(x, y)] === b), "chaque caisse cache le bonus prévu (même leçon pour tous)");
+  // le joueur pose une bombe à côté de la caisse « flamme » puis se met à l'abri
+  place(m, 0, 3, 1);
+  run(m, DT, (mm) => mm.players.map((p) => ({ mx: 0, my: 0, bomb: p.id === 0, ability: false })));
+  const go = (dx: number, dy: number, secs: number) => run(m, secs, (mm) => mm.players.map((p) => (p.id === 0 ? { mx: dx, my: dy, bomb: false, ability: false } : { mx: 0, my: 0, bomb: false, ability: false })));
+  go(0, 1, 0.9); // descend en (3,3)
+  go(-1, 0, 0.5); // à gauche, hors de la croix
+  run(m, 3.5);
+  check(m.players[0].alive && m.grid.tile(4, 1) === TILE.FLOOR && m.players[0].stats.blocksDestroyed >= 1, "bombe posée, caisse cassée, joueur à l'abri : vraies règles d'explosion");
+  check(m.bonuses.size >= 1, "un bonus est apparu à la place de la caisse");
+  // le mannequin éliminé réapparaît ; le joueur aussi ; jamais de fin de partie
+  m.kill(m.players[1], 0);
+  m.kill(m.players[0], 0);
+  run(m, 2.2);
+  check(m.players[0].alive && m.players[1].alive && m.players[0].shieldTime > 0, "éliminés : retour au départ au bout de 1,5 s, avec un bouclier");
+  run(m, 200);
+  check(m.phase === "playing", "pas de fin de partie, même après le temps d'une vraie partie");
+  // toutes les caisses cassées : elles reviennent
+  for (const [x, y] of TRAINING_CRATES) m.grid.tiles[m.grid.idx(x, y)] = TILE.FLOOR;
+  run(m, 5);
+  check(TRAINING_CRATES.filter(([x, y]) => m.grid.tile(x, y) === TILE.BLOCK).length >= TRAINING_CRATES.length - 2, "plus de caisses : elles reviennent (on peut continuer à s'entraîner)");
+  check(!MAPS.some((x) => x.id === "training") && MODES.find((x) => x.id === "training")!.hidden === true, "terrain et mode d'entraînement : jamais tirés au sort ni proposés en partie");
+}
+
 console.log(failures ? `\n${failures} échec(s)` : "\nTout est vert.");
 (globalThis as unknown as { process: { exit(c: number): void } }).process.exit(failures ? 1 : 0);

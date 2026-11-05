@@ -260,5 +260,29 @@ console.log("Bombers (monnaie premium) et achats");
   check(LOGIN_REWARDS[6].some((r) => r.kind === "bombers"), "7e jour de connexion : des bombers");
 }
 
+console.log("Tutoriel : état sauvegardé avec le profil");
+{
+  const { setTutorial, shouldOfferTutorial } = await import("../src/meta/tutorial-state");
+  const fresh = defaultProfile();
+  check(fresh.tutorial.state === "new" && shouldOfferTutorial(fresh), "nouveau joueur : tutoriel proposé");
+  // joueur existant (profil d'avant le tutoriel) : proposé une fois, rien d'autre ne change
+  const old = migrate({ ...JSON.parse(JSON.stringify(baseProfile())), tutorial: undefined, played: 42, coins: 1234, level: 7 } as never);
+  check(old.tutorial.state === "new" && shouldOfferTutorial(old) && old.played === 42 && old.coins === 1234 && old.level === 7, "joueur existant sans tutoriel : proposé une fois, progression intacte");
+  setTutorial(old, "skipped");
+  check(!shouldOfferTutorial(old), "passé : il ne revient plus tout seul");
+  const done = defaultProfile();
+  setTutorial(done, "done");
+  setTutorial(done, "skipped"); // revu depuis les Paramètres puis passé
+  check(done.tutorial.state === "done" && done.tutorial.at > 0, "terminé : le revoir puis le passer ne l'efface pas");
+  // autre appareil : la sauvegarde en ligne (profil complet en JSON) garde l'état
+  const cloud = migrate(JSON.parse(JSON.stringify(done)));
+  check(cloud.tutorial.state === "done" && !shouldOfferTutorial(cloud), "même compte sur un autre appareil : pas proposé à nouveau");
+  const weird = migrate({ ...JSON.parse(JSON.stringify(baseProfile())), tutorial: { state: "???", at: "x" } } as never);
+  check(weird.tutorial.state === "new" && weird.tutorial.at === 0, "valeur inconnue : remise à « jamais proposé »");
+  const offered = defaultProfile();
+  setTutorial(offered, "offered");
+  check(shouldOfferTutorial(offered), "proposé puis jeu fermé sans répondre : reproposé au prochain lancement");
+}
+
 console.log(failures ? `\n${failures} échec(s)` : "\nTout est vert ✅");
 (globalThis as unknown as { process: { exit(c: number): void } }).process.exit(failures ? 1 : 0);

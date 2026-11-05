@@ -113,6 +113,13 @@ export interface Profile {
   ledger: import("./rewards").CoinTransaction[];
   winStreak: number;
   lastSetup: { botCount: number; difficulty: "easy" | "normal" | "hard" | "expert"; mapId: string; modeId: string };
+  /**
+   * Tutoriel : « new » = jamais proposé, « offered » = proposé (réponse en
+   * attente), « skipped » = passé, « done » = terminé. Sauvegardé avec le
+   * profil (donc dans la sauvegarde en ligne) : il ne revient pas tout seul
+   * après avoir été passé ou terminé, sur aucun appareil.
+   */
+  tutorial: { state: "new" | "offered" | "skipped" | "done"; at: number };
   settings: Settings;
 }
 
@@ -155,6 +162,7 @@ export function defaultProfile(): Profile {
     clock: { max: 0, offset: 0 },
     ads: { day: "", coins: 0, freeChest: 0, doubled: [], lastAdAt: 0, gamesSinceAd: 0, personalized: null },
     starterGift: false,
+    tutorial: { state: "new", at: 0 },
     seen: [],
     settled: [],
     pending: null,

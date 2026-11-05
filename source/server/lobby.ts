@@ -221,7 +221,7 @@ export class Lobby {
     const r = this.roomOf(c);
     if (!r || r.game) return;
     if (r.hostToken !== c.token) return this.error(c.token, "not_host", "Seul l'hôte choisit le mode et la carte.");
-    if (s.modeId && MODES.some((m) => m.id === s.modeId && m.available)) r.modeId = s.modeId;
+    if (s.modeId && MODES.some((m) => m.id === s.modeId && m.available && !m.hidden)) r.modeId = s.modeId;
     if (s.mapId && (s.mapId === RANDOM_MAP || MAPS.some((m) => m.id === s.mapId))) r.mapId = s.mapId;
     if (typeof s.fillBots === "boolean") r.fillBots = s.fillBots;
     // carte pas faite pour le mode choisi (ex. passage en Domination) : au hasard

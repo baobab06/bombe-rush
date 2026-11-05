@@ -82,6 +82,8 @@ export class Match {
   chaos: import("./chaos").ChaosDirector | null = null;
   /** état du mode Roi de la colline (null sinon) */
   hill: import("./hill").HillState | null = null;
+  /** mode Entraînement (tutoriel) */
+  training: import("./training").TrainingState | null = null;
   /**
    * Équipes (Domination 2 contre 2) : équipe de chaque joueur, 0 = rouges
    * (à gauche), 1 = bleus (à droite). null = chacun pour soi.
@@ -1206,6 +1208,8 @@ export class Match {
 
   // ------------------------------------------------------- fin de match
   private updateEnd(): void {
+    // entraînement : pas de fin de partie
+    if (this.mode.endless) return;
     if (this.phase === "playing") {
       // Roi de la colline : on réapparaît, la partie se joue aux points
       const done = this.hill ? this.hill.reached || this.timeLeft <= 0 : this.aliveCount <= 1 || this.timeLeft <= 0;

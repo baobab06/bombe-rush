@@ -1469,6 +1469,92 @@ class HillState {
   }
 }
 
+// src/core/training.ts
+var TRAINING_CRATES = [
+  [4, 1, "flame"],
+  [1, 3, "bomb"],
+  [5, 3, "speed"],
+  [8, 1, "shield"],
+  [3, 5, "throw"],
+  [7, 3, null],
+  [9, 3, "bomb"],
+  [7, 5, null]
+];
+var TRAINING_SPAWNS = [
+  [1, 1],
+  [11, 5]
+];
+var RESPAWN = 1.5;
+var CRATES_BACK = 4;
+
+class TrainingState {
+  m;
+  respawnIn;
+  refill = -1;
+  constructor(m) {
+    this.m = m;
+    this.respawnIn = m.players.map(() => 0);
+    this.placeCrates();
+    m.players.forEach((p, i) => {
+      const [x, y] = TRAINING_SPAWNS[i] ?? TRAINING_SPAWNS[0];
+      p.x = x + 0.5;
+      p.y = y + 0.5;
+    });
+  }
+  placeCrates() {
+    const g = this.m.grid;
+    for (const [x, y, bonus] of TRAINING_CRATES) {
+      const i = g.idx(x, y);
+      if (g.tiles[i] !== TILE.FLOOR || g.bombAt[i] >= 0 || g.bonusAt[i] >= 0 || g.fire[i] > 0)
+        continue;
+      if (this.m.players.some((p) => p.alive && Math.floor(p.x) === x && Math.floor(p.y) === y))
+        continue;
+      g.tiles[i] = TILE.BLOCK;
+      g.hiddenBonus[i] = bonus;
+    }
+  }
+  onDeath(id) {
+    this.respawnIn[id] = RESPAWN;
+  }
+  update(dt) {
+    const m = this.m;
+    for (const p of m.players) {
+      if (p.alive)
+        continue;
+      if (this.respawnIn[p.id] <= 0)
+        this.respawnIn[p.id] = RESPAWN;
+      this.respawnIn[p.id] -= dt;
+      if (this.respawnIn[p.id] > 0)
+        continue;
+      const [x, y] = TRAINING_SPAWNS[p.id] ?? TRAINING_SPAWNS[0];
+      const i = m.grid.idx(x, y);
+      if (m.grid.fire[i] > 0 || m.grid.bombAt[i] >= 0)
+        continue;
+      p.x = x + 0.5;
+      p.y = y + 0.5;
+      p.alive = true;
+      p.moving = false;
+      p.slideX = 0;
+      p.slideY = 0;
+      p.faceX = 0;
+      p.faceY = 1;
+      clearAbilities(p);
+      p.bombCooldown = 0;
+      p.shieldTime = 1.5;
+      m.events.push({ t: "respawn", player: p.id, x: p.x, y: p.y });
+    }
+    const left = TRAINING_CRATES.some(([x, y]) => m.grid.tiles[m.grid.idx(x, y)] === TILE.BLOCK);
+    if (left)
+      this.refill = -1;
+    else if (this.refill < 0)
+      this.refill = CRATES_BACK;
+    else if ((this.refill -= dt) <= 0) {
+      this.refill = -1;
+      this.placeCrates();
+    }
+  }
+}
+
 // src/core/modes.ts
 var MODES = [
   {
@@ -1517,6 +1603,23 @@ var MODES = [
     },
     onTick(m) {
       m.hill?.update();
+    }
+  },
+  {
+    id: "training",
+    name: "Entraînement",
+    tagline: "Apprends à bouger, poser des bombes et ramasser des bonus, sans risque.",
+    available: true,
+    hidden: true,
+    endless: true,
+    emoji: "\uD83C\uDFAF",
+    suddenDeath: false,
+    specials: null,
+    onStart(m) {
+      m.training = new TrainingState(m);
+    },
+    onTick(m, dt) {
+      m.training?.update(dt);
     }
   }
 ];
@@ -3238,6 +3341,7 @@ class Match {
   fog = false;
   chaos = null;
   hill = null;
+  training = null;
   teams = null;
   vents = [];
   bombRules;
@@ -4311,6 +4415,8 @@ class Match {
     this.events.push({ t: "wallDrop", x, y });
   }
   updateEnd() {
+    if (this.mode.endless)
+      return;
     if (this.phase === "playing") {
       const done = this.hill ? this.hill.reached || this.timeLeft <= 0 : this.aliveCount <= 1 || this.timeLeft <= 0;
       if (done) {
@@ -4730,7 +4836,7 @@ class Lobby {
       return;
     if (r.hostToken !== c.token)
       return this.error(c.token, "not_host", "Seul l'hôte choisit le mode et la carte.");
-    if (s.modeId && MODES.some((m) => m.id === s.modeId && m.available))
+    if (s.modeId && MODES.some((m) => m.id === s.modeId && m.available && !m.hidden))
       r.modeId = s.modeId;
     if (s.mapId && (s.mapId === RANDOM_MAP || MAPS.some((m) => m.id === s.mapId)))
       r.mapId = s.mapId;
@@ -6017,6 +6123,7 @@ function defaultProfile() {
     clock: { max: 0, offset: 0 },
     ads: { day: "", coins: 0, freeChest: 0, doubled: [], lastAdAt: 0, gamesSinceAd: 0, personalized: null },
     starterGift: false,
+    tutorial: { state: "new", at: 0 },
     seen: [],
     settled: [],
     pending: null,
@@ -6050,6 +6157,8 @@ function migrate(data) {
     clock: { ...base.clock, ...data.clock ?? {} },
     ads: { ...base.ads, ...data.ads ?? {} }
   };
+  const ts = data.tutorial?.state;
+  p.tutorial = { state: ts === "offered" || ts === "skipped" || ts === "done" ? ts : "new", at: Math.max(0, Number(data.tutorial?.at) || 0) };
   const owned = new Set([...data.owned ?? [], ...data.ownedSkins ?? []]);
   p.owned = [...owned].filter((id) => !!getItem(id));
   delete p.ownedSkins;

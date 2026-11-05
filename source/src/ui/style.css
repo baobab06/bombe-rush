@@ -1472,3 +1472,129 @@ button:focus-visible, input:focus-visible + i { outline: 3px solid var(--coin); 
 @keyframes updIn { from { opacity: 0; transform: translateY(1cqh); } to { opacity: 1; transform: none; } }
 @keyframes updPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.04); } }
 @media (prefers-reduced-motion: reduce) { .upd-badge, .upd-ver .arrow, .upd-actions .upd-go, .upd-notes li { animation: none; } }
+
+/* =====================================================================
+   AUDIT TEXTES & MISE EN PAGE (05/11/2026)
+   Aucun texte coupé, aucun chevauchement, du petit téléphone (568×320)
+   à la tablette 4:3 et à l'ordinateur. On ajuste les conteneurs, les
+   retours à la ligne et les colonnes plutôt que de réduire les polices.
+   ===================================================================== */
+/* Options de partie : nom du mode sous son emoji (plus de « Domi… ») */
+#modeRow .choice { align-items: center; text-align: center; padding: 1.2cqh .8cqh; }
+#modeRow .choice b { display: flex; flex-direction: column; align-items: center; gap: .3cqh; overflow: visible; text-overflow: clip; font-size: clamp(10px, 2.05cqw, .86em); line-height: 1.15; letter-spacing: 0; }
+#modeRow .mc-emo { font-style: normal; font-size: 1.35em; line-height: 1; }
+/* cartes de difficulté : gains et pertes tiennent dans la carte */
+.stake-card .gain, .stake-card .risk { gap: .25cqh; font-size: clamp(9.5px, 1.75cqw, .7em); }
+.stake-card .coin { width: 2.8cqh; height: 2.8cqh; min-width: 10px; min-height: 10px; }
+/* bouton LANCER : le texte reste dans le bouton, même sur tablette 4:3 */
+.launch-row .launch { font-size: min(6.2cqh, 2.7cqw); white-space: nowrap; }
+/* Accueil : prochaine récompense et réglages de partie sur 2 lignes plutôt que « … » */
+@container app (max-width: 760px) {
+  .next-rw { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; text-overflow: clip; }
+  .play-setup { white-space: normal; border-radius: 3cqh; text-align: left; }
+  .play-setup #playSub { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.2; text-overflow: clip; }
+}
+/* en-têtes : le titre passe avant la note (« Nouvelle sélection dans… ») */
+.bar:has(.bar-note) h2 { flex: 0 0 auto; }
+.bar-note { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* gains / pertes jamais coupés entre l'emoji et le nombre */
+.play-setup .ps-win, .play-setup .ps-loss, .play-setup .ps-ev { white-space: nowrap; }
+/* résultats : la médaille ne touche plus « TU TERMINES » */
+.res-title small { margin-bottom: .3em; }
+/* tablettes 4:3 : la note d'en-tête (déjà rappelée dans la page) laisse la place au titre */
+@container app (max-aspect-ratio: 3/2) { .bar-note { display: none; } }
+/* Paramètres : chaque colonne défile si l'écran est trop court */
+.settings-grid { align-content: stretch; grid-template-rows: minmax(0, 1fr); }
+.settings-grid > .panel { min-height: 0; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; }
+/* Rang : la barre de progression ne s'étire plus en hauteur (tablettes) */
+.rank-hero .xpbar.big { flex: none; width: 100%; }
+
+/* =====================================================================
+   TUTORIEL (05/11/2026) : même identité que le reste (panneaux en relief,
+   boutons-bonbons, typo d'affiche). Paysage, du 568×320 à la tablette.
+   ===================================================================== */
+#tutorial { gap: 1.8cqh; }
+.tut-top { display: flex; align-items: center; justify-content: space-between; gap: 2cqh; flex: none; }
+.tut-progress { display: flex; align-items: center; gap: 1.6cqh; min-width: 0; }
+.tut-dots { display: flex; gap: 1.2cqh; }
+.tut-dots i { width: 5.4cqh; height: 1.8cqh; min-height: 6px; border-radius: 99px; background: rgba(10,6,40,.6); border: max(1.5px,.35cqh) solid var(--ink); transition: background .25s, width .25s; }
+.tut-dots i.done { background: var(--leaf); }
+.tut-dots i.cur { width: 9cqh; background: linear-gradient(180deg, var(--yellow-a), var(--yellow-b)); }
+.tut-skip { align-self: center; padding: 0; white-space: nowrap; }
+.tut-card { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); gap: 3cqw; padding: 2.6cqh 3.4cqh; }
+.tut-card.in .tut-text, .tut-card.in .tut-visual > * { animation: rise .35s cubic-bezier(.2,1.1,.35,1) backwards; }
+.tut-card.in .tut-visual > * { animation-delay: .06s; }
+.tut-visual { min-height: 0; min-width: 0; display: grid; place-items: center; border-radius: 3.4cqh; background: radial-gradient(90% 90% at 50% 45%, rgba(98,205,255,.18), rgba(10,6,40,.45) 70%); overflow: hidden; }
+.tut-visual canvas { display: block; }
+.tut-board { width: 100%; height: 100%; max-height: 100%; }
+.tut-hero { width: min(100%, 52cqh); height: auto; aspect-ratio: 1; }
+.tut-text { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: .8cqh; }
+.tut-title { margin: 0; font-family: var(--display); font-weight: 400; font-size: min(7cqh, 3.4cqw); line-height: 1.1; text-shadow: var(--outline); overflow-wrap: anywhere; }
+.tut-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; padding-right: .6cqh; font-size: max(11.5px, .8em); line-height: 1.3; }
+.tut-body b { color: #fff3a0; }
+.tut-lead { margin: .4cqh 0 1cqh; color: #e7e5ff; font-weight: 700; }
+.tut-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1.2cqh; }
+.tut-list li { display: flex; align-items: flex-start; gap: 1.8cqh; padding: 1.1cqh 1.8cqh; border-radius: 2.6cqh; background: rgba(10,6,40,.42); }
+.tut-list li > span { flex: none; width: 1.6em; text-align: center; font-size: 1.15em; line-height: 1.2; }
+.tut-list p { margin: 0; font-weight: 700; color: #e7e5ff; }
+.tut-bonuses { list-style: none; margin: 0 0 1.2cqh; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1cqh; }
+.tut-bonus { display: flex; align-items: center; gap: 1.4cqh; padding: .8cqh 1.4cqh; border-radius: 2.4cqh; background: rgba(10,6,40,.42); min-width: 0; }
+.tut-bonus canvas { flex: none; width: 7.4cqh; height: 7.4cqh; min-width: 26px; min-height: 26px; }
+.tut-bonus span { display: flex; flex-direction: column; min-width: 0; }
+.tut-bonus b { font-weight: 800; font-size: max(11px, .86em); color: #fff; }
+.tut-bonus small { font-weight: 700; font-size: max(10px, .76em); color: var(--muted); line-height: 1.2; overflow-wrap: anywhere; }
+.tut-bonuses.small .tut-bonus canvas { width: 6cqh; height: 6cqh; }
+.tut-modes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.2cqh; }
+.tut-mode { --t: #4fb0ff; padding: 1.2cqh 1.8cqh; border-radius: 2.6cqh; background: rgba(10,6,40,.45); border: max(1.5px,.4cqh) solid color-mix(in srgb, var(--t) 55%, transparent); min-width: 0; }
+.tut-mode.m-koth { --t: #ffd23f; }
+.tut-mode.m-chaos { --t: #ff4d6d; }
+.tut-mode.m-friends { --t: #5be08a; }
+.tut-mode > b { display: block; font-family: var(--display); font-weight: 400; font-size: max(11px, .86em); color: var(--t); text-shadow: 0 .3cqh 0 var(--ink); margin-bottom: .4cqh; }
+.tut-mode p { margin: 0; font-weight: 700; font-size: max(10.5px, .78em); color: #e7e5ff; line-height: 1.28; }
+.tut-mode p i { font-style: normal; }
+.tut-checks { margin: 0 0 1cqh; padding: 0; list-style: none; display: flex; flex-direction: column; gap: .8cqh; counter-reset: c; }
+.tut-checks li { display: flex; align-items: center; gap: 1.4cqh; padding: .8cqh 1.6cqh; border-radius: 2.4cqh; background: rgba(10,6,40,.42); font-weight: 800; }
+.tut-checks li span { flex: none; font-size: 1.1em; }
+.tut-note { margin: .6cqh 0 0; color: var(--muted); font-weight: 700; font-size: max(10.5px, .74em); }
+.tut-nav { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 2cqh; }
+.tut-nav .btn { min-width: 0; white-space: nowrap; font-size: min(5cqh, 2.5cqw); padding: 1.6cqh 4cqh 2.1cqh; }
+.tut-nav .tut-next { margin-left: auto; min-width: 30cqh; }
+.tut-nav .btn:disabled { opacity: .45; filter: saturate(.4); }
+@container app (max-height: 345px) {
+  .tut-card { padding: 1.8cqh 2.6cqh; }
+  .tut-list li { padding: .8cqh 1.4cqh; }
+  .tut-nav .btn { padding: 1.2cqh 3cqh 1.6cqh; }
+}
+@container app (max-aspect-ratio: 3/2) {
+  .tut-modes, .tut-bonuses { grid-template-columns: minmax(0, 1fr); }
+}
+/* fenêtre d'accueil du tutoriel */
+.tut-offer { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 1cqh; }
+.tut-offer h2 { margin: 0; }
+.tut-goals { list-style: none; margin: .6cqh 0; padding: 0; display: flex; gap: 1.6cqh; flex-wrap: wrap; justify-content: center; }
+.tut-goals li { display: flex; align-items: center; gap: 1cqh; padding: .8cqh 2cqh; border-radius: 99px; background: rgba(10,6,40,.45); font-weight: 800; font-size: max(11px, .8em); }
+.tut-goals li span { font-size: 1.2em; }
+.tut-offer .tut-note { max-width: 70cqh; }
+.tut-replay { margin: 1.6cqh 0 .4cqh; align-self: flex-start; }
+/* objectifs de l'entraînement (en partie) */
+.tut-coach { position: absolute; z-index: 5; left: 50%; top: calc(var(--st) + max(4px, 1cqh)); transform: translateX(-50%); width: max-content; max-width: min(64cqw, 92cqh); pointer-events: none;
+  display: flex; flex-direction: column; align-items: center; gap: .5cqh; padding: .8cqh 2.6cqh 1cqh; border-radius: 3cqh; background: linear-gradient(180deg, rgba(50,46,140,.94), rgba(28,26,90,.94)); border: var(--edge) solid var(--ink); box-shadow: 0 .8cqh 0 var(--ink); }
+.tut-coach.pop { animation: titlePop .5s cubic-bezier(.2,1.6,.4,1); }
+.tc-head { display: flex; align-items: center; gap: 1.6cqh; font-family: var(--display); font-weight: 400; font-size: max(10px, .62em); letter-spacing: .06em; color: var(--coin); }
+.tc-head em { font-style: normal; color: #fff; }
+.tc-goal { margin: 0; font-weight: 800; font-size: max(11.5px, .82em); color: #fff; text-align: center; text-shadow: 0 .3cqh 0 var(--ink); }
+.tc-dots { display: flex; gap: .8cqh; }
+.tc-dots i { width: 4.6cqh; height: 4.6cqh; min-width: 18px; min-height: 18px; display: grid; place-items: center; border-radius: 50%; font-style: normal; font-size: max(9px, .58em); background: rgba(10,6,40,.6); border: max(1.5px,.35cqh) solid var(--ink); opacity: .6; }
+.tc-dots i.cur { opacity: 1; box-shadow: 0 0 0 .4cqh rgba(255,210,63,.6); }
+.tc-dots i.ok { opacity: 1; background: var(--leaf); color: var(--ink); font-weight: 900; }
+#hud.training #hudTimer, #hud.training #hudAlive { display: none; }
+.tut-card.wide { grid-template-columns: minmax(0, 1fr); }
+.tut-card.wide .tut-visual { display: none; }
+/* boutique (packs de bombers / pièces) : le nom passe sur 2 lignes au lieu d'être coupé */
+.item.pack .name, .item.pack .sub { white-space: normal; text-overflow: clip; overflow: visible; text-align: center; line-height: 1.1; overflow-wrap: anywhere; }
+/* objectifs de l'entraînement : dans la colonne de droite (jamais sur l'arène) */
+.hud-r .tut-coach { position: static; transform: none; left: auto; top: auto; width: auto; max-width: calc(var(--colR) - var(--gut) * 1.4); align-self: stretch; padding: .8cqh 1.6cqh 1cqh; border-radius: 2.6cqh; }
+.hud-r .tc-goal { font-size: max(10.5px, .7em); line-height: 1.2; }
+.hud-r .tc-dots { flex-wrap: wrap; justify-content: center; gap: .6cqh; }
+.hud-r .tc-dots i { width: 4cqh; height: 4cqh; min-width: 16px; min-height: 16px; }
+.hud-r .tc-head { flex-wrap: wrap; justify-content: center; gap: .6cqh 1cqh; text-align: center; }

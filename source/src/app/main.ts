@@ -29,6 +29,7 @@ import { hydrateIcons, icon } from "../ui/icons";
 import { Stage } from "../ui/stage";
 import { ItemBrowser } from "./browser";
 import { Modal, Wallet, fmt, type AppCtx, type ScreenId } from "./ctx";
+import { offerTutorial, shouldOfferTutorial, TrainingCoach, TutorialScreen } from "./tutorial";
 import { OnlineController } from "./online";
 import { openDaily, showGranted } from "./rewards";
 import { maybeInterstitial, watchRewarded } from "./ads-ui";
@@ -55,8 +56,8 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 
 /** écrans interdits tant qu'une mise à jour obligatoire n'est pas faite */
 const BLOCKED_BY_UPDATE: ScreenId[] = ["setup", "game", "pause", "private", "lobby", "invite"];
-const SCREENS: ScreenId[] = ["home", "setup", "settings", "pause", "results", "private", "lobby", "boot", "welcome", "invite", "shop", "collection", "missions", "profile", "rank", "chests"];
-const MENU_SCREENS: ScreenId[] = ["setup", "settings", "private", "lobby", "welcome", "invite", "shop", "collection", "missions", "profile", "rank", "chests"];
+const SCREENS: ScreenId[] = ["home", "setup", "settings", "pause", "results", "private", "lobby", "boot", "welcome", "invite", "shop", "collection", "missions", "profile", "rank", "chests", "tutorial"];
+const MENU_SCREENS: ScreenId[] = ["setup", "settings", "private", "lobby", "welcome", "invite", "shop", "collection", "missions", "profile", "rank", "chests", "tutorial"];
 
 class App implements AppCtx {
   private save = new SaveSystem();
@@ -82,6 +83,8 @@ class App implements AppCtx {
   private missionsScr: MissionsScreen;
   private profileScr: ProfileScreen;
   private rankScr: RankScreen;
+  private tutorial!: TutorialScreen;
+  private coach!: TrainingCoach;
   private chestsScr: ChestsScreen;
 
   constructor() {
@@ -120,6 +123,15 @@ class App implements AppCtx {
       rank: () => this.go("rank"),
     });
     this.rankScr = new RankScreen(this);
+    this.tutorial = new TutorialScreen(this, {
+      practice: () => this.startPractice(),
+      exit: () => {
+        this.history = [];
+        this.go("home", false);
+      },
+    });
+    this.coach = new TrainingCoach(this, () => this.practiceDone());
+    this.game.onTraining = (m) => this.coach.update(m);
     this.chestsScr = new ChestsScreen(this, () => this.renderBadges());
     this.homeStage = new Stage($<HTMLCanvasElement>("homeStage"), { y: 0.58, scale: 1.05 });
     this.resStage = new Stage($<HTMLCanvasElement>("resStage"), { y: 0.56 });
@@ -284,6 +296,9 @@ class App implements AppCtx {
     if (id === "profile") this.profileScr.render();
     if (id === "rank") this.rankScr.render();
     if (id === "chests") this.chestsScr.render();
+    if (id === "tutorial" && prev !== "tutorial") this.tutorial.open(0);
+    if (prev === "tutorial" && id !== "tutorial") this.tutorial.close();
+    $("tutCoach").hidden = !(inGame && this.game.training);
     this.shopTarget = null;
     if (id === "settings") this.renderSettings();
     if (id === "private") this.renderPrivate();
@@ -294,6 +309,8 @@ class App implements AppCtx {
     $("netOverlay").hidden = !(this.game.online && (id === "game" || id === "pause") && this.online.status !== "online");
     // menu pause en ligne : la partie continue, pas de « Recommencer »
     $("btnRestart").hidden = this.game.online;
+    // entraînement : ni minuteur ni compteur de joueurs
+    $("hud").classList.toggle("training", this.game.training);
     $("btnAgain").querySelector("span")!.textContent = this.game.online ? "SALON" : "REJOUER";
     audio.playMusic(inGame ? "game" : "menu");
     if (!inGame && prev !== id && prev !== "boot") audio.play("whoosh", 0.35);
@@ -430,6 +447,7 @@ class App implements AppCtx {
       // recommencer une partie en cours = l'abandonner (pas d'esquive d'une défaite)
       this.abandonLive();
       this.game.restart();
+      if (this.game.training) this.coach.reset();
       this.game.setPaused(false);
       this.startStake();
       this.go("game");
@@ -501,6 +519,10 @@ class App implements AppCtx {
       this.click();
       this.askRename();
     });
+    $("btnTutorial").addEventListener("click", () => {
+      this.click();
+      this.go("tutorial");
+    });
     $("btnReset").addEventListener("click", () => {
       $("resetConfirm").hidden = false;
     });
@@ -571,7 +593,7 @@ class App implements AppCtx {
     this.homeStage.set({ characterId: c.id, skinId: skin.id, accessoryId: p.equipped.accessory, trailId: p.equipped.trail }, skin.free ? null : skin.rarity);
     this.homeStage.idleEmotes = p.equipped.emotes;
     // mode de jeu (choix rapide)
-    const modeId = MODES.some((m) => m.id === p.lastSetup.modeId) ? p.lastSetup.modeId : "classic";
+    const modeId = MODES.some((m) => m.id === p.lastSetup.modeId && !m.hidden) ? p.lastSetup.modeId : "classic";
     $("homeModes").querySelectorAll<HTMLButtonElement>("button").forEach((b) => {
       b.classList.toggle("sel", b.dataset.mode === modeId);
       b.setAttribute("aria-checked", String(b.dataset.mode === modeId));
@@ -621,6 +643,18 @@ class App implements AppCtx {
   /** Arrivée sur l'accueil : cadeau de bienvenue, puis récompense du jour. */
   private afterHome() {
     const p = this._profile;
+    // tutoriel : proposé une fois (premier lancement, ou joueur qui ne l'a jamais vu) ; jamais imposé
+    if (shouldOfferTutorial(p) && p.named && !this.inviteCode && !this.updateUI?.blocking) {
+      window.setTimeout(() => {
+        if (this.screen !== "home" || this.modal.isOpen || !shouldOfferTutorial(p)) return;
+        offerTutorial(
+          this,
+          () => this.go("tutorial"),
+          () => this.afterHome(),
+        );
+      }, 450);
+      return;
+    }
     // 1.8.4 : retour des personnages d'origine. Ceux qui avaient été remboursés gardent leurs pièces.
     const q = p as typeof p & { legacyRefund?: number; accRefund?: number; classicBackSeen?: boolean };
     if (((q.legacyRefund ?? 0) > 0 || (q.accRefund ?? 0) > 0) && !q.classicBackSeen) {
@@ -684,11 +718,11 @@ class App implements AppCtx {
     const st = this.setupState;
     const modeRow = $("modeRow");
     modeRow.innerHTML = "";
-    for (const m of MODES) {
+    for (const m of MODES.filter((x) => !x.hidden)) {
       const b = document.createElement("button");
       b.className = "choice" + (m.id === st.modeId ? " sel" : "") + (m.available ? "" : " locked");
       b.dataset.mode = m.id;
-      b.innerHTML = `<b>${m.emoji ?? "🎮"} ${m.name}</b><span>${m.tagline}</span>${m.available ? "" : '<em class="tag">Bientôt</em>'}`;
+      b.innerHTML = `<b><i class="mc-emo">${m.emoji ?? "🎮"}</i> ${m.name}</b><span>${m.tagline}</span>${m.available ? "" : '<em class="tag">Bientôt</em>'}`;
       b.disabled = !m.available;
       b.setAttribute("aria-pressed", String(m.id === st.modeId));
       b.addEventListener("click", () => {
@@ -845,6 +879,59 @@ class App implements AppCtx {
     this.startStake();
     this.history = [];
     this.go("game");
+  }
+
+  /** Terrain d'entraînement du tutoriel : aucune mise, aucune récompense. */
+  private startPractice() {
+    const p = this._profile;
+    this.game.startTraining({
+      name: "Toi",
+      characterId: p.characterId,
+      skinId: this.equippedSkin(p.characterId),
+      accessoryId: p.equipped.accessory ?? undefined,
+      trailId: p.equipped.trail,
+      boomId: p.equipped.boom,
+      isBot: false,
+    });
+    this.coach.reset();
+    this.history = [];
+    this.go("game");
+  }
+
+  /** Tous les objectifs de l'entraînement sont réussis. */
+  private practiceDone() {
+    if (!this.game.training || this.screen !== "game") return;
+    audio.play("unlock");
+    const c = { x: window.innerWidth / 2, y: window.innerHeight / 3 };
+    this.fx.confetti(c.x, c.y, 80);
+    this.game.setPaused(true);
+    this.modal.open(
+      (sheet, close) => {
+        sheet.insertAdjacentHTML("beforeend", `<div class="tut-offer"><p class="kicker">Entraînement réussi</p><h2>Bravo, tu es prêt ! 🏆</h2><p class="sub">Tu sais te déplacer, poser des bombes, te mettre à l'abri, casser des caisses et ramasser des bonus. Place aux vraies parties !</p></div>`);
+        const actions = document.createElement("div");
+        actions.className = "sheet-actions";
+        const stay = document.createElement("button");
+        stay.className = "btn btn-ghost";
+        stay.innerHTML = "<span>Continuer l'entraînement</span>";
+        stay.addEventListener("click", () => {
+          this.click();
+          close();
+          this.game.setPaused(false);
+        });
+        const play = document.createElement("button");
+        play.className = "btn btn-yellow";
+        play.id = "btnTutGoPlay";
+        play.innerHTML = "<span>▶ ALLER JOUER</span>";
+        play.addEventListener("click", () => {
+          this.click();
+          close();
+          this.toMenu();
+        });
+        actions.append(stay, play);
+        sheet.appendChild(actions);
+      },
+      { closable: false },
+    );
   }
 
   private equippedSkin(characterId: string): string {
@@ -1483,8 +1570,8 @@ class App implements AppCtx {
     const live = this.game.live;
     const cs = this.currentStake();
     const loss = maxLoss(cs.stake, cs.players ?? 4);
-    $("btnRestart").querySelector("span")!.textContent = live ? `Recommencer (−${fmt(loss)} 🪙)` : "Recommencer";
-    $("btnQuit").querySelector("span")!.textContent = live ? `Abandonner (−${fmt(loss)} 🪙)` : "Quitter la partie";
+    $("btnRestart").querySelector("span")!.textContent = this.game.training ? "Recommencer l'entraînement" : live ? `Recommencer (−${fmt(loss)} 🪙)` : "Recommencer";
+    $("btnQuit").querySelector("span")!.textContent = this.game.training ? "Quitter l'entraînement" : live ? `Abandonner (−${fmt(loss)} 🪙)` : "Quitter la partie";
   }
   private resume() {
     this.game.setPaused(false);
@@ -1912,7 +1999,7 @@ class App implements AppCtx {
       const c = getCharacter(m.characterId);
       const max = m.levelAfter >= MASTERY_MAX;
       chips.push(
-        `<div class="rp mast${m.levelAfter > m.levelBefore ? " up" : ""}"><small>Maîtrise ${c.name}</small><b><span class="lvl">${m.levelAfter}</span>${m.levelAfter > m.levelBefore ? " ⬆️" : ""}</b><span class="xpbar"><i style="width:${max ? 100 : (m.xpAfter / masteryXp(m.levelAfter)) * 100}%"></i></span><em>+${m.xp}</em></div>`,
+        `<div class="rp mast${m.levelAfter > m.levelBefore ? " up" : ""}"><small title="Maîtrise ${esc(c.name)}">Maîtrise</small><b><span class="lvl">${m.levelAfter}</span>${m.levelAfter > m.levelBefore ? " ⬆️" : ""}</b><span class="xpbar"><i style="width:${max ? 100 : (m.xpAfter / masteryXp(m.levelAfter)) * 100}%"></i></span><em>+${m.xp}</em></div>`,
       );
     }
     const rk = s.tx.rank;

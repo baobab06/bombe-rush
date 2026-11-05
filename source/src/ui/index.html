@@ -21,6 +21,8 @@
       <div class="alive" id="hudAlive"></div>
       <div class="hill-board" id="hudHill" hidden></div>
       <div class="powers" id="hudPowers"></div>
+      <!-- entraînement du tutoriel : objectifs (à la place du chrono, hors de l'arène) -->
+      <div class="tut-coach" id="tutCoach" hidden></div>
     </div>
     <!-- mode spectateur (Chaos, salle privée) : après élimination -->
     <div class="spec" id="hudSpec" hidden>
@@ -282,6 +284,7 @@
         <div id="adsPrivacy" hidden>
           <button class="btn btn-ghost small" id="btnAdsPrivacy"><span>Choix de confidentialité (publicités)</span></button>
         </div>
+        <button class="btn btn-blue small tut-replay" id="btnTutorial"><span>📘 Revoir le tutoriel</span></button>
         <dl class="keys">
           <dt>Tactile</dt><dd>Joystick à gauche (là où tu poses le pouce), bombe et bouclier à droite.</dd>
           <dt>Clavier</dt><dd>Flèches / ZQSD · Espace : bombe · E : bouclier · 1-4 : emotes · Échap : pause</dd>
@@ -310,6 +313,27 @@
         </div>
       </div>
     </div>
+  </section>
+
+  <!-- Tutoriel des nouveaux joueurs -->
+  <section class="screen" id="tutorial" hidden>
+    <header class="tut-top">
+      <div class="tut-progress"><span class="tut-dots" id="tutDots"></span></div>
+      <button class="btn-link tut-skip" id="btnTutSkip">Passer le tutoriel</button>
+    </header>
+    <div class="tut-card panel" id="tutCard">
+      <div class="tut-visual" id="tutVisual"></div>
+      <div class="tut-text">
+        <p class="kicker" id="tutKicker">Étape 1</p>
+        <h2 class="tut-title" id="tutTitle">Bienvenue</h2>
+        <div class="tut-body" id="tutBody"></div>
+      </div>
+    </div>
+    <nav class="tut-nav">
+      <button class="btn btn-ghost tut-prev" id="btnTutPrev"><span>◀ PRÉCÉDENT</span></button>
+      <button class="btn btn-green tut-practice" id="btnTutPractice" hidden><span>🎯 S'ENTRAÎNER</span></button>
+      <button class="btn btn-yellow tut-next" id="btnTutNext"><span>SUIVANT</span></button>
+    </nav>
   </section>
 
   <!-- Pause -->

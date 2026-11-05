@@ -2,6 +2,7 @@ import type { Match } from "./match";
 import type { BombRules } from "./bombs";
 import { ChaosDirector } from "./chaos";
 import { HillState } from "./hill";
+import { TrainingState } from "./training";
 import type { SpecialSpawnConfig } from "./specials";
 
 /**
@@ -16,6 +17,10 @@ export interface ModeDef {
   available: boolean;
   /** emoji affiché sur les boutons du mode */
   emoji?: string;
+  /** mode interne (entraînement du tutoriel) : jamais proposé dans les menus ni en ligne */
+  hidden?: boolean;
+  /** pas de fin de partie (entraînement) */
+  endless?: boolean;
   /** false : pas de mort subite (murs qui tombent) dans ce mode */
   suddenDeath?: boolean;
   /** règles de bombes propres au mode (sinon celles du jeu) */
@@ -83,6 +88,24 @@ export const MODES: ModeDef[] = [
     },
     onTick(m) {
       m.hill?.update();
+    },
+  },
+  {
+    id: "training",
+    name: "Entraînement",
+    tagline: "Apprends à bouger, poser des bombes et ramasser des bonus, sans risque.",
+    available: true,
+    hidden: true,
+    endless: true,
+    emoji: "🎯",
+    suddenDeath: false,
+    // capacités : seulement celle cachée dans une caisse (leçon identique pour tous)
+    specials: null,
+    onStart(m) {
+      m.training = new TrainingState(m);
+    },
+    onTick(m, dt) {
+      m.training?.update(dt);
     },
   },
 ];
