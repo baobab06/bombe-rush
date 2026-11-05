@@ -6,27 +6,55 @@ import { Rng } from "../core/rng";
 import { HILL_RULES } from "../core/hill";
 import { blastCells, computeDanger, type DangerMap } from "./danger";
 
-interface Profile {
-  think: number; // intervalle de réflexion (s)
-  margin: number; // marge de sécurité temporelle (s)
+/**
+ * Réglages d'un niveau de difficulté. Tout l'équilibrage des bots passe par
+ * ces valeurs (AI_PROFILES) : aucun bonus caché, les bots jouent avec les
+ * mêmes règles, la même vitesse et les mêmes bombes que les joueurs.
+ */
+export interface AiProfile {
+  /** temps de réaction : intervalle entre deux réflexions (s) */
+  think: number;
+  /** retard (s) avant de remarquer qu'une bombe menace sa case (0 = immédiat) */
+  reactDelay: number;
+  /** probabilité de réagir entre deux réflexions quand la case suivante prend feu (esquive « réflexe ») */
+  reflex: number;
+  /** marge de sécurité (s) dans les calculs de fuite : petite = fuites plus risquées */
+  margin: number;
+  /** distance (cases) à laquelle un bonus attire le bot */
   bonusRadius: number;
-  aggression: number; // 0..1
-  mistake: number; // probabilité d'une décision bâclée
-  reflex: boolean; // revérifie le danger à chaque tick
-  trapRadius: number; // distance à laquelle il tente de piéger
-  shieldSense: number; // seuil de danger pour activer le bouclier
-  escapeRoom: number; // nb de cases sûres exigées avant de poser (évite les culs-de-sac)
-  /** Domination : probabilité, à chaque réflexion, d'oublier un moment l'objectif (bots faciles) */
+  /** agressivité 0..1 : envie de poser des bombes et de chasser */
+  aggression: number;
+  /** temps (s) qu'un adversaire doit rester dans l'axe avant que le bot ose l'attaquer */
+  hesitate: number;
+  /** probabilité qu'une bombe « d'attaque » soit posée trop tôt / à côté (adversaire proche mais pas dans l'axe) */
+  misaim: number;
+  /** probabilité d'une décision bâclée (bombe posée sans vérifier la fuite) */
+  mistake: number;
+  /** probabilité, à chaque réflexion, de s'arrêter un instant (hésitation) */
+  pause: number;
+  /** probabilité, à chaque réflexion, de flâner au lieu d'aller au but (déplacements moins efficaces) */
+  wander: number;
+  /** distance à laquelle il tente de piéger un adversaire */
+  trapRadius: number;
+  /** seuil de danger pour activer le bouclier */
+  shieldSense: number;
+  /** nb de cases sûres exigées avant de poser (évite les culs-de-sac) */
+  escapeRoom: number;
+  /** Domination : probabilité, à chaque réflexion, d'oublier un moment l'objectif */
   distract: number;
   /** Domination : avance (s) prise pour rejoindre la prochaine zone annoncée */
   lead: number;
 }
 
-const PROFILES: Record<Difficulty, Profile> = {
-  easy: { think: 0.5, margin: 0.12, bonusRadius: 4, aggression: 0.25, mistake: 0.08, reflex: false, trapRadius: 0, shieldSense: 0.12, escapeRoom: 1, distract: 0.15, lead: 0 },
-  normal: { think: 0.22, margin: 0.22, bonusRadius: 7, aggression: 0.6, mistake: 0.012, reflex: true, trapRadius: 1, shieldSense: 0.25, escapeRoom: 2, distract: 0.008, lead: 0.6 },
-  hard: { think: 0.1, margin: 0.25, bonusRadius: 11, aggression: 0.9, mistake: 0, reflex: true, trapRadius: 2, shieldSense: 0.35, escapeRoom: 3, distract: 0, lead: 1 },
-  expert: { think: 0.06, margin: 0.28, bonusRadius: 14, aggression: 1, mistake: 0, reflex: true, trapRadius: 3, shieldSense: 0.45, escapeRoom: 3, distract: 0, lead: 1.3 },
+/**
+ * Niveaux : Facile (débutants), Normal (« moyen » : défi raisonnable),
+ * Difficile et Expert (inchangés lors du rééquilibrage du 05/11/2026).
+ */
+export const AI_PROFILES: Record<Difficulty, AiProfile> = {
+  easy: { think: 0.5, reactDelay: 0.15, reflex: 0, margin: 0.12, bonusRadius: 4, aggression: 0.3, hesitate: 0.3, misaim: 0.2, mistake: 0.05, pause: 0.03, wander: 0.25, trapRadius: 0, shieldSense: 0.1, escapeRoom: 1, distract: 0.15, lead: 0 },
+  normal: { think: 0.28, reactDelay: 0.12, reflex: 0.6, margin: 0.18, bonusRadius: 6, aggression: 0.45, hesitate: 0.3, misaim: 0.1, mistake: 0.015, pause: 0.02, wander: 0.05, trapRadius: 1, shieldSense: 0.22, escapeRoom: 2, distract: 0.035, lead: 0.3 },
+  hard: { think: 0.1, reactDelay: 0, reflex: 1, margin: 0.25, bonusRadius: 11, aggression: 0.9, hesitate: 0, misaim: 0, mistake: 0, pause: 0, wander: 0, trapRadius: 2, shieldSense: 0.35, escapeRoom: 3, distract: 0, lead: 1 },
+  expert: { think: 0.06, reactDelay: 0, reflex: 1, margin: 0.28, bonusRadius: 14, aggression: 1, hesitate: 0, misaim: 0, mistake: 0, pause: 0, wander: 0, trapRadius: 3, shieldSense: 0.45, escapeRoom: 3, distract: 0, lead: 1.3 },
 };
 
 /** Domination : cartes de distance à la zone, partagées par les bots d'une partie (une fois par tick). */
@@ -44,7 +72,7 @@ interface Node {
  */
 export class BotBrain {
   readonly playerId: number;
-  private readonly prof: Profile;
+  private readonly prof: AiProfile;
   private readonly rng: Rng;
   private thinkTimer: number;
   private path: number[] = [];
@@ -53,9 +81,10 @@ export class BotBrain {
   /** dernière décision (débogage) */
   lastDecision = "";
 
-  constructor(playerId: number, difficulty: Difficulty, seed: number) {
+  /** `tune` : réglages modifiés (tests d'équilibrage) */
+  constructor(playerId: number, difficulty: Difficulty, seed: number, tune?: Partial<AiProfile>) {
     this.playerId = playerId;
-    this.prof = PROFILES[difficulty];
+    this.prof = tune ? { ...AI_PROFILES[difficulty], ...tune } : AI_PROFILES[difficulty];
     this.rng = new Rng(seed * 7919 + playerId * 104729);
     this.thinkTimer = this.rng.next() * this.prof.think;
   }
@@ -72,10 +101,11 @@ export class BotBrain {
 
     this.thinkTimer -= dt;
     let mustThink = this.thinkTimer <= 0;
-    if (!mustThink && this.prof.reflex && this.path.length) {
-      // réflexe : la prochaine case est-elle devenue mortelle ?
+    if (!mustThink && this.prof.reflex > 0 && this.path.length) {
+      // réflexe : la prochaine case est-elle devenue mortelle ? (pas toujours vu à temps en Normal)
       const next = this.path[0];
-      if (m.grid.fire[next] > 0 || m.grid.blocksMove(next % m.grid.w, Math.floor(next / m.grid.w))) mustThink = true;
+      if (m.grid.fire[next] > 0 || m.grid.blocksMove(next % m.grid.w, Math.floor(next / m.grid.w)))
+        if (this.prof.reflex >= 1 || this.rng.chance(this.prof.reflex)) mustThink = true;
     }
     if (mustThink) {
       this.thinkTimer = this.prof.think * (0.8 + this.rng.next() * 0.4);
@@ -187,6 +217,22 @@ export class BotBrain {
     const danger = computeDanger(m, undefined, p.id);
     const sloppy = this.rng.chance(this.prof.mistake);
 
+    // 0. Temps de réaction : une menace toute nouvelle n'est remarquée qu'après reactDelay
+    if (danger.start[myIdx] === Infinity) this.dangerSince = -1;
+    else if (this.prof.reactDelay > 0) {
+      if (this.dangerSince < 0) this.dangerSince = m.time;
+      if (m.time - this.dangerSince < this.prof.reactDelay) {
+        this.lastDecision = "unaware";
+        return;
+      }
+    }
+    // 0 bis. Hésitation : on s'arrête un instant (seulement quand rien ne menace)
+    if (this.prof.pause > 0 && danger.start[myIdx] === Infinity && this.rng.chance(this.prof.pause)) {
+      this.path = [];
+      this.lastDecision = "pause";
+      return;
+    }
+
     // 1. Danger sur ma case : fuir
     // (Domination : sur la zone, on tient jusqu'au dernier moment où la fuite reste sûre)
     if (danger.start[myIdx] !== Infinity && m.hill && this.holdUnderFire(m, p, danger, myIdx)) return;
@@ -232,7 +278,10 @@ export class BotBrain {
     if (p.activeBombs < p.maxBombs && g.bombAt[myIdx] < 0) {
       const value = this.bombValue(m, p);
       const roll = this.rng.next();
-      if (value.enemy && roll < 0.4 + this.prof.aggression * 0.6) {
+      const enemy = this.readyToAttack(m, value.enemy);
+      // visée approximative : bombe posée alors que l'adversaire est seulement à côté
+      const misaim = !value.enemy && this.prof.misaim > 0 && this.enemyNear(m, p, 2) && this.rng.chance(this.prof.misaim);
+      if ((enemy || misaim) && roll < 0.4 + this.prof.aggression * 0.6) {
         if (this.placeIfEscapable(m, p, sloppy)) return;
       } else if (value.blocks > 0 && roll < 0.55 + this.prof.aggression * 0.4) {
         if (this.placeIfEscapable(m, p, sloppy)) return;
@@ -244,7 +293,7 @@ export class BotBrain {
     if (this.path.length) return;
 
     // 5. Les bots faciles flânent parfois
-    if (this.prof.aggression < 0.5 && this.rng.chance(0.25)) {
+    if (this.prof.wander > 0 && this.rng.chance(this.prof.wander)) {
       const wander = this.findTarget(m, p, danger, 3, () => this.rng.chance(0.3));
       if (wander) this.path = wander;
       return;
@@ -372,7 +421,7 @@ export class BotBrain {
       return matesOnZone.length > 0 || myPts >= foePts || !this.rng.chance(0.25);
     })();
     const attack = (chance: number): boolean =>
-      canBomb && bombVal.enemy && !hurtsHold && this.rng.chance(chance) && this.placeIfEscapable(m, p, sloppy);
+      canBomb && this.readyToAttack(m, bombVal.enemy) && !hurtsHold && this.rng.chance(chance) && this.placeIfEscapable(m, p, sloppy);
 
     // ---- 3. Sur la zone : on la tient
     if (onZone && role !== "guard") {
@@ -491,6 +540,19 @@ export class BotBrain {
     for (const [dx, dy] of DIRS) if (!g.blocksMove(x + dx, y + dy) && g.bombAt[g.idx(x + dx, y + dy)] < 0) n++;
     return n;
   }
+
+  /** Hésitation avant d'attaquer : l'adversaire doit rester dans l'axe `hesitate` secondes. */
+  private readyToAttack(m: Match, enemyInBlast: boolean): boolean {
+    if (!enemyInBlast) {
+      this.enemySince = -1;
+      return false;
+    }
+    if (this.prof.hesitate <= 0) return true;
+    if (this.enemySince < 0) this.enemySince = m.time;
+    return m.time - this.enemySince >= this.prof.hesitate;
+  }
+  private enemySince = -1;
+  private dangerSince = -1;
 
   private mark(d: string): boolean {
     this.lastDecision = d;

@@ -844,7 +844,7 @@ console.log("IA Domination : objectif, équipe, déplacements de zone");
   {
     let split = 0, guardNear = 0, samples = 0;
     for (let s = 1; s <= 5; s++) {
-      const { m, brains } = fresh(200 + s);
+      const { m, brains } = fresh(200 + s, "hard");
       m.hill!.moveIn = 1e9;
       // bleus éliminés pour le test : les rouges sont tranquilles
       for (const id of [1, 3]) { m.players[id].alive = false; m.hill!.respawnIn[id] = 1e9; }
@@ -943,6 +943,48 @@ console.log("IA Domination : objectif, équipe, déplacements de zone");
     check(computeDanger(m, undefined, 0).start[i] === Infinity && computeDanger(m, undefined, 1).start[i] !== Infinity, "bombe d'un coéquipier : pas un danger pour moi, mais oui pour l'adversaire");
     check(computeDanger(m, undefined, 2).start[m.grid.idx(4, 6)] !== Infinity, "sa propre bombe reste un danger");
   }
+}
+
+console.log("Niveaux de difficulté (joueur simulé contre 3 bots)");
+{
+  const { AI_PROFILES } = await import("../src/ai/bot");
+  const { mapsFor } = await import("../src/maps/index");
+  // joueur « moyen » simulé : réflexes humains (~0,25 s), esquive imparfaite
+  const human = { think: 0.25, reactDelay: 0.15, reflex: 0.7, margin: 0.2, bonusRadius: 6, aggression: 0.55, hesitate: 0.15, misaim: 0.05, mistake: 0.02, pause: 0, wander: 0, trapRadius: 1, shieldSense: 0.25, escapeRoom: 2, distract: 0.03, lead: 0.3 };
+  const maps = mapsFor("classic");
+  const winRate = (d: Difficulty) => {
+    let win = 0;
+    const N = 40;
+    for (let s = 1; s <= N; s++) {
+      const m = new Match({ seed: s * 911 + 5, map: maps[s % maps.length], modeId: "classic", players: Array.from({ length: 4 }, (_, i) => ({ name: "P" + i, characterId: "pip", isBot: true, difficulty: d })) });
+      const hid = s % 4;
+      const brains = m.players.map((p) => (p.id === hid ? new BotBrain(p.id, "normal", s, human) : new BotBrain(p.id, d, s)));
+      let g = 0;
+      while (m.phase !== "over" && g++ < 60 * 400) m.step(brains.map((b) => b.update(m, DT)));
+      if (m.winnerId === hid) win++;
+    }
+    return win / N;
+  };
+  const [e, n, h] = (["easy", "normal", "hard"] as Difficulty[]).map(winRate);
+  check(e > 0.6, `Facile : le joueur moyen gagne souvent (${Math.round(e * 100)}% des parties à 4)`);
+  check(n > 0.18 && n < 0.45, `Normal : défi raisonnable (${Math.round(n * 100)}% de victoires, 25% = à égalité)`);
+  check(h < 0.18, `Difficile : reste difficile (${Math.round(h * 100)}%)`);
+  check(e > n && n > h, "chaque niveau est nettement plus fort que le précédent");
+  check(AI_PROFILES.hard.think === 0.1 && AI_PROFILES.hard.reactDelay === 0 && AI_PROFILES.hard.hesitate === 0 && AI_PROFILES.hard.reflex === 1, "Difficile : réglages inchangés (aucun handicap ajouté)");
+  // les bots faciles jouent quand même : ils bougent et posent des bombes
+  let bombs = 0, moved = 0;
+  for (let s = 1; s <= 6; s++) {
+    const m = new Match({ seed: s * 13, map: maps[s % maps.length], modeId: "classic", players: Array.from({ length: 4 }, (_, i) => ({ name: "P" + i, characterId: "pip", isBot: true, difficulty: "easy" as Difficulty })) });
+    const brains = m.players.map((p) => new BotBrain(p.id, "easy", s));
+    const start = m.players.map((p) => [p.x, p.y]);
+    let g = 0;
+    while (m.phase !== "over" && g++ < 60 * 60) {
+      m.step(brains.map((b) => b.update(m, DT)));
+      bombs += m.events.filter((ev) => ev.t === "bombPlaced").length;
+    }
+    m.players.forEach((p, i) => { if (Math.abs(p.x - start[i][0]) + Math.abs(p.y - start[i][1]) > 1 || !p.alive) moved++; });
+  }
+  check(bombs >= 6 * 4 * 3 && moved >= 20, `Facile : les bots bougent et posent des bombes (${bombs} bombes en 6 parties, ${moved}/24 ont quitté leur départ)`);
 }
 
 console.log("Grosse bombe");

@@ -1935,11 +1935,11 @@ function computeDanger(m, extra, viewer) {
 }
 
 // src/ai/bot.ts
-var PROFILES = {
-  easy: { think: 0.5, margin: 0.12, bonusRadius: 4, aggression: 0.25, mistake: 0.08, reflex: false, trapRadius: 0, shieldSense: 0.12, escapeRoom: 1, distract: 0.15, lead: 0 },
-  normal: { think: 0.22, margin: 0.22, bonusRadius: 7, aggression: 0.6, mistake: 0.012, reflex: true, trapRadius: 1, shieldSense: 0.25, escapeRoom: 2, distract: 0.008, lead: 0.6 },
-  hard: { think: 0.1, margin: 0.25, bonusRadius: 11, aggression: 0.9, mistake: 0, reflex: true, trapRadius: 2, shieldSense: 0.35, escapeRoom: 3, distract: 0, lead: 1 },
-  expert: { think: 0.06, margin: 0.28, bonusRadius: 14, aggression: 1, mistake: 0, reflex: true, trapRadius: 3, shieldSense: 0.45, escapeRoom: 3, distract: 0, lead: 1.3 }
+var AI_PROFILES = {
+  easy: { think: 0.5, reactDelay: 0.15, reflex: 0, margin: 0.12, bonusRadius: 4, aggression: 0.3, hesitate: 0.3, misaim: 0.2, mistake: 0.05, pause: 0.03, wander: 0.25, trapRadius: 0, shieldSense: 0.1, escapeRoom: 1, distract: 0.15, lead: 0 },
+  normal: { think: 0.28, reactDelay: 0.12, reflex: 0.6, margin: 0.18, bonusRadius: 6, aggression: 0.45, hesitate: 0.3, misaim: 0.1, mistake: 0.015, pause: 0.02, wander: 0.05, trapRadius: 1, shieldSense: 0.22, escapeRoom: 2, distract: 0.035, lead: 0.3 },
+  hard: { think: 0.1, reactDelay: 0, reflex: 1, margin: 0.25, bonusRadius: 11, aggression: 0.9, hesitate: 0, misaim: 0, mistake: 0, pause: 0, wander: 0, trapRadius: 2, shieldSense: 0.35, escapeRoom: 3, distract: 0, lead: 1 },
+  expert: { think: 0.06, reactDelay: 0, reflex: 1, margin: 0.28, bonusRadius: 14, aggression: 1, hesitate: 0, misaim: 0, mistake: 0, pause: 0, wander: 0, trapRadius: 3, shieldSense: 0.45, escapeRoom: 3, distract: 0, lead: 1.3 }
 };
 var FIELDS = new WeakMap;
 
@@ -1952,9 +1952,9 @@ class BotBrain {
   wantBomb = false;
   wantShield = false;
   lastDecision = "";
-  constructor(playerId, difficulty, seed) {
+  constructor(playerId, difficulty, seed, tune) {
     this.playerId = playerId;
-    this.prof = PROFILES[difficulty];
+    this.prof = tune ? { ...AI_PROFILES[difficulty], ...tune } : AI_PROFILES[difficulty];
     this.rng = new Rng(seed * 7919 + playerId * 104729);
     this.thinkTimer = this.rng.next() * this.prof.think;
   }
@@ -1967,10 +1967,12 @@ class BotBrain {
     this.speedNow = m.effectiveSpeed(p);
     this.thinkTimer -= dt;
     let mustThink = this.thinkTimer <= 0;
-    if (!mustThink && this.prof.reflex && this.path.length) {
+    if (!mustThink && this.prof.reflex > 0 && this.path.length) {
       const next = this.path[0];
-      if (m.grid.fire[next] > 0 || m.grid.blocksMove(next % m.grid.w, Math.floor(next / m.grid.w)))
-        mustThink = true;
+      if (m.grid.fire[next] > 0 || m.grid.blocksMove(next % m.grid.w, Math.floor(next / m.grid.w))) {
+        if (this.prof.reflex >= 1 || this.rng.chance(this.prof.reflex))
+          mustThink = true;
+      }
     }
     if (mustThink) {
       this.thinkTimer = this.prof.think * (0.8 + this.rng.next() * 0.4);
@@ -2074,6 +2076,21 @@ class BotBrain {
     const myIdx = g.idx(Math.floor(p.x), Math.floor(p.y));
     const danger = computeDanger(m, undefined, p.id);
     const sloppy = this.rng.chance(this.prof.mistake);
+    if (danger.start[myIdx] === Infinity)
+      this.dangerSince = -1;
+    else if (this.prof.reactDelay > 0) {
+      if (this.dangerSince < 0)
+        this.dangerSince = m.time;
+      if (m.time - this.dangerSince < this.prof.reactDelay) {
+        this.lastDecision = "unaware";
+        return;
+      }
+    }
+    if (this.prof.pause > 0 && danger.start[myIdx] === Infinity && this.rng.chance(this.prof.pause)) {
+      this.path = [];
+      this.lastDecision = "pause";
+      return;
+    }
     if (danger.start[myIdx] !== Infinity && m.hill && this.holdUnderFire(m, p, danger, myIdx))
       return;
     if (danger.start[myIdx] !== Infinity) {
@@ -2109,7 +2126,9 @@ class BotBrain {
     if (p.activeBombs < p.maxBombs && g.bombAt[myIdx] < 0) {
       const value = this.bombValue(m, p);
       const roll = this.rng.next();
-      if (value.enemy && roll < 0.4 + this.prof.aggression * 0.6) {
+      const enemy = this.readyToAttack(m, value.enemy);
+      const misaim = !value.enemy && this.prof.misaim > 0 && this.enemyNear(m, p, 2) && this.rng.chance(this.prof.misaim);
+      if ((enemy || misaim) && roll < 0.4 + this.prof.aggression * 0.6) {
         if (this.placeIfEscapable(m, p, sloppy))
           return;
       } else if (value.blocks > 0 && roll < 0.55 + this.prof.aggression * 0.4) {
@@ -2122,7 +2141,7 @@ class BotBrain {
     }
     if (this.path.length)
       return;
-    if (this.prof.aggression < 0.5 && this.rng.chance(0.25)) {
+    if (this.prof.wander > 0 && this.rng.chance(this.prof.wander)) {
       const wander = this.findTarget(m, p, danger, 3, () => this.rng.chance(0.3));
       if (wander)
         this.path = wander;
@@ -2227,7 +2246,7 @@ class BotBrain {
         return false;
       return matesOnZone.length > 0 || myPts >= foePts || !this.rng.chance(0.25);
     })();
-    const attack = (chance) => canBomb && bombVal.enemy && !hurtsHold && this.rng.chance(chance) && this.placeIfEscapable(m, p, sloppy);
+    const attack = (chance) => canBomb && this.readyToAttack(m, bombVal.enemy) && !hurtsHold && this.rng.chance(chance) && this.placeIfEscapable(m, p, sloppy);
     if (onZone && role !== "guard") {
       if (h.contested || foesOnZone.length) {
         if (attack(0.45 + this.prof.aggression * 0.5))
@@ -2338,6 +2357,19 @@ class BotBrain {
         n++;
     return n;
   }
+  readyToAttack(m, enemyInBlast) {
+    if (!enemyInBlast) {
+      this.enemySince = -1;
+      return false;
+    }
+    if (this.prof.hesitate <= 0)
+      return true;
+    if (this.enemySince < 0)
+      this.enemySince = m.time;
+    return m.time - this.enemySince >= this.prof.hesitate;
+  }
+  enemySince = -1;
+  dangerSince = -1;
   mark(d) {
     this.lastDecision = d;
     return true;
