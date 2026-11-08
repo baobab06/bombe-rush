@@ -120,6 +120,8 @@ export interface Profile {
    * après avoir été passé ou terminé, sur aucun appareil.
    */
   tutorial: { state: "new" | "offered" | "skipped" | "done"; at: number };
+  /** Notifications : nombre de fois où le jeu a proposé de les activer (on ne harcèle pas). */
+  notifyAsks: number;
   settings: Settings;
 }
 
@@ -163,6 +165,7 @@ export function defaultProfile(): Profile {
     ads: { day: "", coins: 0, freeChest: 0, doubled: [], lastAdAt: 0, gamesSinceAd: 0, personalized: null },
     starterGift: false,
     tutorial: { state: "new", at: 0 },
+    notifyAsks: 0,
     seen: [],
     settled: [],
     pending: null,

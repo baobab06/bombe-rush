@@ -29,6 +29,11 @@ export interface UpdateConfig {
   description: string;
   notes: PatchNote[];
   storeUrl: string;
+  /**
+   * Annonce envoyée en notification sur les téléphones (appli 1.12.2+), une seule
+   * fois par identifiant : changer l'identifiant = nouvelle notification.
+   */
+  push?: { id: string; title: string; body: string } | null;
   /** date de la dernière modification (ms) */
   updatedAt: number;
 }
@@ -112,9 +117,17 @@ export function sanitizeUpdate(raw: unknown, now = Date.now()): { ok: true; conf
       if (text) notes.push({ kind, text });
     }
   }
+  let push: UpdateConfig["push"] = null;
+  const rp = (r.push ?? null) as Record<string, unknown> | null;
+  if (rp && typeof rp === "object") {
+    const title = clip(rp.title, 60);
+    const body = clip(rp.body, 200);
+    if (title && body) push = { id: (clip(rp.id, 40) || String(now)).replace(/[^A-Za-z0-9_-]/g, "") || String(now), title, body };
+  }
   return {
     ok: true,
     config: {
+      push,
       enabled: r.enabled === true,
       latestVersion: latest,
       minVersion: min,

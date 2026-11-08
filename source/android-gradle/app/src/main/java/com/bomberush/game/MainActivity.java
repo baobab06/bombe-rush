@@ -48,6 +48,7 @@ public class MainActivity extends Activity {
     private AdsBridge ads;
     private BillingBridge billing;
     private AuthBridge auth;
+    private NotifyBridge notify;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -97,6 +98,8 @@ public class MainActivity extends Activity {
         web.addJavascriptInterface(billing, "BombeRushBilling");
         auth = new AuthBridge(this, web);
         web.addJavascriptInterface(auth, "BombeRushAuth");
+        notify = new NotifyBridge(this, web);
+        web.addJavascriptInterface(notify, "BombeRushNotify");
         web.setWebChromeClient(new WebChromeClient());
         web.setWebViewClient(new WebViewClient() {
             @Override
@@ -166,6 +169,12 @@ public class MainActivity extends Activity {
         if (raw == null) return null;
         String c = raw.replaceAll("[^A-Za-z0-9]", "").toUpperCase();
         return c.length() >= 4 && c.length() <= 8 ? c : null;
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == NotifyBridge.REQ && notify != null) notify.onResult();
     }
 
     @Override

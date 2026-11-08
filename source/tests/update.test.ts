@@ -120,5 +120,54 @@ calls = 0;
 await Promise.all([ck.check(), ck.check(), ck.check()]);
 check(calls === 1 && !ck.due(), "une seule requête à la fois, pas de revérification avant 30 min");
 
+console.log("Notifications : annonces et rappels");
+{
+  const base = { enabled: true, latestVersion: "1.12.2", minVersion: "1.0.0", storeUrl: "https://play.google.com/store/apps/details?id=com.bomberush.game" };
+  const a = sanitizeUpdate({ ...base, push: { id: "a1<script>", title: "🎉 Week-end double pièces", body: "Toutes tes victoires rapportent 2× plus." } });
+  check(a.ok && a.config.push?.id === "a1script" && a.config.push.title.startsWith("🎉"), "annonce gardée, identifiant nettoyé");
+  const b = sanitizeUpdate({ ...base, push: { id: "x", title: "", body: "rien" } });
+  check(b.ok && b.config.push === null, "annonce incomplète : aucune notification");
+  const c = sanitizeUpdate({ ...base, push: { title: "T".repeat(500), body: "B".repeat(900) } });
+  check(c.ok && c.config.push!.title.length <= 60 && c.config.push!.body.length <= 200 && !!c.config.push!.id, "textes coupés à la bonne longueur, identifiant créé");
+
+  // rappels programmés par le jeu (pont natif simulé)
+  const calls: [string, number, string, string][] = [];
+  let state = "granted";
+  (globalThis as unknown as { window: unknown }).window = {
+    BombeRushNotify: {
+      permissionState: () => state,
+      requestPermission: () => {},
+      setEnabled: () => {},
+      schedule: (k: string, at: number, t: string, b: string) => calls.push([k, at, t, b]),
+      cancel: () => {},
+    },
+    setTimeout,
+    clearTimeout,
+  };
+  const { notifications } = await import("../src/platform/notifications");
+  const { dayKey } = await import("../src/meta/store");
+  const { defaultProfile } = await import("../src/meta/profile");
+  const p = defaultProfile();
+  const morning = new Date(2026, 10, 9, 9, 0, 0);
+  p.daily = { last: dayKey(morning), streak: 2 };
+  notifications.scheduleReminders(p, morning);
+  const daily = calls.find((x) => x[0] === "daily")!;
+  const d = new Date(daily[1]);
+  check(d.getDate() === 10 && d.getHours() === 18 && d.getMinutes() === 30 && daily[3].includes("Jour 3/7"), "récompense déjà prise ce matin : rappel demain 18 h 30 (jour 3/7)");
+  calls.length = 0;
+  p.daily = { last: "2026-11-08", streak: 2 };
+  notifications.scheduleReminders(p, morning);
+  check(new Date(calls.find((x) => x[0] === "daily")![1]).getDate() === 9, "récompense pas encore prise : rappel ce soir");
+  const back = new Date(calls.find((x) => x[0] === "comeback")![1]);
+  check(back.getDate() === 12 && back.getHours() === 18, "retour dans l'arène : 3 jours plus tard, 18 h (remplacé à chaque partie)");
+  calls.length = 0;
+  state = "off";
+  notifications.scheduleReminders(p, morning);
+  check(calls.length === 0, "notifications coupées dans le jeu : aucun rappel");
+  state = "denied";
+  notifications.scheduleReminders(p, morning);
+  check(calls.length === 0, "refusées par Android : aucun rappel");
+}
+
 console.log(failures ? `\n${failures} échec(s)` : "\nTout est vert.");
 process.exit(failures ? 1 : 0);

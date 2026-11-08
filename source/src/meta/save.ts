@@ -75,6 +75,7 @@ export function migrate(data: Partial<Profile> & { ownedSkins?: string[]; versio
   };
   // tutoriel : valeur inconnue = jamais proposé (anciens profils compris : on le leur propose une fois)
   const ts = (data.tutorial as { state?: string } | undefined)?.state;
+  p.notifyAsks = Math.max(0, Math.min(10, Number(data.notifyAsks) || 0));
   p.tutorial = { state: ts === "offered" || ts === "skipped" || ts === "done" ? ts : "new", at: Math.max(0, Number(data.tutorial?.at) || 0) };
   // v1 : les skins achetés étaient dans ownedSkins
   const owned = new Set<string>([...(data.owned ?? []), ...(data.ownedSkins ?? [])]);

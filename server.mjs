@@ -5663,9 +5663,18 @@ function sanitizeUpdate(raw, now = Date.now()) {
         notes.push({ kind, text });
     }
   }
+  let push = null;
+  const rp = r.push ?? null;
+  if (rp && typeof rp === "object") {
+    const title = clip(rp.title, 60);
+    const body = clip(rp.body, 200);
+    if (title && body)
+      push = { id: (clip(rp.id, 40) || String(now)).replace(/[^A-Za-z0-9_-]/g, "") || String(now), title, body };
+  }
   return {
     ok: true,
     config: {
+      push,
       enabled: r.enabled === true,
       latestVersion: latest,
       minVersion: min,
@@ -6124,6 +6133,7 @@ function defaultProfile() {
     ads: { day: "", coins: 0, freeChest: 0, doubled: [], lastAdAt: 0, gamesSinceAd: 0, personalized: null },
     starterGift: false,
     tutorial: { state: "new", at: 0 },
+    notifyAsks: 0,
     seen: [],
     settled: [],
     pending: null,
@@ -6158,6 +6168,7 @@ function migrate(data) {
     ads: { ...base.ads, ...data.ads ?? {} }
   };
   const ts = data.tutorial?.state;
+  p.notifyAsks = Math.max(0, Math.min(10, Number(data.notifyAsks) || 0));
   p.tutorial = { state: ts === "offered" || ts === "skipped" || ts === "done" ? ts : "new", at: Math.max(0, Number(data.tutorial?.at) || 0) };
   const owned = new Set([...data.owned ?? [], ...data.ownedSkins ?? []]);
   p.owned = [...owned].filter((id) => !!getItem(id));

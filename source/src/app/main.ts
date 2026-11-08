@@ -30,6 +30,7 @@ import { Stage } from "../ui/stage";
 import { ItemBrowser } from "./browser";
 import { Modal, Wallet, fmt, type AppCtx, type ScreenId } from "./ctx";
 import { offerTutorial, shouldOfferTutorial, TrainingCoach, TutorialScreen } from "./tutorial";
+import { notifications } from "../platform/notifications";
 import { OnlineController } from "./online";
 import { openDaily, showGranted } from "./rewards";
 import { maybeInterstitial, watchRewarded } from "./ads-ui";
@@ -193,6 +194,8 @@ class App implements AppCtx {
         // en ligne la partie continue sans nous : pas de pause
         if (this.screen === "game" && !this.game.online) this.pause();
         audio.suspend();
+        // rappels (récompense du jour, retour dans l'arène) : reprogrammés à chaque départ
+        notifications.scheduleReminders(this._profile);
       } else {
         audio.resume();
         this.startStages();
@@ -500,6 +503,17 @@ class App implements AppCtx {
     bind("setMusic", "music");
     bind("setSfx", "sfx");
     bind("setVibe", "vibration");
+    $<HTMLInputElement>("setNotify").addEventListener("change", async (e) => {
+      const el = e.target as HTMLInputElement;
+      const st = notifications.state();
+      if (!el.checked) {
+        notifications.setEnabled(false);
+        notifications.cancelReminders();
+      } else if (st === "off") notifications.setEnabled(true);
+      else if (st === "default") await notifications.request();
+      else if (st === "denied") this.toast("Les notifications sont bloquées par Android : active-les dans les réglages du téléphone.", "bad");
+      this.renderSettings();
+    });
     $("btnAdsPrivacy").addEventListener("click", () => {
       this.click();
       ads.showPrivacyOptions();
@@ -643,6 +657,14 @@ class App implements AppCtx {
   /** Arrivée sur l'accueil : cadeau de bienvenue, puis récompense du jour. */
   private afterHome() {
     const p = this._profile;
+    // notifications : proposées après quelques parties (2 fois au plus), jamais au lancement
+    if (notifications.supported && notifications.state() === "default" && !this.inviteCode && ((p.notifyAsks === 0 && p.played >= 2) || (p.notifyAsks === 1 && p.played >= 10)) && !shouldOfferTutorial(p)) {
+      window.setTimeout(() => {
+        if (this.screen !== "home" || this.modal.isOpen) return;
+        this.offerNotifications();
+      }, 600);
+      return;
+    }
     // tutoriel : proposé une fois (premier lancement, ou joueur qui ne l'a jamais vu) ; jamais imposé
     if (shouldOfferTutorial(p) && p.named && !this.inviteCode && !this.updateUI?.blocking) {
       window.setTimeout(() => {
@@ -881,6 +903,47 @@ class App implements AppCtx {
     this.go("game");
   }
 
+  /** Proposition d'activer les notifications (explique avant la fenêtre d'Android). */
+  private offerNotifications() {
+    const p = this._profile;
+    p.notifyAsks += 1;
+    this.persist();
+    this.modal.open(
+      (sheet, close) => {
+        sheet.insertAdjacentHTML(
+          "beforeend",
+          `<div class="tut-offer"><p class="kicker">Reste au courant</p><h2>🔔 Activer les notifications ?</h2>
+           <ul class="tut-goals"><li><span>🚀</span>Nouvelles mises à jour</li><li><span>🎁</span>Récompense du jour</li><li><span>🎉</span>Événements</li></ul>
+           <p class="tut-note">Pas de spam : seulement l'essentiel. Tu peux les couper à tout moment dans les Paramètres.</p></div>`,
+        );
+        const actions = document.createElement("div");
+        actions.className = "sheet-actions";
+        const later = document.createElement("button");
+        later.className = "btn btn-ghost";
+        later.innerHTML = "<span>Plus tard</span>";
+        later.addEventListener("click", () => {
+          this.click();
+          close();
+          this.afterHome();
+        });
+        const yes = document.createElement("button");
+        yes.className = "btn btn-yellow";
+        yes.id = "btnNotifyYes";
+        yes.innerHTML = "<span>🔔 ACTIVER</span>";
+        yes.addEventListener("click", async () => {
+          this.click();
+          close();
+          const st = await notifications.request();
+          if (st === "granted") this.toast("🔔 Notifications activées !", "good");
+          this.afterHome();
+        });
+        actions.append(later, yes);
+        sheet.appendChild(actions);
+      },
+      { closable: false },
+    );
+  }
+
   /** Terrain d'entraînement du tutoriel : aucune mise, aucune récompense. */
   private startPractice() {
     const p = this._profile;
@@ -983,6 +1046,12 @@ class App implements AppCtx {
     $("adsSettings").hidden = !ads.enabled || ads.nativeConsent;
     $("adsPrivacy").hidden = !ads.nativeConsent || !ads.privacyOptionsRequired();
     $<HTMLInputElement>("setAdsPerso").checked = this._profile.ads.personalized === true;
+    $("notifySettings").hidden = !notifications.supported;
+    if (notifications.supported) {
+      const ns = notifications.state();
+      $<HTMLInputElement>("setNotify").checked = ns === "granted";
+      $("notifyHint").textContent = ns === "denied" ? "Bloquées par Android : active-les dans les réglages du téléphone (Applis › Bombe Rush › Notifications)." : "Mises à jour, annonces et récompense du jour.";
+    }
     const p = this._profile;
     const cc = countOwned(p);
     const rows: [string, string][] = [

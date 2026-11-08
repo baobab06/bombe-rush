@@ -76,6 +76,14 @@
     </section>
 
     <section>
+      <h2>🔔 Annonce en notification <span class="hint">(téléphones avec l'appli 1.12.2 ou plus)</span></h2>
+      <p class="muted">Envoyée une seule fois à chaque joueur ayant activé les notifications (vérifiée environ 2 fois par jour). Laisse vide pour ne rien envoyer. Pour une nouvelle annonce, clique « Nouvelle annonce ».</p>
+      <label for="pushTitle">Titre de la notification</label><input id="pushTitle" type="text" maxlength="60" placeholder="ex. 🎉 Week-end double pièces !">
+      <label for="pushBody">Texte</label><textarea id="pushBody" maxlength="200" placeholder="ex. Toutes tes victoires rapportent 2× plus de pièces jusqu'à dimanche soir."></textarea>
+      <div class="actions" style="margin-top:10px"><button class="ghost" id="newPush">Nouvelle annonce</button><span class="muted" id="pushId"></span></div>
+    </section>
+
+    <section>
       <h2>👀 Ce que verront les joueurs</h2>
       <div class="preview" id="preview"></div>
     </section>
@@ -111,6 +119,7 @@
       enabled: $("enabled").checked, latestVersion: $("latest").value.trim(), minVersion: $("min").value.trim(), mandatory: $("mandatory").checked,
       title: $("title").value, description: $("desc").value, storeUrl: $("store").value.trim(),
       notes: [...$("notes").children].map((r) => ({ kind: r.querySelector("select").value, text: r.querySelector("input").value })).filter((n) => n.text.trim()),
+      push: $("pushTitle").value.trim() && $("pushBody").value.trim() ? { id: pushId, title: $("pushTitle").value.trim(), body: $("pushBody").value.trim() } : null,
     };
   }
 
@@ -129,7 +138,11 @@
     }
   }
 
+  let pushId = "";
+  const showPushId = () => { $("pushId").textContent = pushId ? "Identifiant : " + pushId : ""; };
+  $("newPush").addEventListener("click", () => { pushId = "a" + Date.now(); $("pushTitle").value = ""; $("pushBody").value = ""; showPushId(); });
   function fill(c) {
+    pushId = c.push?.id || ("a" + Date.now()); $("pushTitle").value = c.push?.title || ""; $("pushBody").value = c.push?.body || ""; showPushId();
     $("enabled").checked = !!c.enabled; $("latest").value = c.latestVersion; $("min").value = c.minVersion; $("mandatory").checked = !!c.mandatory;
     $("title").value = c.title; $("desc").value = c.description; $("store").value = c.storeUrl;
     $("notes").innerHTML = ""; (c.notes || []).forEach(noteRow);
