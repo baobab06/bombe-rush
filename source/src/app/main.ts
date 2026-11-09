@@ -39,6 +39,9 @@ import { doubleAmount, noteGamePlayed } from "../meta/ad-rewards";
 import { MissionsScreen } from "./missions-screen";
 import { ProfileScreen } from "./profile-screen";
 import { RankScreen } from "./rank-screen";
+import { WorldScreen } from "./world-screen";
+import { WorldRank, type WorldTicket } from "../net/world";
+import { isRanked } from "../meta/rank";
 import { ChestsScreen } from "./chests-screen";
 import { achievementsToClaim, checkAchievements } from "../meta/achievements";
 import { chestCount, nextLevelReward, rewardText, type Granted } from "../meta/grants";
@@ -48,7 +51,7 @@ import { ensureWeekly, weeklyToClaim } from "../meta/weekly";
 import { setServerTime } from "../meta/clock";
 import { getTitle } from "../core/cosmetics";
 import { CHESTS, levelXp, masteryXp, MASTERY_MAX } from "../meta/progress-config";
-import { GameScreen, type GameResult, type StandingRow } from "./game";
+import { GameScreen, type GameResult, type GameSetup, type StandingRow } from "./game";
 import { UpdateChecker } from "../meta/update-check";
 import { UpdateUI } from "./update-ui";
 import { appVersion } from "../platform/app-version";
@@ -57,8 +60,8 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 
 /** écrans interdits tant qu'une mise à jour obligatoire n'est pas faite */
 const BLOCKED_BY_UPDATE: ScreenId[] = ["setup", "game", "pause", "private", "lobby", "invite"];
-const SCREENS: ScreenId[] = ["home", "setup", "settings", "pause", "results", "private", "lobby", "boot", "welcome", "invite", "shop", "collection", "missions", "profile", "rank", "chests", "tutorial"];
-const MENU_SCREENS: ScreenId[] = ["setup", "settings", "private", "lobby", "welcome", "invite", "shop", "collection", "missions", "profile", "rank", "chests", "tutorial"];
+const SCREENS: ScreenId[] = ["home", "setup", "settings", "pause", "results", "private", "lobby", "boot", "welcome", "invite", "shop", "collection", "missions", "profile", "rank", "chests", "tutorial", "world"];
+const MENU_SCREENS: ScreenId[] = ["setup", "settings", "private", "lobby", "welcome", "invite", "shop", "collection", "missions", "profile", "rank", "chests", "tutorial", "world"];
 
 class App implements AppCtx {
   private save = new SaveSystem();
@@ -84,6 +87,10 @@ class App implements AppCtx {
   private missionsScr: MissionsScreen;
   private profileScr: ProfileScreen;
   private rankScr: RankScreen;
+  private worldScr: WorldScreen;
+  readonly world: WorldRank;
+  /** partie classée mondiale en cours (ticket du serveur) */
+  private worldTicket: WorldTicket | null = null;
   private tutorial!: TutorialScreen;
   private coach!: TrainingCoach;
   private chestsScr: ChestsScreen;
@@ -124,6 +131,15 @@ class App implements AppCtx {
       rank: () => this.go("rank"),
     });
     this.rankScr = new RankScreen(this);
+    this.world = new WorldRank(() => this._profile, () => this.persist());
+    this.worldScr = new WorldScreen(this, this.world, () => this.renderBadges());
+    setTimeout(() => void this.world.flush(), 4000);
+    this.world.onResult = (r) => {
+      if (r.ok && r.delta !== undefined) {
+        const pos = r.weekPos ? ` · ${r.weekPos}e cette semaine` : "";
+        this.toast(`🏆 Classement mondial : ${r.delta > 0 ? "+" : r.delta < 0 ? "−" : "±"}${Math.abs(r.delta)} pts${pos}`, r.delta > 0 ? "good" : "");
+      }
+    };
     this.tutorial = new TutorialScreen(this, {
       practice: () => this.startPractice(),
       exit: () => {
@@ -290,7 +306,10 @@ class App implements AppCtx {
     $("veil").classList.toggle("off", inGame);
     $("veil").classList.toggle("deep", id === "results");
     $("veil").classList.toggle("dim", MENU_SCREENS.includes(id));
-    if (id === "home") this.renderHome();
+    if (id === "home") {
+      this.renderHome();
+      this.world.warm();
+    }
     if (id === "setup") this.renderSetup();
     if (id === "shop" && prev !== "shop") this.shop.open(this.shopTarget?.id, this.shopTarget?.tab);
     if (id === "collection" && prev !== "collection") this.coll.open(this.collTab ?? undefined, this.collTab ?? undefined);
@@ -298,6 +317,7 @@ class App implements AppCtx {
     if (id === "missions") this.missionsScr.render();
     if (id === "profile") this.profileScr.render();
     if (id === "rank") this.rankScr.render();
+    if (id === "world") this.worldScr.render();
     if (id === "chests") this.chestsScr.render();
     if (id === "tutorial" && prev !== "tutorial") this.tutorial.open(0);
     if (prev === "tutorial" && id !== "tutorial") this.tutorial.close();
@@ -400,6 +420,7 @@ class App implements AppCtx {
     nav("btnSettings", "settings");
     nav("homeProfile", "profile");
     nav("btnMissions", "missions");
+    nav("btnWorld", "world");
     nav("btnChests", "chests");
     nav("btnMyCollection", "collection");
     // JOUER : partie immédiate avec le mode choisi et les derniers réglages
@@ -449,11 +470,13 @@ class App implements AppCtx {
       this.click();
       // recommencer une partie en cours = l'abandonner (pas d'esquive d'une défaite)
       this.abandonLive();
-      this.game.restart();
-      if (this.game.training) this.coach.reset();
-      this.game.setPaused(false);
-      this.startStake();
-      this.go("game");
+      if (this.game.training) {
+        this.game.restart();
+        this.coach.reset();
+        this.game.setPaused(false);
+        this.startStake();
+        this.go("game");
+      } else void this.relaunch();
     });
     $("btnQuit").addEventListener("click", () => {
       this.click();
@@ -476,9 +499,7 @@ class App implements AppCtx {
         this.go("lobby", false);
         return;
       }
-      this.game.restart();
-      this.startStake();
-      this.go("game");
+      void this.relaunch();
     });
     $("btnMenu").addEventListener("click", async () => {
       this.click();
@@ -876,6 +897,10 @@ class App implements AppCtx {
   /** L'issue est connue : UNE transaction, enregistrée tout de suite. */
   private settleOutcome(r: GameResult) {
     const summary = applyMatch(this._profile, r, this.currentStake());
+    // classement mondial : le serveur rejoue la partie et compte les points
+    const replay = this.worldTicket && summary ? this.game.rankedReplay() : null;
+    if (this.worldTicket && replay) this.world.submit(this.worldTicket, replay);
+    this.worldTicket = null;
     this.lastSummary = summary;
     this.lastTx = summary?.tx ?? null;
     if (summary) {
@@ -885,11 +910,13 @@ class App implements AppCtx {
     this.persist();
   }
 
-  private launch() {
+  private launching = false;
+  private async launch() {
+    if (this.launching) return;
     const p = this._profile;
     p.lastSetup = { ...this.setupState };
     this.persist();
-    this.game.start({
+    await this.startSolo({
       ...this.setupState,
       characterId: p.characterId,
       skinId: this.equippedSkin(p.characterId),
@@ -898,8 +925,35 @@ class App implements AppCtx {
       boomId: p.equipped.boom,
       playerName: "Toi",
     });
-    this.startStake();
     this.history = [];
+  }
+
+  /** Rejouer (même réglages), avec un nouveau ticket du classement mondial. */
+  private async relaunch() {
+    const setup = this.game.setup;
+    if (!setup || this.launching) return;
+    this.game.setPaused(false);
+    await this.startSolo(setup);
+  }
+
+  /**
+   * Partie contre les bots : demande d'abord un ticket au serveur (graine
+   * choisie par lui) pour qu'elle compte au classement mondial. Sans réseau,
+   * la partie se joue quand même (rang personnel seulement).
+   */
+  private async startSolo(setup: GameSetup) {
+    this.launching = true;
+    document.body.classList.add("launching");
+    this.worldTicket = null;
+    try {
+      const t = isRanked(false) ? await this.world.ticket(setup.modeId, setup.difficulty, setup.botCount).catch(() => undefined) : undefined;
+      this.worldTicket = t ?? null;
+      this.game.start({ ...setup, seed: t?.seed });
+    } finally {
+      this.launching = false;
+      document.body.classList.remove("launching");
+    }
+    this.startStake();
     this.go("game");
   }
 

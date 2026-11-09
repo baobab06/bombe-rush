@@ -2,6 +2,7 @@ import { BotBrain } from "../ai/bot";
 import { Match, type MatchConfig } from "../core/match";
 import { DT } from "../core/rules";
 import type { InputCmd } from "../core/types";
+import type { InputRecorder } from "./replay";
 
 /**
  * Une session de jeu fournit la simulation à l'écran de jeu.
@@ -21,6 +22,8 @@ export class LocalSession implements GameSession {
   readonly match: Match;
   readonly localPlayer: number;
   private bots: BotBrain[] = [];
+  /** partie classée mondiale : commandes enregistrées (rejouées par le serveur) */
+  recorder: InputRecorder | null = null;
 
   constructor(config: MatchConfig, localPlayer: number) {
     this.match = new Match(config);
@@ -32,7 +35,7 @@ export class LocalSession implements GameSession {
 
   step(localInput: InputCmd): void {
     const inputs: InputCmd[] = this.match.players.map(() => ({ mx: 0, my: 0, bomb: false, ability: false }));
-    inputs[this.localPlayer] = localInput;
+    inputs[this.localPlayer] = this.recorder ? this.recorder.record(localInput) : localInput;
     for (const b of this.bots) inputs[b.playerId] = b.update(this.match, DT);
     this.match.step(inputs);
   }

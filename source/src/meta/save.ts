@@ -76,6 +76,16 @@ export function migrate(data: Partial<Profile> & { ownedSkins?: string[]; versio
   // tutoriel : valeur inconnue = jamais proposé (anciens profils compris : on le leur propose une fois)
   const ts = (data.tutorial as { state?: string } | undefined)?.state;
   p.notifyAsks = Math.max(0, Math.min(10, Number(data.notifyAsks) || 0));
+  const w = (data.world ?? {}) as Partial<Profile["world"]>;
+  const str = (v: unknown, re: RegExp) => (typeof v === "string" && re.test(v) ? v : "");
+  p.world = {
+    id: str(w.id, /^[A-Za-z0-9_-]{4,24}$/),
+    secret: str(w.secret, /^[A-Za-z0-9_-]{16,64}$/),
+    points: Math.max(0, Math.floor(Number(w.points) || 0)),
+    pos: Math.max(0, Math.floor(Number(w.pos) || 0)),
+    claimed: str(w.claimed, /^\d{4}-\d{2}-\d{2}$/),
+  };
+  if (!p.world.id || !p.world.secret) p.world.id = p.world.secret = "";
   p.tutorial = { state: ts === "offered" || ts === "skipped" || ts === "done" ? ts : "new", at: Math.max(0, Number(data.tutorial?.at) || 0) };
   // v1 : les skins achetés étaient dans ownedSkins
   const owned = new Set<string>([...(data.owned ?? []), ...(data.ownedSkins ?? [])]);

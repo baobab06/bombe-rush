@@ -9,6 +9,7 @@
  *   GET  /                 le jeu
  *   GET  /j/CODE           lien d'invitation (ouvre le jeu et rejoint la salle)
  *   GET  /health           état du serveur
+ *   /api/lb/…              classement mondial (server/leaderboard.ts)
  *   /api/…                 comptes Google et sauvegarde en ligne (server/accounts.ts)
  *   GET  /.well-known/assetlinks.json   Android App Links (si ANDROID_* défini)
  *   WS   /ws               temps réel
@@ -27,6 +28,7 @@ import { PushService } from "./push";
 import { acceptUpgrade, type WsConn } from "./ws";
 import { Accounts, GoogleVerifier, MemoryStore, accountRoutes, allowedOrigin, storeFromEnv } from "./accounts";
 import { UpdateService, updateRoutes } from "./updates";
+import { LeaderboardService, leaderboardRoutes } from "./leaderboard";
 import { migrate } from "../src/meta/save";
 
 const PORT = Number(process.env.PORT ?? 8787);
@@ -195,6 +197,9 @@ const accounts = accountStore && googleClientIds.length ? new Accounts(accountSt
 // mises à jour du jeu (réglées depuis /admin-mises-a-jour.html, clé ADMIN_TOKEN)
 const updates = new UpdateService(accountStore ?? new MemoryStore());
 const updateApi = updateRoutes(updates, process.env.ADMIN_TOKEN, (req) => allowedOrigin(req.headers.origin, req.headers.host));
+const leaderboard = new LeaderboardService(accountStore ?? new MemoryStore());
+const lbApi = leaderboardRoutes(leaderboard, process.env.ADMIN_TOKEN, (req) => allowedOrigin(req.headers.origin, req.headers.host));
+void leaderboard.ready();
 const api = accountRoutes(accounts, process.env.GOOGLE_WEB_CLIENT_ID, (req) => updates.statusOf(String(req.headers["x-bomberush-version"] ?? "") || null) === "mandatory");
 console.log(process.env.ADMIN_TOKEN && process.env.ADMIN_TOKEN.length >= 24 ? "Mises à jour : administration activée" : "Mises à jour : administration désactivée (ADMIN_TOKEN à configurer)");
 console.log(accounts ? `Comptes : activés (stockage ${accountStore!.kind})` : "Comptes : désactivés (GOOGLE_WEB_CLIENT_ID + stockage à configurer)");
@@ -202,6 +207,7 @@ console.log(accounts ? `Comptes : activés (stockage ${accountStore!.kind})` : "
 const server = createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", "http://x");
   if (await updateApi(req, res, url.pathname, url.searchParams)) return;
+  if (await lbApi(req, res, url.pathname, url.searchParams)) return;
   if (await api(req, res, url.pathname)) return;
   if (url.pathname === "/health") {
     res.writeHead(200, { "content-type": "application/json", "access-control-allow-origin": "*" });
@@ -279,3 +285,10 @@ setInterval(() => {
 server.listen(PORT, () => {
   console.log(`BOMBE RUSH — serveur prêt sur http://localhost:${PORT}  (jeu : ${STATIC_DIR})`);
 });
+
+// arrêt (nouveau déploiement) : on enregistre le classement avant de partir
+for (const sig of ["SIGTERM", "SIGINT"] as const)
+  process.once(sig, () => {
+    void leaderboard.flush().finally(() => process.exit(0));
+    setTimeout(() => process.exit(0), 3000).unref();
+  });

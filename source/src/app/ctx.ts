@@ -6,7 +6,7 @@ import type { Profile } from "../meta/profile";
 import type { UiFx } from "../ui/fx";
 
 export type ScreenId =
-  | "home" | "setup" | "settings" | "pause" | "results" | "game" | "private" | "lobby" | "boot" | "welcome" | "invite" | "shop" | "collection" | "missions" | "profile" | "rank" | "chests" | "tutorial";
+  | "home" | "setup" | "settings" | "pause" | "results" | "game" | "private" | "lobby" | "boot" | "welcome" | "invite" | "shop" | "collection" | "missions" | "profile" | "rank" | "chests" | "tutorial" | "world";
 
 export interface AppCtx {
   readonly profile: Profile;

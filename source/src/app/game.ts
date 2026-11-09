@@ -12,6 +12,7 @@ import { getMap, pickMap, RANDOM_MAP } from "../maps";
 import { TRAINING } from "../maps/training";
 import type { Match } from "../core/match";
 import { LocalSession, type GameSession } from "../net/session";
+import { InputRecorder, type RankedSpec } from "../net/replay";
 import { haptics } from "../platform/haptics";
 import { Renderer, type Rect } from "../render/renderer";
 import { BONUS_COLORS, LIFT } from "../render/sprites";
@@ -32,6 +33,8 @@ export interface GameSetup {
   trailId?: string;
   boomId?: string;
   playerName: string;
+  /** graine imposée (partie classée mondiale : choisie par le serveur) */
+  seed?: number;
 }
 
 const pick = <T,>(a: T[]) => a[Math.floor(Math.random() * a.length)];
@@ -204,7 +207,20 @@ export class GameScreen {
       })),
     ];
     // Classique : la carte est toujours tirée au hasard (surprise)
-    this.begin(players, pickMap(setup.modeId === "classic" ? RANDOM_MAP : setup.mapId, Math.random, setup.modeId).id, setup.modeId, 0, (Math.random() * 1e9) | 0);
+    this.begin(players, pickMap(setup.modeId === "classic" ? RANDOM_MAP : setup.mapId, Math.random, setup.modeId).id, setup.modeId, 0, setup.seed ?? (Math.random() * 1e9) | 0);
+    this.setup = { ...setup, seed: undefined };
+    if (setup.seed !== undefined && this.session instanceof LocalSession) this.session.recorder = new InputRecorder();
+  }
+
+  /** Partie classée mondiale en cours : de quoi la faire vérifier par le serveur. */
+  rankedReplay(): { spec: RankedSpec; log: number[] } | null {
+    const s = this.session;
+    if (!(s instanceof LocalSession) || !s.recorder || this.demo || this.training) return null;
+    const c = s.match.config;
+    return {
+      spec: { seed: c.seed, mapId: c.map.id, modeId: c.modeId, players: c.players.map((p) => ({ characterId: p.characterId, isBot: p.isBot, ...(p.isBot ? { difficulty: p.difficulty } : {}) })) },
+      log: s.recorder.log,
+    };
   }
 
   restart() {

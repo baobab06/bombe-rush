@@ -3,9 +3,9 @@
  *
  * Points gagnés ou perdus selon la place, la difficulté et le nombre
  * d'adversaires (RANK_RULES). Parties classées : contre les bots, résultat
- * calculé sur l'appareil. C'est un rang PERSONNEL : il n'existe pas de
- * classement mondial (il faudrait des comptes et des résultats validés par le
- * serveur). L'interface `Leaderboard` ci-dessous est prête pour ce jour-là.
+ * calculé sur l'appareil. C'est le rang PERSONNEL ; le classement mondial
+ * (server/leaderboard.ts) utilise le même barème, mais sur des parties
+ * rejouées et vérifiées par le serveur.
  */
 import { grantAll, type Granted } from "./grants";
 import { RANKS, RANK_RULES, type RankDef } from "./progress-config";
@@ -78,14 +78,3 @@ export function applyRank(p: Profile, column: number, stake: StakeId, players: n
   if (p.rank.history.length > RANK_RULES.historySize) p.rank.history.splice(0, p.rank.history.length - RANK_RULES.historySize);
   return { delta: after - before, before, after, tierBefore, tierAfter, protected: prot, granted };
 }
-
-/**
- * Architecture prête pour un classement en ligne : un fournisseur qui
- * enverrait les résultats VALIDÉS PAR LE SERVEUR et renverrait le top.
- * Aucun n'est branché : le jeu n'affiche donc aucun faux classement mondial.
- */
-export interface Leaderboard {
-  submit(entry: RankEntry): Promise<void>;
-  top(limit: number): Promise<{ name: string; points: number }[]>;
-}
-export const leaderboard: Leaderboard | null = null;

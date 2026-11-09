@@ -1,6 +1,6 @@
 /**
  * Écran RANG : rang actuel, points, progression, paliers et historique.
- * Rang personnel (aucun faux classement mondial).
+ * Rang personnel ; le classement mondial vérifié est dans world-screen.ts.
  */
 import { STAKES, placeMedal, placeName, type StakeId } from "../meta/economy";
 import { RANKS, RANK_RULES } from "../meta/progress-config";
@@ -43,7 +43,7 @@ export class RankScreen {
         }).join("")}</ol>
         <h3 class="label">Dernières parties classées</h3>
         ${hist.length ? `<ul class="rank-hist">${hist.map((h) => `<li><span>${placeMedal(h.place, h.players)} ${placeName(h.place)}/${h.players}</span><span>${STAKES[h.stake as StakeId]?.label ?? h.stake}</span><b class="${h.delta > 0 ? "up" : h.delta < 0 ? "down" : ""}">${sgn(h.delta)}</b><small>${fmt(h.points)} pts</small></li>`).join("")}</ul>` : `<p class="hint">Joue une partie contre les bots pour commencer à grimper !</p>`}
-        <p class="hint">Rang personnel calculé sur ton appareil : il n'y a pas encore de classement mondial (il faudrait des comptes vérifiés par le serveur).</p>
+        <p class="hint">🏆 Ces mêmes parties comptent aussi pour le <b>classement mondial</b> (bouton CLASSEMENT de l'accueil), où le serveur rejoue chaque partie pour vérifier le résultat.</p>
       </div>`;
   }
 }

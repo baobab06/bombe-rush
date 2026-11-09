@@ -122,6 +122,11 @@ export interface Profile {
   tutorial: { state: "new" | "offered" | "skipped" | "done"; at: number };
   /** Notifications : nombre de fois où le jeu a proposé de les activer (on ne harcèle pas). */
   notifyAsks: number;
+  /**
+   * Classement mondial : identifiant + clé secrète donnés par le serveur,
+   * derniers points / place connus, dernière semaine dont la récompense a été prise.
+   */
+  world: { id: string; secret: string; points: number; pos: number; claimed: string };
   settings: Settings;
 }
 
@@ -166,6 +171,7 @@ export function defaultProfile(): Profile {
     starterGift: false,
     tutorial: { state: "new", at: 0 },
     notifyAsks: 0,
+    world: { id: "", secret: "", points: 0, pos: 0, claimed: "" },
     seen: [],
     settled: [],
     pending: null,

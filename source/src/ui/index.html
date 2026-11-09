@@ -122,6 +122,7 @@
       <button class="dock t-pink" id="btnShop"><i data-icon="shop"></i><span>BOUTIQUE</span><em class="ribbon" id="shopRibbon" hidden>PROMO</em></button>
       <button class="dock t-gold" id="btnChests"><span class="emo-ico">🎁</span><span>COFFRES</span><span class="dot" id="chestDot" hidden>1</span></button>
       <button class="dock t-green" id="btnMissions"><i data-icon="missions"></i><span>MISSIONS</span><span class="dot" id="missionDot" hidden>1</span></button>
+      <button class="dock t-blue" id="btnWorld"><span class="emo-ico">🏆</span><span>MONDIAL</span></button>
     </nav>
   </section>
 
@@ -260,6 +261,18 @@
   <section class="screen" id="rank" hidden>
     <header class="bar"><button class="back" data-back aria-label="Retour"><i data-icon="back"></i></button><h2>Rang</h2><span class="bar-note">Rang personnel · parties contre les bots</span></header>
     <div class="rank-grid" id="rankBody"></div>
+  </section>
+
+  <!-- Classement mondial -->
+  <section class="screen" id="world" hidden>
+    <header class="bar"><button class="back" data-back aria-label="Retour"><i data-icon="back"></i></button><h2>Classement mondial</h2>
+      <div class="seg world-tabs" id="worldTabs" role="radiogroup"><button data-board="week" role="radio">Cette semaine</button><button data-board="all" role="radio">Général</button></div>
+    </header>
+    <div class="world-body">
+      <div class="world-list panel" id="worldList"></div>
+      <div class="world-me" id="worldMe"></div>
+      <p class="world-info hint" id="worldInfo"></p>
+    </div>
   </section>
 
   <!-- Coffres -->

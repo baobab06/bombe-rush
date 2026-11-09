@@ -1,5 +1,5 @@
 // server/index.ts
-import { randomBytes as randomBytes2 } from "node:crypto";
+import { randomBytes as randomBytes3 } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { existsSync as existsSync2 } from "node:fs";
@@ -5839,6 +5839,81 @@ function updateRoutes(svc, adminToken, corsOrigin) {
   };
 }
 
+// server/leaderboard.ts
+import { createHash as createHash4, randomBytes as randomBytes2, timingSafeEqual as timingSafeEqual2 } from "node:crypto";
+
+// src/meta/progress-config.ts
+var LEVEL_MAX = 100;
+function levelXp(level) {
+  const k = level - 1;
+  return Math.round((100 + 20 * k + 0.9 * k * k) / 5) * 5;
+}
+var MASTERY_MAX = 50;
+function masteryXp(level) {
+  const k = level - 1;
+  return Math.round((60 + 8 * k + 0.35 * k * k) / 5) * 5;
+}
+var CHEST_ORDER = ["common", "rare", "epic", "legend"];
+var RANKS = [
+  { id: "bronze", name: "Bronze", icon: "\uD83E\uDD49", color: "#d08a4c", min: 0, reward: [] },
+  { id: "argent", name: "Argent", icon: "\uD83E\uDD48", color: "#c9d6e3", min: 150, reward: [{ kind: "chest", tier: "rare" }] },
+  { id: "or", name: "Or", icon: "\uD83E\uDD47", color: "#ffd23f", min: 400, reward: [{ kind: "chest", tier: "rare" }, { kind: "coins", amount: 300 }] },
+  { id: "platine", name: "Platine", icon: "\uD83D\uDCA0", color: "#5fe0d0", min: 800, reward: [{ kind: "chest", tier: "epic" }] },
+  { id: "diamant", name: "Diamant", icon: "\uD83D\uDC8E", color: "#7cc7ff", min: 1300, reward: [{ kind: "item", id: "title-diamond" }, { kind: "chest", tier: "epic" }] },
+  { id: "elite", name: "Élite", icon: "\uD83D\uDC51", color: "#ff5fa2", min: 2000, reward: [{ kind: "item", id: "title-elite" }, { kind: "item", id: "boom-gold" }, { kind: "chest", tier: "legend" }] }
+];
+var RANK_RULES = {
+  places: [20, 8, -4, -10],
+  difficulty: { easy: 0.5, normal: 1, hard: 1.5, expert: 2 },
+  perOpponent: 1 / 3,
+  protectedRanks: ["bronze"],
+  solo: true,
+  online: false,
+  historySize: 15
+};
+var A = (id, icon, name, desc, stat, goal, ...reward) => ({ id, icon, name, desc, stat, goal, reward });
+var C = (amount) => ({ kind: "coins", amount });
+var CH = (tier) => ({ kind: "chest", tier });
+var IT = (id) => ({ kind: "item", id });
+var ACHIEVEMENTS = [
+  A("first-game", "\uD83C\uDFAE", "Premier pas", "Joue ta première partie", "played", 1, C(50)),
+  A("played-25", "\uD83C\uDFAE", "On y prend goût", "Joue {n} parties", "played", 25, C(200)),
+  A("played-100", "\uD83C\uDFAE", "Habitué", "Joue {n} parties", "played", 100, IT("title-regular"), C(400)),
+  A("played-500", "\uD83C\uDFAE", "Pilier de l'arène", "Joue {n} parties", "played", 500, IT("boom-veteran"), CH("epic")),
+  A("first-win", "\uD83C\uDFC6", "Première victoire", "Gagne ta première partie", "wins", 1, C(100)),
+  A("wins-10", "\uD83C\uDFC6", "Gagnant", "Gagne {n} parties", "wins", 10, C(250)),
+  A("wins-50", "\uD83C\uDFC6", "Champion", "Gagne {n} parties", "wins", 50, IT("title-champion"), CH("rare")),
+  A("wins-200", "\uD83C\uDFC6", "Invincible", "Gagne {n} parties", "wins", 200, IT("title-unbeatable"), CH("legend")),
+  A("kills-25", "\uD83D\uDCA5", "Pas de pitié", "Élimine {n} adversaires", "kills", 25, C(150)),
+  A("kills-250", "\uD83D\uDCA5", "Chasseur", "Élimine {n} adversaires", "kills", 250, IT("title-hunter"), CH("rare")),
+  A("blocks-500", "\uD83E\uDDF1", "Bûcheron", "Détruis {n} blocs", "blocks", 500, C(150)),
+  A("blocks-5000", "\uD83E\uDDF1", "Démolisseur", "Détruis {n} blocs", "blocks", 5000, IT("title-demolisher"), CH("rare")),
+  A("bombs-1000", "\uD83D\uDCA3", "Artificier fou", "Pose {n} bombes", "bombs", 1000, CH("rare")),
+  A("bonus-200", "⭐", "Ramasse-tout", "Ramasse {n} bonus", "bonuses", 200, C(250)),
+  A("streak-3", "\uD83D\uDD25", "En forme", "Gagne {n} parties d'affilée", "bestStreak", 3, C(100)),
+  A("streak-5", "\uD83D\uDD25", "En feu", "Gagne {n} parties d'affilée", "bestStreak", 5, CH("rare")),
+  A("streak-10", "\uD83D\uDD25", "Inarrêtable", "Gagne {n} parties d'affilée", "bestStreak", 10, IT("title-unstoppable"), CH("epic")),
+  A("level-10", "⬆️", "Niveau 10", "Atteins le niveau {n}", "level", 10, C(200)),
+  A("level-25", "⬆️", "Niveau 25", "Atteins le niveau {n}", "level", 25, CH("epic")),
+  A("level-50", "⬆️", "Niveau 50", "Atteins le niveau {n}", "level", 50, CH("legend")),
+  A("mastery-10", "\uD83C\uDF96️", "Spécialiste", "Monte un personnage au niveau de maîtrise {n}", "bestMastery", 10, C(300)),
+  A("mastery-30", "\uD83C\uDF96️", "Virtuose", "Monte un personnage au niveau de maîtrise {n}", "bestMastery", 30, CH("epic")),
+  A("chars-7", "\uD83E\uDDD1‍\uD83E\uDD1D‍\uD83E\uDDD1", "Touche-à-tout", "Joue avec {n} personnages différents", "charsPlayed", 7, IT("title-jack"), C(300)),
+  A("owned-25", "\uD83C\uDF92", "Garde-robe", "Possède {n} objets", "owned", 25, C(300)),
+  A("owned-60", "\uD83C\uDF92", "Collectionneur", "Possède {n} objets", "owned", 60, IT("title-collector"), CH("epic")),
+  A("chests-10", "\uD83C\uDF81", "Chasseur de trésors", "Ouvre {n} coffres", "chests", 10, CH("rare")),
+  A("missions-20", "\uD83C\uDFAF", "Appliqué", "Récupère {n} missions", "missions", 20, C(400)),
+  A("expert-1", "\uD83D\uDC80", "Sans peur", "Gagne une partie en Expert", "expertWins", 1, C(300)),
+  A("expert-10", "\uD83D\uDC80", "Expert", "Gagne {n} parties en Expert", "expertWins", 10, IT("title-expert"), CH("epic")),
+  A("chaos-10", "\uD83C\uDF2A️", "Amateur de chaos", "Joue {n} parties en mode Chaos", "chaos", 10, C(250)),
+  A("online-5", "\uD83C\uDF10", "Entre amis", "Joue {n} parties privées en ligne", "online", 5, C(250)),
+  A("rank-or", "\uD83E\uDD47", "Doré", "Atteins le rang Or", "rank", 2, C(300)),
+  A("rank-diamant", "\uD83D\uDC8E", "Brillant", "Atteins le rang Diamant", "rank", 4, CH("epic")),
+  A("login-7", "\uD83D\uDCC5", "Fidèle", "Connecte-toi {n} jours", "loginDays", 7, C(200)),
+  A("login-30", "\uD83D\uDCC5", "Inséparable", "Connecte-toi {n} jours", "loginDays", 30, CH("epic")),
+  A("rich", "\uD83E\uDE99", "Fortune", "Gagne {n} pièces au total", "coinsEarned", 20000, CH("rare"))
+];
+
 // src/core/cosmetics.ts
 var ACCESSORIES = [
   { id: "acc-cap", wear: "cap", name: "Casquette", rarity: "common", desc: "Visière vers l'avant, comme un pro." },
@@ -5940,70 +6015,6 @@ var DEFAULT_TRAIL = "fx-dust";
 var DEFAULT_EMOTES = ["emo-hello", "emo-gg"];
 var EMOTE_SLOTS = 4;
 
-// src/meta/progress-config.ts
-var LEVEL_MAX = 100;
-function levelXp(level) {
-  const k = level - 1;
-  return Math.round((100 + 20 * k + 0.9 * k * k) / 5) * 5;
-}
-var MASTERY_MAX = 50;
-function masteryXp(level) {
-  const k = level - 1;
-  return Math.round((60 + 8 * k + 0.35 * k * k) / 5) * 5;
-}
-var CHEST_ORDER = ["common", "rare", "epic", "legend"];
-var RANK_RULES = {
-  places: [20, 8, -4, -10],
-  difficulty: { easy: 0.5, normal: 1, hard: 1.5, expert: 2 },
-  perOpponent: 1 / 3,
-  protectedRanks: ["bronze"],
-  solo: true,
-  online: false,
-  historySize: 15
-};
-var A = (id, icon, name, desc, stat, goal, ...reward) => ({ id, icon, name, desc, stat, goal, reward });
-var C = (amount) => ({ kind: "coins", amount });
-var CH = (tier) => ({ kind: "chest", tier });
-var IT = (id) => ({ kind: "item", id });
-var ACHIEVEMENTS = [
-  A("first-game", "\uD83C\uDFAE", "Premier pas", "Joue ta première partie", "played", 1, C(50)),
-  A("played-25", "\uD83C\uDFAE", "On y prend goût", "Joue {n} parties", "played", 25, C(200)),
-  A("played-100", "\uD83C\uDFAE", "Habitué", "Joue {n} parties", "played", 100, IT("title-regular"), C(400)),
-  A("played-500", "\uD83C\uDFAE", "Pilier de l'arène", "Joue {n} parties", "played", 500, IT("boom-veteran"), CH("epic")),
-  A("first-win", "\uD83C\uDFC6", "Première victoire", "Gagne ta première partie", "wins", 1, C(100)),
-  A("wins-10", "\uD83C\uDFC6", "Gagnant", "Gagne {n} parties", "wins", 10, C(250)),
-  A("wins-50", "\uD83C\uDFC6", "Champion", "Gagne {n} parties", "wins", 50, IT("title-champion"), CH("rare")),
-  A("wins-200", "\uD83C\uDFC6", "Invincible", "Gagne {n} parties", "wins", 200, IT("title-unbeatable"), CH("legend")),
-  A("kills-25", "\uD83D\uDCA5", "Pas de pitié", "Élimine {n} adversaires", "kills", 25, C(150)),
-  A("kills-250", "\uD83D\uDCA5", "Chasseur", "Élimine {n} adversaires", "kills", 250, IT("title-hunter"), CH("rare")),
-  A("blocks-500", "\uD83E\uDDF1", "Bûcheron", "Détruis {n} blocs", "blocks", 500, C(150)),
-  A("blocks-5000", "\uD83E\uDDF1", "Démolisseur", "Détruis {n} blocs", "blocks", 5000, IT("title-demolisher"), CH("rare")),
-  A("bombs-1000", "\uD83D\uDCA3", "Artificier fou", "Pose {n} bombes", "bombs", 1000, CH("rare")),
-  A("bonus-200", "⭐", "Ramasse-tout", "Ramasse {n} bonus", "bonuses", 200, C(250)),
-  A("streak-3", "\uD83D\uDD25", "En forme", "Gagne {n} parties d'affilée", "bestStreak", 3, C(100)),
-  A("streak-5", "\uD83D\uDD25", "En feu", "Gagne {n} parties d'affilée", "bestStreak", 5, CH("rare")),
-  A("streak-10", "\uD83D\uDD25", "Inarrêtable", "Gagne {n} parties d'affilée", "bestStreak", 10, IT("title-unstoppable"), CH("epic")),
-  A("level-10", "⬆️", "Niveau 10", "Atteins le niveau {n}", "level", 10, C(200)),
-  A("level-25", "⬆️", "Niveau 25", "Atteins le niveau {n}", "level", 25, CH("epic")),
-  A("level-50", "⬆️", "Niveau 50", "Atteins le niveau {n}", "level", 50, CH("legend")),
-  A("mastery-10", "\uD83C\uDF96️", "Spécialiste", "Monte un personnage au niveau de maîtrise {n}", "bestMastery", 10, C(300)),
-  A("mastery-30", "\uD83C\uDF96️", "Virtuose", "Monte un personnage au niveau de maîtrise {n}", "bestMastery", 30, CH("epic")),
-  A("chars-7", "\uD83E\uDDD1‍\uD83E\uDD1D‍\uD83E\uDDD1", "Touche-à-tout", "Joue avec {n} personnages différents", "charsPlayed", 7, IT("title-jack"), C(300)),
-  A("owned-25", "\uD83C\uDF92", "Garde-robe", "Possède {n} objets", "owned", 25, C(300)),
-  A("owned-60", "\uD83C\uDF92", "Collectionneur", "Possède {n} objets", "owned", 60, IT("title-collector"), CH("epic")),
-  A("chests-10", "\uD83C\uDF81", "Chasseur de trésors", "Ouvre {n} coffres", "chests", 10, CH("rare")),
-  A("missions-20", "\uD83C\uDFAF", "Appliqué", "Récupère {n} missions", "missions", 20, C(400)),
-  A("expert-1", "\uD83D\uDC80", "Sans peur", "Gagne une partie en Expert", "expertWins", 1, C(300)),
-  A("expert-10", "\uD83D\uDC80", "Expert", "Gagne {n} parties en Expert", "expertWins", 10, IT("title-expert"), CH("epic")),
-  A("chaos-10", "\uD83C\uDF2A️", "Amateur de chaos", "Joue {n} parties en mode Chaos", "chaos", 10, C(250)),
-  A("online-5", "\uD83C\uDF10", "Entre amis", "Joue {n} parties privées en ligne", "online", 5, C(250)),
-  A("rank-or", "\uD83E\uDD47", "Doré", "Atteins le rang Or", "rank", 2, C(300)),
-  A("rank-diamant", "\uD83D\uDC8E", "Brillant", "Atteins le rang Diamant", "rank", 4, CH("epic")),
-  A("login-7", "\uD83D\uDCC5", "Fidèle", "Connecte-toi {n} jours", "loginDays", 7, C(200)),
-  A("login-30", "\uD83D\uDCC5", "Inséparable", "Connecte-toi {n} jours", "loginDays", 30, CH("epic")),
-  A("rich", "\uD83E\uDE99", "Fortune", "Gagne {n} pièces au total", "coinsEarned", 20000, CH("rare"))
-];
-
 // src/meta/economy.ts
 var PRICES = {
   common: 500,
@@ -6035,6 +6046,12 @@ var BOMBER_EMOTE_PRICES = {
 var BOMBER_CHARACTER_PRICES = {
   pingo: 400
 };
+var PLACE_COLUMNS = {
+  2: [1, 4],
+  3: [1, 2, 4],
+  4: [1, 2, 3, 4]
+};
+var DRAW_COLUMN = 2;
 
 // src/meta/catalog.ts
 function build() {
@@ -6093,6 +6110,521 @@ function getItem(id) {
   return id ? byId.get(id) : undefined;
 }
 
+// src/meta/rank.ts
+function rankIndex(points) {
+  let i = 0;
+  for (let k = 0;k < RANKS.length; k++)
+    if (points >= RANKS[k].min)
+      i = k;
+  return i;
+}
+function rankDelta(column, stake, players) {
+  const base = RANK_RULES.places[Math.min(4, Math.max(1, column)) - 1];
+  const opp = Math.min(1, Math.max(1, players - 1) * RANK_RULES.perOpponent);
+  return Math.round(base * (RANK_RULES.difficulty[stake] ?? 1) * opp);
+}
+
+// src/meta/rewards.ts
+function columnOf(pl) {
+  const n = Math.max(2, pl.players);
+  if (pl.draw)
+    return DRAW_COLUMN;
+  if (pl.abandon)
+    return 4;
+  const place = Math.min(Math.max(1, Math.round(pl.place)), n);
+  const table = PLACE_COLUMNS[n];
+  if (table)
+    return table[place - 1];
+  if (place === 1)
+    return 1;
+  if (place === n)
+    return 4;
+  return place <= n / 2 ? 2 : 3;
+}
+
+// src/net/replay.ts
+var Q = 32;
+var RANKED_MODES = ["classic", "chaos", "koth"];
+var DIFFICULTIES = ["easy", "normal", "hard", "expert"];
+var MAX_TICKS = 60 * 60 * 8;
+function checkSpec(s, expect) {
+  if (!s || typeof s !== "object")
+    return "partie illisible";
+  if (!Number.isInteger(s.seed) || s.seed < 0 || s.seed > 2 ** 31)
+    return "graine";
+  if (!RANKED_MODES.includes(s.modeId) || !MODES.some((m) => m.id === s.modeId && !m.hidden))
+    return "mode";
+  const map = MAPS.find((m) => m.id === s.mapId);
+  if (!map || !mapAllows(map, s.modeId))
+    return "carte";
+  const ps = s.players;
+  if (!Array.isArray(ps) || ps.length < 2 || ps.length > 4)
+    return "joueurs";
+  if (s.modeId === "koth" && ps.length !== 4)
+    return "joueurs";
+  const ids = new Set;
+  for (let i = 0;i < ps.length; i++) {
+    const p = ps[i];
+    if (!p || !CHARACTERS.some((c) => c.id === p.characterId) || ids.has(p.characterId))
+      return "personnages";
+    ids.add(p.characterId);
+    if (p.isBot !== i > 0)
+      return "joueurs";
+    if (i > 0 && !DIFFICULTIES.includes(p.difficulty))
+      return "difficulté";
+    if (i > 0 && p.difficulty !== ps[1].difficulty)
+      return "difficulté";
+  }
+  if (expect) {
+    if (expect.modeId !== s.modeId)
+      return "mode";
+    if (expect.stake !== ps[1].difficulty)
+      return "difficulté";
+    if (expect.bots !== ps.length - 1)
+      return "joueurs";
+  }
+  return null;
+}
+function specSlots(s) {
+  return s.players.map((p) => ({ name: p.isBot ? "bot" : "joueur", characterId: p.characterId, isBot: p.isBot, difficulty: p.isBot ? p.difficulty : undefined }));
+}
+function outcomeOf(m, me) {
+  const st = m.standings();
+  const place = st.find((r) => r.id === me)?.place ?? m.players.length;
+  const won = m.phase === "over" && m.winnerId >= 0 && (m.winnerId === me || m.sameTeam(m.winnerId, me));
+  return { place, players: m.players.length, won, draw: place === 1 && !won };
+}
+
+class Replay {
+  log;
+  match;
+  bots = [];
+  i = 0;
+  left = 0;
+  cmd = { mx: 0, my: 0, bomb: false, ability: false };
+  ticks = 0;
+  error = null;
+  constructor(spec, log) {
+    this.log = log;
+    const players = specSlots(spec);
+    this.match = new Match({ seed: spec.seed, map: getMap(spec.mapId), modeId: spec.modeId, players });
+    players.forEach((p, i) => {
+      if (p.isBot)
+        this.bots.push(new BotBrain(i, p.difficulty ?? "normal", spec.seed + i));
+    });
+    if (!Array.isArray(log) || log.length % 4 !== 0 || log.length > 4 * MAX_TICKS)
+      this.error = "journal";
+    else {
+      let total = 0;
+      for (let k = 0;k < log.length; k += 4) {
+        const [n, x, y, f] = [log[k], log[k + 1], log[k + 2], log[k + 3]];
+        if (![n, x, y, f].every(Number.isInteger) || n < 1 || n > 65535 || Math.abs(x) > Q || Math.abs(y) > Q || f < 0 || f > 15) {
+          this.error = "journal";
+          break;
+        }
+        total += n;
+      }
+      if (total > MAX_TICKS)
+        this.error = "partie trop longue";
+    }
+  }
+  run(maxSteps) {
+    if (this.error)
+      return { complete: false, place: this.match.players.length, players: this.match.players.length, won: false, draw: false, ticks: this.ticks };
+    const m = this.match;
+    for (let s = 0;s < maxSteps; s++) {
+      if (this.left === 0) {
+        if (this.i >= this.log.length)
+          return this.finish();
+        const L = this.log;
+        this.left = L[this.i];
+        const f = L[this.i + 3];
+        this.cmd = { mx: L[this.i + 1] / Q, my: L[this.i + 2] / Q, bomb: !!(f & 1), ability: !!(f & 2), throw: !!(f & 4), remote: !!(f & 8) };
+        this.i += 4;
+      }
+      this.left--;
+      const inputs = m.players.map(() => ({ mx: 0, my: 0, bomb: false, ability: false }));
+      inputs[0] = this.cmd;
+      for (const b of this.bots)
+        inputs[b.playerId] = b.update(m, DT);
+      m.step(inputs);
+      this.ticks++;
+    }
+    return null;
+  }
+  finish() {
+    const m = this.match;
+    const me = m.players[0];
+    const complete = !me.alive && !m.hill || m.phase === "over";
+    return { complete, ticks: this.ticks, ...outcomeOf(m, 0) };
+  }
+}
+
+// server/leaderboard.ts
+var KEY2 = "lb:v1";
+function weekOf(t) {
+  const d = new Date(t);
+  const day = (d.getUTCDay() + 6) % 7;
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - day)).toISOString().slice(0, 10);
+}
+function weekEnd(t) {
+  return Date.parse(weekOf(t) + "T00:00:00Z") + 7 * 86400000;
+}
+var sha2 = (s) => createHash4("sha256").update(s).digest("hex").slice(0, 40);
+var sameHash = (a, b) => a.length === b.length && timingSafeEqual2(Buffer.from(a), Buffer.from(b));
+var cleanLbName = (n) => String(n ?? "").replace(/[<>&"'`\u0000-\u001f​-‏‪-‮]/g, "").replace(/\s+/g, " ").trim().slice(0, 16) || "Joueur";
+var ABANDON_AFTER_MS = 20000;
+var CLOCK_SLACK_MS = 4000;
+
+class LeaderboardService {
+  store;
+  now;
+  chunk;
+  doc = { v: 1, players: {} };
+  loading = null;
+  loaded = false;
+  saveTimer = null;
+  queue = [];
+  busy = false;
+  sorted = { all: null, week: null, wk: "" };
+  constructor(store = new MemoryStore, now = Date.now, chunk = 1500) {
+    this.store = store;
+    this.now = now;
+    this.chunk = chunk;
+  }
+  async ready() {
+    if (this.loaded)
+      return;
+    this.loading ??= (async () => {
+      try {
+        const raw = await this.store.get(KEY2);
+        if (raw) {
+          const d = JSON.parse(raw);
+          if (d && d.v === 1 && d.players && typeof d.players === "object")
+            this.doc = d;
+        }
+      } catch (e) {
+        console.warn("classement : lecture impossible", e.message);
+      }
+      this.loaded = true;
+    })();
+    await this.loading;
+  }
+  touch() {
+    this.sorted.all = this.sorted.week = null;
+    if (this.saveTimer)
+      return;
+    this.saveTimer = setTimeout(() => {
+      this.saveTimer = null;
+      this.flush();
+    }, 1500);
+  }
+  async flush() {
+    if (this.saveTimer)
+      clearTimeout(this.saveTimer);
+    this.saveTimer = null;
+    try {
+      await this.store.set(KEY2, JSON.stringify(this.doc));
+    } catch (e) {
+      console.warn("classement : écriture impossible", e.message);
+    }
+  }
+  rollWeek() {
+    const prev = weekOf(this.now() - 7 * 86400000);
+    if (this.doc.last?.week === prev)
+      return;
+    const top = Object.entries(this.doc.players).filter(([, p]) => !p.x && p.wk === prev && p.w > 0).sort((a, b) => b[1].w - a[1].w || a[1].s - b[1].s).slice(0, 10).map(([id]) => id);
+    this.doc.last = { week: prev, top };
+    this.touch();
+  }
+  player(id, secret) {
+    if (typeof id !== "string" || typeof secret !== "string" || secret.length > 80)
+      return null;
+    const p = this.doc.players[id];
+    return p && sameHash(p.h, sha2(secret)) ? p : null;
+  }
+  create(name) {
+    let id;
+    do
+      id = randomBytes2(6).toString("base64url");
+    while (this.doc.players[id]);
+    const secret = randomBytes2(24).toString("base64url");
+    const t = this.now();
+    const p = { n: name, h: sha2(secret), p: 0, w: 0, wk: weekOf(t), g: 0, v: 0, c: t, s: t };
+    this.doc.players[id] = p;
+    return { id, secret, p };
+  }
+  score(p, column, stake, players, won) {
+    const wk = weekOf(this.now());
+    if (p.wk !== wk) {
+      p.wk = wk;
+      p.w = 0;
+    }
+    let delta = rankDelta(column, stake, players);
+    if (delta < 0 && RANK_RULES.protectedRanks.includes(RANKS[rankIndex(p.p)].id))
+      delta = 0;
+    const before = p.p;
+    p.p = Math.max(0, p.p + delta);
+    p.w = Math.max(0, p.w + delta);
+    p.g++;
+    if (won)
+      p.v++;
+    p.s = this.now();
+    this.touch();
+    return p.p - before;
+  }
+  settleOpen(p) {
+    const t = p.t;
+    if (!t)
+      return;
+    p.t = null;
+    if (this.now() - t.at < ABANDON_AFTER_MS)
+      return;
+    this.score(p, columnOf({ place: t.bots + 1, players: t.bots + 1, abandon: true }), t.stake, t.bots + 1, false);
+  }
+  async ticket(b, canCreate) {
+    await this.ready();
+    this.rollWeek();
+    const modeId = String(b.modeId ?? "");
+    const stake = String(b.stake ?? "");
+    const bots = Number(b.bots);
+    if (!RANKED_MODES.includes(modeId) || !DIFFICULTIES.includes(stake) || !Number.isInteger(bots) || bots < 1 || bots > 3)
+      return { error: "partie non classée", status: 400 };
+    let id = typeof b.id === "string" ? b.id : "";
+    let secret;
+    let p = this.player(b.id, b.secret);
+    if (!p) {
+      if (!canCreate())
+        return { error: "Trop de nouveaux joueurs depuis cette adresse.", status: 429 };
+      const c = this.create(cleanLbName(b.name));
+      ({ id, secret, p } = c);
+    }
+    p.n = cleanLbName(b.name ?? p.n);
+    this.settleOpen(p);
+    const t = { id: randomBytes2(8).toString("base64url"), seed: randomBytes2(4).readUInt32BE(0) >>> 1, at: this.now(), mode: modeId, stake, bots: modeId === "koth" ? 3 : bots };
+    p.t = t;
+    p.s = this.now();
+    this.touch();
+    return { id, secret, ticket: t.id, seed: t.seed };
+  }
+  async cancel(b) {
+    await this.ready();
+    const p = this.player(b.id, b.secret);
+    if (p?.t && p.t.id === b.ticket && this.now() - p.t.at < 90000) {
+      p.t = null;
+      this.touch();
+    }
+    return { ok: true };
+  }
+  async submit(b) {
+    await this.ready();
+    this.rollWeek();
+    const p = this.player(b.id, b.secret);
+    if (!p)
+      return { ok: false, error: "joueur inconnu", status: 401 };
+    const t = p.t;
+    if (!t || t.id !== b.ticket)
+      return { ok: false, error: "ticket inconnu ou déjà utilisé", status: 409 };
+    const spec = b.spec;
+    const bad = checkSpec(spec, { modeId: t.mode, stake: t.stake, bots: t.bots });
+    if (bad || spec.seed !== t.seed) {
+      p.t = null;
+      this.score(p, columnOf({ place: t.bots + 1, players: t.bots + 1, abandon: true }), t.stake, t.bots + 1, false);
+      return { ok: false, error: "partie invalide (" + (bad ?? "graine") + ")", status: 400 };
+    }
+    if (this.queue.length > 40)
+      return { ok: false, error: "serveur occupé, réessaie plus tard", status: 503 };
+    p.t = null;
+    this.touch();
+    const out = await this.enqueue(spec, Array.isArray(b.log) ? b.log : []);
+    const elapsed = this.now() - t.at;
+    let pl;
+    let won = false;
+    let note;
+    if (!out.complete) {
+      pl = { place: out.players, players: out.players, abandon: true };
+      note = "partie incomplète : comptée comme abandon";
+    } else if (out.ticks * DT * 1000 > elapsed + CLOCK_SLACK_MS) {
+      pl = { place: out.players, players: out.players, abandon: true };
+      note = "partie envoyée trop vite : refusée";
+    } else {
+      pl = { place: out.won ? 1 : Math.max(1, out.place), players: out.players, draw: out.draw };
+      won = out.won;
+    }
+    if (b.name !== undefined)
+      p.n = cleanLbName(b.name);
+    const delta = this.score(p, columnOf(pl), t.stake, out.players, won);
+    return { ok: true, delta, points: p.p, week: p.w, place: pl.abandon ? null : pl.place, draw: !!pl.draw, note, pos: this.position(b.id, "all"), weekPos: this.position(b.id, "week") };
+  }
+  enqueue(spec, log) {
+    return new Promise((resolve) => {
+      this.queue.push(async () => {
+        const r = new Replay(spec, log);
+        let out = null;
+        while (!(out = r.run(this.chunk)))
+          await new Promise((ok) => setImmediate(ok));
+        resolve(out);
+      });
+      this.drain();
+    });
+  }
+  async drain() {
+    if (this.busy)
+      return;
+    this.busy = true;
+    while (this.queue.length) {
+      const job = this.queue.shift();
+      try {
+        await job();
+      } catch (e) {
+        console.warn("classement : rejeu impossible", e.message);
+      }
+    }
+    this.busy = false;
+  }
+  ranking(board) {
+    const wk = weekOf(this.now());
+    if (this.sorted.wk !== wk)
+      this.sorted = { all: null, week: null, wk };
+    const cached = this.sorted[board];
+    if (cached)
+      return cached;
+    const P = this.doc.players;
+    const ids = board === "all" ? Object.keys(P).filter((id) => !P[id].x && P[id].g > 0).sort((a, b) => P[b].p - P[a].p || P[a].s - P[b].s) : Object.keys(P).filter((id) => !P[id].x && P[id].wk === wk && P[id].w > 0).sort((a, b) => P[b].w - P[a].w || P[a].s - P[b].s);
+    this.sorted[board] = ids;
+    return ids;
+  }
+  position(id, board) {
+    const i = this.ranking(board).indexOf(id);
+    return i < 0 ? null : i + 1;
+  }
+  async top(board, id, limit) {
+    await this.ready();
+    this.rollWeek();
+    const P = this.doc.players;
+    const ids = this.ranking(board);
+    const pts = (pid) => board === "all" ? P[pid].p : P[pid].w;
+    const entries = ids.slice(0, limit).map((pid) => ({ n: P[pid].n, p: pts(pid), r: rankIndex(P[pid].p), ...pid === id ? { me: true } : {} }));
+    const me = id && P[id] ? { pos: this.position(id, board), p: board === "all" ? P[id].p : P[id].wk === weekOf(this.now()) ? P[id].w : 0, r: rankIndex(P[id].p), n: P[id].n } : null;
+    const last = this.doc.last;
+    const lastPos = id && last ? last.top.indexOf(id) : -1;
+    return {
+      board,
+      entries,
+      total: ids.length,
+      me,
+      weekEnds: weekEnd(this.now()),
+      last: last ? { week: last.week, pos: lastPos >= 0 ? lastPos + 1 : null } : null
+    };
+  }
+  async hide(id, hidden) {
+    await this.ready();
+    const p = this.doc.players[id];
+    if (!p)
+      return false;
+    if (hidden)
+      p.x = 1;
+    else
+      delete p.x;
+    this.touch();
+    return true;
+  }
+}
+
+class Limit {
+  max;
+  windowMs;
+  hits = new Map;
+  constructor(max, windowMs) {
+    this.max = max;
+    this.windowMs = windowMs;
+  }
+  allow(key) {
+    const now = Date.now();
+    const h = this.hits.get(key);
+    if (!h || now - h.t > this.windowMs) {
+      this.hits.set(key, { n: 1, t: now });
+      if (this.hits.size > 1e4)
+        this.hits.clear();
+      return true;
+    }
+    return ++h.n <= this.max;
+  }
+}
+async function readJson2(req, max) {
+  const chunks = [];
+  let n = 0;
+  for await (const c of req) {
+    n += c.length;
+    if (n > max)
+      throw new Error("trop gros");
+    chunks.push(c);
+  }
+  const v = chunks.length ? JSON.parse(Buffer.concat(chunks).toString("utf8")) : {};
+  return v && typeof v === "object" ? v : {};
+}
+function leaderboardRoutes(svc, adminToken, corsOrigin) {
+  const ticketLimit = new Limit(40, 60000);
+  const createLimit = new Limit(12, 86400000);
+  const submitLimit = new Limit(40, 60000);
+  const readLimit = new Limit(60, 60000);
+  return async (req, res, path, query) => {
+    if (!path.startsWith("/api/lb/") && path !== "/api/admin/lb/hide")
+      return false;
+    const headers = { "content-type": "application/json", "cache-control": "no-store" };
+    const origin = corsOrigin(req);
+    if (origin) {
+      headers["access-control-allow-origin"] = origin;
+      headers["access-control-allow-headers"] = "authorization, content-type";
+      headers["access-control-allow-methods"] = "GET, POST, OPTIONS";
+      headers["vary"] = "origin";
+    }
+    const reply = (status, obj) => {
+      res.writeHead(status, headers);
+      res.end(JSON.stringify(obj));
+      return true;
+    };
+    if (req.method === "OPTIONS") {
+      res.writeHead(origin ? 204 : 403, headers);
+      res.end();
+      return true;
+    }
+    const ip = (req.headers["x-forwarded-for"] ?? req.socket.remoteAddress ?? "?").split(",")[0].trim();
+    try {
+      if (path === "/api/lb/top" && req.method === "GET") {
+        if (!readLimit.allow(ip))
+          return reply(429, { error: "Trop de requêtes" });
+        const board = query.get("board") === "all" ? "all" : "week";
+        const limit = Math.max(1, Math.min(100, Number(query.get("limit")) || 50));
+        return reply(200, await svc.top(board, query.get("id"), limit));
+      }
+      if (path === "/api/lb/ticket" && req.method === "POST") {
+        if (!ticketLimit.allow(ip))
+          return reply(429, { error: "Trop de requêtes" });
+        const r = await svc.ticket(await readJson2(req, 4096), () => createLimit.allow(ip));
+        return "error" in r ? reply(r.status ?? 400, { error: r.error }) : reply(200, r);
+      }
+      if (path === "/api/lb/cancel" && req.method === "POST")
+        return reply(200, await svc.cancel(await readJson2(req, 4096)));
+      if (path === "/api/lb/submit" && req.method === "POST") {
+        if (!submitLimit.allow(ip))
+          return reply(429, { error: "Trop de requêtes" });
+        const r = await svc.submit(await readJson2(req, 1200000));
+        return reply(r.ok ? 200 : r.status ?? 400, r);
+      }
+      if (path === "/api/admin/lb/hide" && req.method === "POST") {
+        if (!adminOk(req.headers.authorization, adminToken))
+          return reply(401, { error: "Clé d'administration incorrecte." });
+        const b = await readJson2(req, 4096);
+        return reply(200, { ok: await svc.hide(String(b.id ?? ""), b.hidden !== false) });
+      }
+      return reply(404, { error: "Introuvable" });
+    } catch (e) {
+      return reply(400, { error: "Requête invalide (" + e.message + ")." });
+    }
+  };
+}
+
 // src/meta/profile.ts
 var DEFAULT_CHARACTERS = ["renard", "boulon", "rainette", "kage", "champi", "bruno"];
 function defaultProfile() {
@@ -6134,6 +6666,7 @@ function defaultProfile() {
     starterGift: false,
     tutorial: { state: "new", at: 0 },
     notifyAsks: 0,
+    world: { id: "", secret: "", points: 0, pos: 0, claimed: "" },
     seen: [],
     settled: [],
     pending: null,
@@ -6169,6 +6702,17 @@ function migrate(data) {
   };
   const ts = data.tutorial?.state;
   p.notifyAsks = Math.max(0, Math.min(10, Number(data.notifyAsks) || 0));
+  const w = data.world ?? {};
+  const str = (v, re) => typeof v === "string" && re.test(v) ? v : "";
+  p.world = {
+    id: str(w.id, /^[A-Za-z0-9_-]{4,24}$/),
+    secret: str(w.secret, /^[A-Za-z0-9_-]{16,64}$/),
+    points: Math.max(0, Math.floor(Number(w.points) || 0)),
+    pos: Math.max(0, Math.floor(Number(w.pos) || 0)),
+    claimed: str(w.claimed, /^\d{4}-\d{2}-\d{2}$/)
+  };
+  if (!p.world.id || !p.world.secret)
+    p.world.id = p.world.secret = "";
   p.tutorial = { state: ts === "offered" || ts === "skipped" || ts === "done" ? ts : "new", at: Math.max(0, Number(data.tutorial?.at) || 0) };
   const owned = new Set([...data.owned ?? [], ...data.ownedSkins ?? []]);
   p.owned = [...owned].filter((id) => !!getItem(id));
@@ -6298,10 +6842,10 @@ function onMessage(conn, raw, state) {
       setTimeout(() => conn.close(4010), 250);
       return;
     }
-    const token = typeof msg.token === "string" && msg.token.length >= 16 ? msg.token.slice(0, 64) : randomBytes2(16).toString("hex");
+    const token = typeof msg.token === "string" && msg.token.length >= 16 ? msg.token.slice(0, 64) : randomBytes3(16).toString("hex");
     let c = clients.get(token);
     if (!c) {
-      c = { token, id: randomBytes2(5).toString("hex"), name: "", characterId: "renard", room: null, connected: true };
+      c = { token, id: randomBytes3(5).toString("hex"), name: "", characterId: "renard", room: null, connected: true };
       clients.set(token, c);
     }
     const old = conns.get(token);
@@ -6400,12 +6944,17 @@ var googleClientIds = [process.env.GOOGLE_WEB_CLIENT_ID, ...(process.env.GOOGLE_
 var accounts = accountStore && googleClientIds.length ? new Accounts(accountStore, new GoogleVerifier(googleClientIds, process.env.GOOGLE_JWKS_URL || undefined), (d) => migrate(d)) : null;
 var updates = new UpdateService(accountStore ?? new MemoryStore);
 var updateApi = updateRoutes(updates, process.env.ADMIN_TOKEN, (req) => allowedOrigin(req.headers.origin, req.headers.host));
+var leaderboard = new LeaderboardService(accountStore ?? new MemoryStore);
+var lbApi = leaderboardRoutes(leaderboard, process.env.ADMIN_TOKEN, (req) => allowedOrigin(req.headers.origin, req.headers.host));
+leaderboard.ready();
 var api = accountRoutes(accounts, process.env.GOOGLE_WEB_CLIENT_ID, (req) => updates.statusOf(String(req.headers["x-bomberush-version"] ?? "") || null) === "mandatory");
 console.log(process.env.ADMIN_TOKEN && process.env.ADMIN_TOKEN.length >= 24 ? "Mises à jour : administration activée" : "Mises à jour : administration désactivée (ADMIN_TOKEN à configurer)");
 console.log(accounts ? `Comptes : activés (stockage ${accountStore.kind})` : "Comptes : désactivés (GOOGLE_WEB_CLIENT_ID + stockage à configurer)");
 var server = createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", "http://x");
   if (await updateApi(req, res, url.pathname, url.searchParams))
+    return;
+  if (await lbApi(req, res, url.pathname, url.searchParams))
     return;
   if (await api(req, res, url.pathname))
     return;
@@ -6480,3 +7029,8 @@ setInterval(() => {
 server.listen(PORT, () => {
   console.log(`BOMBE RUSH — serveur prêt sur http://localhost:${PORT}  (jeu : ${STATIC_DIR})`);
 });
+for (const sig of ["SIGTERM", "SIGINT"])
+  process.once(sig, () => {
+    leaderboard.flush().finally(() => process.exit(0));
+    setTimeout(() => process.exit(0), 3000).unref();
+  });
