@@ -29,6 +29,7 @@ import { acceptUpgrade, type WsConn } from "./ws";
 import { Accounts, GoogleVerifier, MemoryStore, accountRoutes, allowedOrigin, storeFromEnv } from "./accounts";
 import { UpdateService, updateRoutes } from "./updates";
 import { LeaderboardService, leaderboardRoutes } from "./leaderboard";
+import ANNOUNCE from "./announce.json";
 import { migrate } from "../src/meta/save";
 
 const PORT = Number(process.env.PORT ?? 8787);
@@ -196,6 +197,7 @@ const googleClientIds = [process.env.GOOGLE_WEB_CLIENT_ID, ...(process.env.GOOGL
 const accounts = accountStore && googleClientIds.length ? new Accounts(accountStore, new GoogleVerifier(googleClientIds, process.env.GOOGLE_JWKS_URL || undefined), (d) => migrate(d as Parameters<typeof migrate>[0])) : null;
 // mises à jour du jeu (réglées depuis /admin-mises-a-jour.html, clé ADMIN_TOKEN)
 const updates = new UpdateService(accountStore ?? new MemoryStore());
+void updates.applyBundled(ANNOUNCE);
 const updateApi = updateRoutes(updates, process.env.ADMIN_TOKEN, (req) => allowedOrigin(req.headers.origin, req.headers.host));
 const leaderboard = new LeaderboardService(accountStore ?? new MemoryStore());
 const lbApi = leaderboardRoutes(leaderboard, process.env.ADMIN_TOKEN, (req) => allowedOrigin(req.headers.origin, req.headers.host));

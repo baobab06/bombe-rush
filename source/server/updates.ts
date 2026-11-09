@@ -68,6 +68,30 @@ export class UpdateService {
     return s;
   }
 
+  /**
+   * Annonce livrée avec le serveur (server/announce.json) : appliquée UNE fois
+   * par révision, au démarrage. Permet de publier une annonce par un simple
+   * déploiement ; la page d'administration reste prioritaire ensuite.
+   */
+  async applyBundled(b: { rev?: unknown; config?: unknown } | null | undefined): Promise<boolean> {
+    const rev = typeof b?.rev === "string" ? b.rev.slice(0, 64) : "";
+    if (!rev || !b?.config) return false;
+    try {
+      if ((await this.store.get(KEY + ":rev")) === rev) return false;
+      const r = await this.save(b.config);
+      if (!r.ok) {
+        console.warn("mises à jour : annonce du serveur invalide —", r.error);
+        return false;
+      }
+      await this.store.set(KEY + ":rev", rev);
+      console.log(`mises à jour : annonce « ${rev} » publiée (dernière ${r.config.latestVersion})`);
+      return true;
+    } catch (e) {
+      console.warn("mises à jour : annonce non appliquée", (e as Error).message);
+      return false;
+    }
+  }
+
   /** Statut pour une version du jeu (absente = ancienne version sans ce système). */
   statusOf(version: string | null | undefined, config = this.current): UpdateStatus {
     return updateStatus(config, version);

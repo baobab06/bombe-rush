@@ -5737,6 +5737,26 @@ class UpdateService {
     this.loadedAt = this.now();
     return s;
   }
+  async applyBundled(b) {
+    const rev = typeof b?.rev === "string" ? b.rev.slice(0, 64) : "";
+    if (!rev || !b?.config)
+      return false;
+    try {
+      if (await this.store.get(KEY + ":rev") === rev)
+        return false;
+      const r = await this.save(b.config);
+      if (!r.ok) {
+        console.warn("mises à jour : annonce du serveur invalide —", r.error);
+        return false;
+      }
+      await this.store.set(KEY + ":rev", rev);
+      console.log(`mises à jour : annonce « ${rev} » publiée (dernière ${r.config.latestVersion})`);
+      return true;
+    } catch (e) {
+      console.warn("mises à jour : annonce non appliquée", e.message);
+      return false;
+    }
+  }
   statusOf(version, config = this.current) {
     return updateStatus(config, version);
   }
@@ -6624,6 +6644,26 @@ function leaderboardRoutes(svc, adminToken, corsOrigin) {
     }
   };
 }
+// server/announce.json
+var announce_default = {
+  rev: "2026-11-09-v1.12.1",
+  config: {
+    enabled: true,
+    latestVersion: "1.12.1",
+    minVersion: "1.0.0",
+    mandatory: false,
+    title: "Nouvelle mise à jour !",
+    description: "La version 1.12.1 de Bombe Rush est disponible sur le Play Store.",
+    notes: [
+      { kind: "new", text: "Tutoriel pour les nouveaux joueurs, avec un terrain d'entraînement." },
+      { kind: "fix", text: "Vidéos récompensées réparées : tu peux de nouveau gagner des pièces en regardant une vidéo." },
+      { kind: "improve", text: "Bots plus malins (surtout en Domination) et niveaux de difficulté rééquilibrés." },
+      { kind: "improve", text: "Menus mieux affichés sur tous les écrans." }
+    ],
+    storeUrl: "https://play.google.com/store/apps/details?id=com.bomberush.game",
+    push: null
+  }
+};
 
 // src/meta/profile.ts
 var DEFAULT_CHARACTERS = ["renard", "boulon", "rainette", "kage", "champi", "bruno"];
@@ -6943,6 +6983,7 @@ var accountStore = storeFromEnv();
 var googleClientIds = [process.env.GOOGLE_WEB_CLIENT_ID, ...(process.env.GOOGLE_EXTRA_CLIENT_IDS ?? "").split(",")].map((s) => s?.trim()).filter((s) => !!s);
 var accounts = accountStore && googleClientIds.length ? new Accounts(accountStore, new GoogleVerifier(googleClientIds, process.env.GOOGLE_JWKS_URL || undefined), (d) => migrate(d)) : null;
 var updates = new UpdateService(accountStore ?? new MemoryStore);
+updates.applyBundled(announce_default);
 var updateApi = updateRoutes(updates, process.env.ADMIN_TOKEN, (req) => allowedOrigin(req.headers.origin, req.headers.host));
 var leaderboard = new LeaderboardService(accountStore ?? new MemoryStore);
 var lbApi = leaderboardRoutes(leaderboard, process.env.ADMIN_TOKEN, (req) => allowedOrigin(req.headers.origin, req.headers.host));
