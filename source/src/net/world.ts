@@ -8,6 +8,7 @@
  * L'identifiant et la clé du joueur sont dans le profil (donc dans la
  * sauvegarde en ligne) et recopiés dans le stockage local par sécurité.
  */
+import type { Difficulty } from "../core/types";
 import type { Profile } from "../meta/profile";
 import { serverBase } from "./config";
 import type { RankedSpec } from "./replay";
@@ -19,6 +20,8 @@ const TICKET_TIMEOUT = 2500;
 export interface WorldTicket {
   ticket: string;
   seed: number;
+  modeId: string;
+  bots: Difficulty[];
 }
 export interface WorldResult {
   ok: boolean;
@@ -117,15 +120,19 @@ export class WorldRank {
     return !!serverBase();
   }
 
-  /** Ticket pour une partie classée ; undefined = partie non classée au niveau mondial (hors ligne…). */
-  async ticket(modeId: string, stake: string, bots: number): Promise<WorldTicket | undefined> {
+  /**
+   * Ticket d'une partie de Compétition : le serveur choisit la graine, le mode
+   * (tiré au hasard) et le niveau des adversaires. undefined = hors ligne
+   * (la partie se joue quand même, sans compter au classement mondial).
+   */
+  async ticket(): Promise<WorldTicket | undefined> {
     if (!this.available) return undefined;
     await this.flush();
     const p = this.profile();
     let late = false;
-    const req = call<{ id: string; secret?: string; ticket: string; seed: number }>(
+    const req = call<{ id: string; secret?: string; ticket: string; seed: number; modeId: string; bots: Difficulty[] }>(
       "/api/lb/ticket",
-      { method: "POST", body: JSON.stringify({ id: p.world.id || undefined, secret: p.world.secret || undefined, name: p.name, modeId, stake, bots }) },
+      { method: "POST", body: JSON.stringify({ id: p.world.id || undefined, secret: p.world.secret || undefined, name: p.name, comp: 2, pts: p.rank.points }) },
       15000,
     ).then((r) => {
       if (r.secret) {
@@ -140,11 +147,11 @@ export class WorldRank {
     });
     req.catch(() => {});
     const t = await Promise.race([req, new Promise<null>((ok) => setTimeout(() => ok(null), TICKET_TIMEOUT))]).catch(() => null);
-    if (!t) {
+    if (!t || !Array.isArray(t.bots) || typeof t.modeId !== "string") {
       late = true;
       return undefined;
     }
-    return { ticket: t.ticket, seed: t.seed };
+    return { ticket: t.ticket, seed: t.seed, modeId: t.modeId, bots: t.bots };
   }
 
   /** Partie terminée : envoi au serveur (gardé jusqu'à réussite). */

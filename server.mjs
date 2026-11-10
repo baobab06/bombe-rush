@@ -5862,78 +5862,6 @@ function updateRoutes(svc, adminToken, corsOrigin) {
 // server/leaderboard.ts
 import { createHash as createHash4, randomBytes as randomBytes2, timingSafeEqual as timingSafeEqual2 } from "node:crypto";
 
-// src/meta/progress-config.ts
-var LEVEL_MAX = 100;
-function levelXp(level) {
-  const k = level - 1;
-  return Math.round((100 + 20 * k + 0.9 * k * k) / 5) * 5;
-}
-var MASTERY_MAX = 50;
-function masteryXp(level) {
-  const k = level - 1;
-  return Math.round((60 + 8 * k + 0.35 * k * k) / 5) * 5;
-}
-var CHEST_ORDER = ["common", "rare", "epic", "legend"];
-var RANKS = [
-  { id: "bronze", name: "Bronze", icon: "\uD83E\uDD49", color: "#d08a4c", min: 0, reward: [] },
-  { id: "argent", name: "Argent", icon: "\uD83E\uDD48", color: "#c9d6e3", min: 150, reward: [{ kind: "chest", tier: "rare" }] },
-  { id: "or", name: "Or", icon: "\uD83E\uDD47", color: "#ffd23f", min: 400, reward: [{ kind: "chest", tier: "rare" }, { kind: "coins", amount: 300 }] },
-  { id: "platine", name: "Platine", icon: "\uD83D\uDCA0", color: "#5fe0d0", min: 800, reward: [{ kind: "chest", tier: "epic" }] },
-  { id: "diamant", name: "Diamant", icon: "\uD83D\uDC8E", color: "#7cc7ff", min: 1300, reward: [{ kind: "item", id: "title-diamond" }, { kind: "chest", tier: "epic" }] },
-  { id: "elite", name: "Élite", icon: "\uD83D\uDC51", color: "#ff5fa2", min: 2000, reward: [{ kind: "item", id: "title-elite" }, { kind: "item", id: "boom-gold" }, { kind: "chest", tier: "legend" }] }
-];
-var RANK_RULES = {
-  places: [20, 8, -4, -10],
-  difficulty: { easy: 0.5, normal: 1, hard: 1.5, expert: 2 },
-  perOpponent: 1 / 3,
-  protectedRanks: ["bronze"],
-  solo: true,
-  online: false,
-  historySize: 15
-};
-var A = (id, icon, name, desc, stat, goal, ...reward) => ({ id, icon, name, desc, stat, goal, reward });
-var C = (amount) => ({ kind: "coins", amount });
-var CH = (tier) => ({ kind: "chest", tier });
-var IT = (id) => ({ kind: "item", id });
-var ACHIEVEMENTS = [
-  A("first-game", "\uD83C\uDFAE", "Premier pas", "Joue ta première partie", "played", 1, C(50)),
-  A("played-25", "\uD83C\uDFAE", "On y prend goût", "Joue {n} parties", "played", 25, C(200)),
-  A("played-100", "\uD83C\uDFAE", "Habitué", "Joue {n} parties", "played", 100, IT("title-regular"), C(400)),
-  A("played-500", "\uD83C\uDFAE", "Pilier de l'arène", "Joue {n} parties", "played", 500, IT("boom-veteran"), CH("epic")),
-  A("first-win", "\uD83C\uDFC6", "Première victoire", "Gagne ta première partie", "wins", 1, C(100)),
-  A("wins-10", "\uD83C\uDFC6", "Gagnant", "Gagne {n} parties", "wins", 10, C(250)),
-  A("wins-50", "\uD83C\uDFC6", "Champion", "Gagne {n} parties", "wins", 50, IT("title-champion"), CH("rare")),
-  A("wins-200", "\uD83C\uDFC6", "Invincible", "Gagne {n} parties", "wins", 200, IT("title-unbeatable"), CH("legend")),
-  A("kills-25", "\uD83D\uDCA5", "Pas de pitié", "Élimine {n} adversaires", "kills", 25, C(150)),
-  A("kills-250", "\uD83D\uDCA5", "Chasseur", "Élimine {n} adversaires", "kills", 250, IT("title-hunter"), CH("rare")),
-  A("blocks-500", "\uD83E\uDDF1", "Bûcheron", "Détruis {n} blocs", "blocks", 500, C(150)),
-  A("blocks-5000", "\uD83E\uDDF1", "Démolisseur", "Détruis {n} blocs", "blocks", 5000, IT("title-demolisher"), CH("rare")),
-  A("bombs-1000", "\uD83D\uDCA3", "Artificier fou", "Pose {n} bombes", "bombs", 1000, CH("rare")),
-  A("bonus-200", "⭐", "Ramasse-tout", "Ramasse {n} bonus", "bonuses", 200, C(250)),
-  A("streak-3", "\uD83D\uDD25", "En forme", "Gagne {n} parties d'affilée", "bestStreak", 3, C(100)),
-  A("streak-5", "\uD83D\uDD25", "En feu", "Gagne {n} parties d'affilée", "bestStreak", 5, CH("rare")),
-  A("streak-10", "\uD83D\uDD25", "Inarrêtable", "Gagne {n} parties d'affilée", "bestStreak", 10, IT("title-unstoppable"), CH("epic")),
-  A("level-10", "⬆️", "Niveau 10", "Atteins le niveau {n}", "level", 10, C(200)),
-  A("level-25", "⬆️", "Niveau 25", "Atteins le niveau {n}", "level", 25, CH("epic")),
-  A("level-50", "⬆️", "Niveau 50", "Atteins le niveau {n}", "level", 50, CH("legend")),
-  A("mastery-10", "\uD83C\uDF96️", "Spécialiste", "Monte un personnage au niveau de maîtrise {n}", "bestMastery", 10, C(300)),
-  A("mastery-30", "\uD83C\uDF96️", "Virtuose", "Monte un personnage au niveau de maîtrise {n}", "bestMastery", 30, CH("epic")),
-  A("chars-7", "\uD83E\uDDD1‍\uD83E\uDD1D‍\uD83E\uDDD1", "Touche-à-tout", "Joue avec {n} personnages différents", "charsPlayed", 7, IT("title-jack"), C(300)),
-  A("owned-25", "\uD83C\uDF92", "Garde-robe", "Possède {n} objets", "owned", 25, C(300)),
-  A("owned-60", "\uD83C\uDF92", "Collectionneur", "Possède {n} objets", "owned", 60, IT("title-collector"), CH("epic")),
-  A("chests-10", "\uD83C\uDF81", "Chasseur de trésors", "Ouvre {n} coffres", "chests", 10, CH("rare")),
-  A("missions-20", "\uD83C\uDFAF", "Appliqué", "Récupère {n} missions", "missions", 20, C(400)),
-  A("expert-1", "\uD83D\uDC80", "Sans peur", "Gagne une partie en Expert", "expertWins", 1, C(300)),
-  A("expert-10", "\uD83D\uDC80", "Expert", "Gagne {n} parties en Expert", "expertWins", 10, IT("title-expert"), CH("epic")),
-  A("chaos-10", "\uD83C\uDF2A️", "Amateur de chaos", "Joue {n} parties en mode Chaos", "chaos", 10, C(250)),
-  A("online-5", "\uD83C\uDF10", "Entre amis", "Joue {n} parties privées en ligne", "online", 5, C(250)),
-  A("rank-or", "\uD83E\uDD47", "Doré", "Atteins le rang Or", "rank", 2, C(300)),
-  A("rank-diamant", "\uD83D\uDC8E", "Brillant", "Atteins le rang Diamant", "rank", 4, CH("epic")),
-  A("login-7", "\uD83D\uDCC5", "Fidèle", "Connecte-toi {n} jours", "loginDays", 7, C(200)),
-  A("login-30", "\uD83D\uDCC5", "Inséparable", "Connecte-toi {n} jours", "loginDays", 30, CH("epic")),
-  A("rich", "\uD83E\uDE99", "Fortune", "Gagne {n} pièces au total", "coinsEarned", 20000, CH("rare"))
-];
-
 // src/core/cosmetics.ts
 var ACCESSORIES = [
   { id: "acc-cap", wear: "cap", name: "Casquette", rarity: "common", desc: "Visière vers l'avant, comme un pro." },
@@ -6130,6 +6058,96 @@ function getItem(id) {
   return id ? byId.get(id) : undefined;
 }
 
+// src/meta/progress-config.ts
+var LEVEL_MAX = 100;
+function levelXp(level) {
+  const k = level - 1;
+  return Math.round((100 + 20 * k + 0.9 * k * k) / 5) * 5;
+}
+var MASTERY_MAX = 50;
+function masteryXp(level) {
+  const k = level - 1;
+  return Math.round((60 + 8 * k + 0.35 * k * k) / 5) * 5;
+}
+var CHEST_ORDER = ["common", "rare", "epic", "legend"];
+var RANKS = [
+  { id: "bronze", name: "Bronze", icon: "\uD83E\uDD49", color: "#d08a4c", min: 0, reward: [] },
+  { id: "argent", name: "Argent", icon: "\uD83E\uDD48", color: "#c9d6e3", min: 150, reward: [{ kind: "chest", tier: "rare" }] },
+  { id: "or", name: "Or", icon: "\uD83E\uDD47", color: "#ffd23f", min: 350, reward: [{ kind: "chest", tier: "rare" }, { kind: "coins", amount: 300 }] },
+  { id: "platine", name: "Platine", icon: "\uD83D\uDCA0", color: "#5fe0d0", min: 600, reward: [{ kind: "chest", tier: "epic" }] },
+  { id: "diamant", name: "Diamant", icon: "\uD83D\uDC8E", color: "#7cc7ff", min: 900, reward: [{ kind: "item", id: "title-diamond" }, { kind: "chest", tier: "epic" }] },
+  { id: "elite", name: "Élite", icon: "\uD83D\uDC51", color: "#ff5fa2", min: 1300, reward: [{ kind: "item", id: "title-elite" }, { kind: "item", id: "boom-gold" }, { kind: "chest", tier: "legend" }] }
+];
+var RANK_RULES = {
+  places: [20, 10, -10, -20],
+  team: { win: 15, loss: -15, draw: 0 },
+  softUnder: 100,
+  softFactor: 0.5,
+  divisions: 3,
+  lastSpan: 600,
+  divisionCoins: 100,
+  modes: ["classic", "chaos", "koth"],
+  teamModes: ["koth"],
+  bots: 3,
+  botsByStep: [
+    "eee",
+    "eee",
+    "een",
+    "enn",
+    "nnn",
+    "nnh",
+    "nhh",
+    "hhh",
+    "hhx",
+    "hxx",
+    "xxx"
+  ],
+  historySize: 15,
+  season: 2
+};
+var A = (id, icon, name, desc, stat, goal, ...reward) => ({ id, icon, name, desc, stat, goal, reward });
+var C = (amount) => ({ kind: "coins", amount });
+var CH = (tier) => ({ kind: "chest", tier });
+var IT = (id) => ({ kind: "item", id });
+var ACHIEVEMENTS = [
+  A("first-game", "\uD83C\uDFAE", "Premier pas", "Joue ta première partie", "played", 1, C(50)),
+  A("played-25", "\uD83C\uDFAE", "On y prend goût", "Joue {n} parties", "played", 25, C(200)),
+  A("played-100", "\uD83C\uDFAE", "Habitué", "Joue {n} parties", "played", 100, IT("title-regular"), C(400)),
+  A("played-500", "\uD83C\uDFAE", "Pilier de l'arène", "Joue {n} parties", "played", 500, IT("boom-veteran"), CH("epic")),
+  A("first-win", "\uD83C\uDFC6", "Première victoire", "Gagne ta première partie", "wins", 1, C(100)),
+  A("wins-10", "\uD83C\uDFC6", "Gagnant", "Gagne {n} parties", "wins", 10, C(250)),
+  A("wins-50", "\uD83C\uDFC6", "Champion", "Gagne {n} parties", "wins", 50, IT("title-champion"), CH("rare")),
+  A("wins-200", "\uD83C\uDFC6", "Invincible", "Gagne {n} parties", "wins", 200, IT("title-unbeatable"), CH("legend")),
+  A("kills-25", "\uD83D\uDCA5", "Pas de pitié", "Élimine {n} adversaires", "kills", 25, C(150)),
+  A("kills-250", "\uD83D\uDCA5", "Chasseur", "Élimine {n} adversaires", "kills", 250, IT("title-hunter"), CH("rare")),
+  A("blocks-500", "\uD83E\uDDF1", "Bûcheron", "Détruis {n} blocs", "blocks", 500, C(150)),
+  A("blocks-5000", "\uD83E\uDDF1", "Démolisseur", "Détruis {n} blocs", "blocks", 5000, IT("title-demolisher"), CH("rare")),
+  A("bombs-1000", "\uD83D\uDCA3", "Artificier fou", "Pose {n} bombes", "bombs", 1000, CH("rare")),
+  A("bonus-200", "⭐", "Ramasse-tout", "Ramasse {n} bonus", "bonuses", 200, C(250)),
+  A("streak-3", "\uD83D\uDD25", "En forme", "Gagne {n} parties d'affilée", "bestStreak", 3, C(100)),
+  A("streak-5", "\uD83D\uDD25", "En feu", "Gagne {n} parties d'affilée", "bestStreak", 5, CH("rare")),
+  A("streak-10", "\uD83D\uDD25", "Inarrêtable", "Gagne {n} parties d'affilée", "bestStreak", 10, IT("title-unstoppable"), CH("epic")),
+  A("level-10", "⬆️", "Niveau 10", "Atteins le niveau {n}", "level", 10, C(200)),
+  A("level-25", "⬆️", "Niveau 25", "Atteins le niveau {n}", "level", 25, CH("epic")),
+  A("level-50", "⬆️", "Niveau 50", "Atteins le niveau {n}", "level", 50, CH("legend")),
+  A("mastery-10", "\uD83C\uDF96️", "Spécialiste", "Monte un personnage au niveau de maîtrise {n}", "bestMastery", 10, C(300)),
+  A("mastery-30", "\uD83C\uDF96️", "Virtuose", "Monte un personnage au niveau de maîtrise {n}", "bestMastery", 30, CH("epic")),
+  A("chars-7", "\uD83E\uDDD1‍\uD83E\uDD1D‍\uD83E\uDDD1", "Touche-à-tout", "Joue avec {n} personnages différents", "charsPlayed", 7, IT("title-jack"), C(300)),
+  A("owned-25", "\uD83C\uDF92", "Garde-robe", "Possède {n} objets", "owned", 25, C(300)),
+  A("owned-60", "\uD83C\uDF92", "Collectionneur", "Possède {n} objets", "owned", 60, IT("title-collector"), CH("epic")),
+  A("chests-10", "\uD83C\uDF81", "Chasseur de trésors", "Ouvre {n} coffres", "chests", 10, CH("rare")),
+  A("missions-20", "\uD83C\uDFAF", "Appliqué", "Récupère {n} missions", "missions", 20, C(400)),
+  A("expert-1", "\uD83D\uDC80", "Sans peur", "Gagne une partie en Expert", "expertWins", 1, C(300)),
+  A("expert-10", "\uD83D\uDC80", "Expert", "Gagne {n} parties en Expert", "expertWins", 10, IT("title-expert"), CH("epic")),
+  A("chaos-10", "\uD83C\uDF2A️", "Amateur de chaos", "Joue {n} parties en mode Chaos", "chaos", 10, C(250)),
+  A("online-5", "\uD83C\uDF10", "Entre amis", "Joue {n} parties privées en ligne", "online", 5, C(250)),
+  A("rank-or", "\uD83E\uDD47", "Doré", "Atteins le rang Or", "rank", 2, C(300)),
+  A("rank-diamant", "\uD83D\uDC8E", "Brillant", "Atteins le rang Diamant", "rank", 4, CH("epic")),
+  A("login-7", "\uD83D\uDCC5", "Fidèle", "Connecte-toi {n} jours", "loginDays", 7, C(200)),
+  A("login-30", "\uD83D\uDCC5", "Inséparable", "Connecte-toi {n} jours", "loginDays", 30, CH("epic")),
+  A("rich", "\uD83E\uDE99", "Fortune", "Gagne {n} pièces au total", "coinsEarned", 20000, CH("rare"))
+];
+
 // src/meta/rank.ts
 function rankIndex(points) {
   let i = 0;
@@ -6138,10 +6156,48 @@ function rankIndex(points) {
       i = k;
   return i;
 }
-function rankDelta(column, stake, players) {
-  const base = RANK_RULES.places[Math.min(4, Math.max(1, column)) - 1];
-  const opp = Math.min(1, Math.max(1, players - 1) * RANK_RULES.perOpponent);
-  return Math.round(base * (RANK_RULES.difficulty[stake] ?? 1) * opp);
+var ROMAN = ["I", "II", "III", "IV", "V"];
+var STEPS = RANKS.flatMap((r, li) => {
+  const span = (RANKS[li + 1]?.min ?? r.min + RANK_RULES.lastSpan) - r.min;
+  return Array.from({ length: RANK_RULES.divisions }, (_, d) => ({
+    index: li * RANK_RULES.divisions + d,
+    league: li,
+    div: d + 1,
+    id: d === 0 ? r.id : `${r.id}-${d + 1}`,
+    name: `${r.name} ${ROMAN[d]}`,
+    min: r.min + Math.round(span * d / RANK_RULES.divisions / 10) * 10,
+    rank: r,
+    reward: d === 0 ? r.reward : [{ kind: "coins", amount: RANK_RULES.divisionCoins }]
+  }));
+});
+function stepIndex(points) {
+  let i = 0;
+  for (let k = 0;k < STEPS.length; k++)
+    if (points >= STEPS[k].min)
+      i = k;
+  return i;
+}
+var isTeamMode = (modeId) => RANK_RULES.teamModes.includes(modeId ?? "");
+function trophyDelta(column, points, modeId, draw = false) {
+  const c = Math.min(4, Math.max(1, Math.round(column)));
+  let d;
+  if (isTeamMode(modeId))
+    d = draw ? RANK_RULES.team.draw : c === 1 ? RANK_RULES.team.win : RANK_RULES.team.loss;
+  else
+    d = RANK_RULES.places[c - 1];
+  if (d < 0 && points < RANK_RULES.softUnder)
+    d = -Math.round(-d * RANK_RULES.softFactor);
+  return Math.max(-points, d);
+}
+var LETTER = { e: "easy", n: "normal", h: "hard", x: "expert" };
+function compBots(points) {
+  const t = RANK_RULES.botsByStep;
+  const row = t[Math.min(stepIndex(points), t.length - 1)];
+  return [...row].slice(0, RANK_RULES.bots).map((c) => LETTER[c] ?? "normal");
+}
+function compMode(rand = Math.random) {
+  const m = RANK_RULES.modes;
+  return m[Math.min(m.length - 1, Math.floor(rand() * m.length))];
 }
 
 // src/meta/rewards.ts
@@ -6192,16 +6248,15 @@ function checkSpec(s, expect) {
       return "joueurs";
     if (i > 0 && !DIFFICULTIES.includes(p.difficulty))
       return "difficulté";
-    if (i > 0 && p.difficulty !== ps[1].difficulty)
-      return "difficulté";
   }
   if (expect) {
     if (expect.modeId !== s.modeId)
       return "mode";
-    if (expect.stake !== ps[1].difficulty)
-      return "difficulté";
-    if (expect.bots !== ps.length - 1)
+    if (expect.bots.length !== ps.length - 1)
       return "joueurs";
+    for (let i = 1;i < ps.length; i++)
+      if (ps[i].difficulty !== expect.bots[i - 1])
+        return "difficulté";
   }
   return null;
 }
@@ -6281,7 +6336,7 @@ class Replay {
 }
 
 // server/leaderboard.ts
-var KEY2 = "lb:v1";
+var KEY2 = "lb:v2";
 function weekOf(t) {
   const d = new Date(t);
   const day = (d.getUTCDay() + 6) % 7;
@@ -6374,15 +6429,13 @@ class LeaderboardService {
     this.doc.players[id] = p;
     return { id, secret, p };
   }
-  score(p, column, stake, players, won) {
+  score(p, column, mode, won, draw = false) {
     const wk = weekOf(this.now());
     if (p.wk !== wk) {
       p.wk = wk;
       p.w = 0;
     }
-    let delta = rankDelta(column, stake, players);
-    if (delta < 0 && RANK_RULES.protectedRanks.includes(RANKS[rankIndex(p.p)].id))
-      delta = 0;
+    const delta = trophyDelta(column, p.p, mode, draw);
     const before = p.p;
     p.p = Math.max(0, p.p + delta);
     p.w = Math.max(0, p.w + delta);
@@ -6400,16 +6453,13 @@ class LeaderboardService {
     p.t = null;
     if (this.now() - t.at < ABANDON_AFTER_MS)
       return;
-    this.score(p, columnOf({ place: t.bots + 1, players: t.bots + 1, abandon: true }), t.stake, t.bots + 1, false);
+    this.score(p, 4, t.mode, false);
   }
   async ticket(b, canCreate) {
     await this.ready();
     this.rollWeek();
-    const modeId = String(b.modeId ?? "");
-    const stake = String(b.stake ?? "");
-    const bots = Number(b.bots);
-    if (!RANKED_MODES.includes(modeId) || !DIFFICULTIES.includes(stake) || !Number.isInteger(bots) || bots < 1 || bots > 3)
-      return { error: "partie non classée", status: 400 };
+    if (b.comp !== 2)
+      return { error: "Mets le jeu à jour pour jouer en Compétition.", status: 400 };
     let id = typeof b.id === "string" ? b.id : "";
     let secret;
     let p = this.player(b.id, b.secret);
@@ -6421,11 +6471,12 @@ class LeaderboardService {
     }
     p.n = cleanLbName(b.name ?? p.n);
     this.settleOpen(p);
-    const t = { id: randomBytes2(8).toString("base64url"), seed: randomBytes2(4).readUInt32BE(0) >>> 1, at: this.now(), mode: modeId, stake, bots: modeId === "koth" ? 3 : bots };
+    const local = Math.max(0, Math.min(1e5, Math.floor(Number(b.pts) || 0)));
+    const t = { id: randomBytes2(8).toString("base64url"), seed: randomBytes2(4).readUInt32BE(0) >>> 1, at: this.now(), mode: compMode(() => randomBytes2(4).readUInt32BE(0) / 2 ** 32), bots: compBots(Math.max(p.p, local)) };
     p.t = t;
     p.s = this.now();
     this.touch();
-    return { id, secret, ticket: t.id, seed: t.seed };
+    return { id, secret, ticket: t.id, seed: t.seed, modeId: t.mode, bots: t.bots, points: p.p };
   }
   async cancel(b) {
     await this.ready();
@@ -6446,10 +6497,10 @@ class LeaderboardService {
     if (!t || t.id !== b.ticket)
       return { ok: false, error: "ticket inconnu ou déjà utilisé", status: 409 };
     const spec = b.spec;
-    const bad = checkSpec(spec, { modeId: t.mode, stake: t.stake, bots: t.bots });
+    const bad = checkSpec(spec, { modeId: t.mode, bots: t.bots });
     if (bad || spec.seed !== t.seed) {
       p.t = null;
-      this.score(p, columnOf({ place: t.bots + 1, players: t.bots + 1, abandon: true }), t.stake, t.bots + 1, false);
+      this.score(p, 4, t.mode, false);
       return { ok: false, error: "partie invalide (" + (bad ?? "graine") + ")", status: 400 };
     }
     if (this.queue.length > 40)
@@ -6473,7 +6524,7 @@ class LeaderboardService {
     }
     if (b.name !== undefined)
       p.n = cleanLbName(b.name);
-    const delta = this.score(p, columnOf(pl), t.stake, out.players, won);
+    const delta = this.score(p, columnOf(pl), t.mode, won, !!pl.draw);
     return { ok: true, delta, points: p.p, week: p.w, place: pl.abandon ? null : pl.place, draw: !!pl.draw, note, pos: this.position(b.id, "all"), weekPos: this.position(b.id, "week") };
   }
   enqueue(spec, log) {
@@ -6698,7 +6749,7 @@ function defaultProfile() {
     mastery: {},
     achievements: {},
     chests: { common: 0, rare: 0, epic: 0, legend: 0 },
-    rank: { points: 0, best: 0, rewarded: ["bronze"], history: [] },
+    rank: { points: 0, best: 0, bestPoints: 0, rewarded: ["bronze"], history: [], season: 2 },
     stats: { bestWinStreak: 0, expertWins: 0, hardWins: 0, chaosPlayed: 0, onlinePlayed: 0, chestsOpened: 0, missionsClaimed: 0, loginDays: 0 },
     levelRewardsUpTo: 1,
     clock: { max: 0, offset: 0 },
@@ -6712,7 +6763,7 @@ function defaultProfile() {
     pending: null,
     ledger: [],
     winStreak: 0,
-    lastSetup: { botCount: 3, difficulty: "normal", mapId: "forest", modeId: "classic" },
+    lastSetup: { botCount: 3, difficulty: "normal", mapId: "forest", modeId: "classic", comp: true },
     settings: { music: true, sfx: true, vibration: true }
   };
 }
@@ -6800,6 +6851,18 @@ function migrate(data) {
   if (!Array.isArray(p.rank.rewarded))
     p.rank.rewarded = ["bronze"];
   p.rank.points = Math.max(0, Math.floor(Number(p.rank.points) || 0));
+  if (data.rank?.season !== RANK_RULES.season) {
+    p.rank.season = RANK_RULES.season;
+    p.rank.points = 0;
+    p.rank.best = 0;
+    p.rank.bestPoints = 0;
+    p.rank.history = [];
+    if (p.lastSetup)
+      p.lastSetup.comp = true;
+    if (p.world)
+      p.world.points = p.world.pos = 0;
+  }
+  p.rank.bestPoints = Math.max(0, Math.floor(Number(p.rank.bestPoints) || 0), p.rank.points);
   for (const k of Object.keys(base.stats))
     p.stats[k] = Math.max(0, Math.floor(Number(p.stats[k]) || 0));
   p.stats.bestWinStreak = Math.max(p.stats.bestWinStreak, Math.floor(Number(data.winStreak) || 0));

@@ -10,7 +10,7 @@ import {
   ACHIEVEMENTS, CHESTS, CHEST_ORDER, LEVEL_MAX, LEVEL_REWARDS, LEVEL_UP_COINS, LOGIN_REWARDS, MASTERY_STEPS, RANKS, STREAK_BONUSES,
   WEEKLY_PER_WEEK, XP_BY_PLACE, levelXp, masteryXp,
 } from "../src/meta/progress-config";
-import { isRanked, rankDelta, rankIndex } from "../src/meta/rank";
+import { STEPS, compBots, rankIndex, rankProgress, stepOf, trophyDelta } from "../src/meta/rank";
 import { settleAbandoned, beginMatch } from "../src/meta/rewards";
 import { SaveSystem, memoryBackend, migrate } from "../src/meta/save";
 import { buy, claimDaily, claimMission, dailyState, ensureMissions, equip, isEquipped, owns } from "../src/meta/store";
@@ -31,7 +31,7 @@ const O = (place: number, o: Partial<{ won: boolean; draw: boolean; kills: numbe
   bonusesPicked: 3, survivalTime: 70, modeId: o.modeId ?? "classic", characterId: o.characterId ?? "renard",
 });
 let mid = 0;
-const C = (stake: "easy" | "normal" | "hard" | "expert" = "normal", online = false) => ({ matchId: `t${++mid}`, stake, modeId: "classic", online });
+const C = (stake: "easy" | "normal" | "hard" | "expert" = "normal", online = false, comp = false, modeId = "classic") => ({ matchId: `t${++mid}`, stake, modeId, online, comp });
 
 console.log("1. XP après chaque partie (selon la place)");
 for (let place = 1; place <= 4; place++) {
@@ -226,32 +226,60 @@ console.log("11. Équipement conservé après rechargement");
   check(b.equipped.boom === "boom-neon" && b.equipped.title === "title-lucky" && isEquipped(b, "title-lucky"), "explosion et titre équipés relus");
 }
 
-console.log("12. Rang : vraie valeur calculée, pas inventée");
+console.log("12. Compétition : trophées, ligues et divisions");
 {
   const p = defaultProfile();
-  check(p.rank.points === 0 && rankIndex(0) === 0, "départ : Bronze, 0 point");
-  const s = applyMatch(p, O(1), C("normal"), day(5))!;
-  check(s.tx.rank?.delta === 20 && p.rank.points === 20 && p.rank.history.length === 1, "1er en Normal à 4 : +20 points");
-  const s2 = applyMatch(p, O(4), C("normal"), day(5))!;
-  check(s2.tx.rank?.delta === 0 && s2.tx.rank.protected && p.rank.points === 20, "en Bronze, une défaite ne fait rien perdre");
+  check(p.rank.points === 0 && stepOf(0).name === "Bronze I", "départ : 0 trophée, Bronze I");
+  const free = applyMatch(p, O(1), C("normal"), day(5))!;
+  check(!free.tx.rank && p.rank.points === 0, "partie libre : aucun trophée en jeu");
+  const s = applyMatch(p, O(1), C("easy", false, true), day(5))!;
+  check(s.tx.rank?.delta === 20 && p.rank.points === 20 && p.rank.history.length === 1, "1er en Compétition : +20 trophées");
+  applyMatch(p, O(2), C("easy", false, true), day(5));
+  check(p.rank.points === 30, "2e : +10");
+  const s3 = applyMatch(p, O(3), C("easy", false, true), day(5))!;
+  check(s3.tx.rank?.delta === -5 && s3.tx.rank.protected && p.rank.points === 25, "débutant (moins de 100 trophées) : 3e = −5 seulement");
+  applyMatch(p, O(4), C("easy", false, true), day(5));
+  check(p.rank.points === 15, "débutant : 4e = −10");
+  p.rank.points = 5;
+  applyMatch(p, O(4), C("easy", false, true), day(5));
+  check(p.rank.points === 0, "jamais sous 0 trophée");
   p.rank.points = 500;
-  const s3 = applyMatch(p, O(4), C("hard"), day(5))!;
-  check(s3.tx.rank?.delta === -15 && p.rank.points === 485, "en Or, 4e en Difficile : −15");
-  const s4 = applyMatch(p, O(1), C("normal", true), day(5))!;
-  check(!s4.tx.rank && p.rank.points === 485 && !isRanked(true), "partie privée en ligne : non classée");
-  check(rankDelta(1, "normal", 2) === 7 && rankDelta(1, "normal", 4) === 20, "1 contre 1 : moins de points (+7)");
+  applyMatch(p, O(3), C("hard", false, true), day(5));
+  check(p.rank.points === 490, "au-dessus de 100 : 3e = −10");
+  applyMatch(p, O(4), C("hard", false, true), day(5));
+  check(p.rank.points === 470, "4e = −20");
+  const on = applyMatch(p, O(1), C("normal", true, true), day(5))!;
+  check(!on.tx.rank && p.rank.points === 470, "partie privée en ligne : pas de trophées");
+  check(trophyDelta(1, 500, "koth") === 15 && trophyDelta(4, 500, "koth") === -15 && trophyDelta(3, 500, "koth") === -15, "Domination (2 contre 2) : victoire +15, défaite −15");
+  check(STEPS.length === RANKS.length * 3 && STEPS.every((x, i) => i === 0 || x.min > STEPS[i - 1].min), `${STEPS.length} échelons croissants (3 divisions par ligue)`);
+  check(stepOf(149).name === "Bronze III" && stepOf(150).name === "Argent I" && rankIndex(150) === 1 && rankProgress(60).next?.name === "Bronze III", "divisions : Bronze III → Argent I à 150 trophées");
+  check(compBots(0).every((d) => d === "easy") && compBots(250).includes("normal") && compBots(450).includes("hard") && compBots(5000).every((d) => d === "expert"), "adversaires : faciles au début, de plus en plus forts ensuite");
+  let prev = 0;
+  const order = { easy: 0, normal: 1, hard: 2, expert: 3 } as Record<string, number>;
+  const mono = STEPS.every((x) => { const v = compBots(x.min).reduce((a, d) => a + order[d], 0); const ok = v >= prev; prev = v; return ok; });
+  check(mono, "la difficulté ne redescend jamais quand on monte");
   const q = defaultProfile();
   q.rank.points = RANKS[1].min - 5;
-  applyMatch(q, O(1), C("normal"), day(5));
+  applyMatch(q, O(1), C("normal", false, true), day(5));
   const chestsAfter = q.chests.rare;
   q.rank.points = RANKS[1].min - 5;
-  applyMatch(q, O(1), C("normal"), day(5));
-  check(chestsAfter >= 1 && q.chests.rare === chestsAfter, "récompense de rang donnée une seule fois");
+  applyMatch(q, O(1), C("normal", false, true), day(5));
+  check(chestsAfter >= 1 && q.chests.rare === chestsAfter, "récompense de ligue donnée une seule fois");
+  const d = defaultProfile();
+  const coins = d.coins;
+  d.rank.points = STEPS[1].min - 10;
+  const sd = applyMatch(d, O(1), C("easy", false, true), day(5))!;
+  check(sd.tx.rank!.stepAfter === 1 && sd.granted.some((g) => g.reward.kind === "coins") && d.coins > coins, "nouvelle division (Bronze II) : pièces offertes");
   const ab = defaultProfile();
   ab.rank.points = 900;
-  beginMatch(ab, { matchId: "ab", stake: "hard", modeId: "classic", players: 4 });
+  beginMatch(ab, { matchId: "ab", stake: "hard", modeId: "classic", players: 4, comp: true });
   settleAbandoned(ab);
-  check(ab.rank.points === 885, "abandon : compté comme dernière place pour le rang aussi");
+  check(ab.rank.points === 880, "abandon en Compétition : compté comme 4e (−20)");
+  const old = defaultProfile() as unknown as { rank: Record<string, unknown> };
+  old.rank.points = 777; delete old.rank.season;
+  const sv2 = new SaveSystem(memoryBackend());
+  sv2.save(old as never);
+  check(sv2.load().rank.points === 0 && sv2.load().rank.season === 2, "ancienne sauvegarde : tout le monde repart de 0 trophée (une seule fois)");
 }
 
 console.log("Séries de victoires");

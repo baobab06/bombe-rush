@@ -168,31 +168,47 @@ export interface RankDef {
 export const RANKS: RankDef[] = [
   { id: "bronze", name: "Bronze", icon: "🥉", color: "#d08a4c", min: 0, reward: [] },
   { id: "argent", name: "Argent", icon: "🥈", color: "#c9d6e3", min: 150, reward: [{ kind: "chest", tier: "rare" }] },
-  { id: "or", name: "Or", icon: "🥇", color: "#ffd23f", min: 400, reward: [{ kind: "chest", tier: "rare" }, { kind: "coins", amount: 300 }] },
-  { id: "platine", name: "Platine", icon: "💠", color: "#5fe0d0", min: 800, reward: [{ kind: "chest", tier: "epic" }] },
-  { id: "diamant", name: "Diamant", icon: "💎", color: "#7cc7ff", min: 1300, reward: [{ kind: "item", id: "title-diamond" }, { kind: "chest", tier: "epic" }] },
-  { id: "elite", name: "Élite", icon: "👑", color: "#ff5fa2", min: 2000, reward: [{ kind: "item", id: "title-elite" }, { kind: "item", id: "boom-gold" }, { kind: "chest", tier: "legend" }] },
+  { id: "or", name: "Or", icon: "🥇", color: "#ffd23f", min: 350, reward: [{ kind: "chest", tier: "rare" }, { kind: "coins", amount: 300 }] },
+  { id: "platine", name: "Platine", icon: "💠", color: "#5fe0d0", min: 600, reward: [{ kind: "chest", tier: "epic" }] },
+  { id: "diamant", name: "Diamant", icon: "💎", color: "#7cc7ff", min: 900, reward: [{ kind: "item", id: "title-diamond" }, { kind: "chest", tier: "epic" }] },
+  { id: "elite", name: "Élite", icon: "👑", color: "#ff5fa2", min: 1300, reward: [{ kind: "item", id: "title-elite" }, { kind: "item", id: "boom-gold" }, { kind: "chest", tier: "legend" }] },
 ];
+/**
+ * MODE COMPÉTITION : trophées.
+ * Chaque ligue (RANKS) est découpée en divisions I, II, III (voir rank.ts).
+ */
 export const RANK_RULES = {
-  /** points selon la colonne du barème : [1er, 2e, 3e, 4e] */
-  places: [20, 8, -4, -10],
-  /** multiplicateur selon la difficulté des bots */
-  difficulty: { easy: 0.5, normal: 1, hard: 1.5, expert: 2 } as Record<StakeId, number>,
+  /** trophées selon la place à 4 joueurs : [1er, 2e, 3e, 4e] */
+  places: [20, 10, -10, -20],
+  /** modes en équipe (Domination, 2 contre 2) : victoire / défaite / égalité */
+  team: { win: 15, loss: -15, draw: 0 },
+  /** débutants : sous ce nombre de trophées, les pertes sont divisées par deux */
+  softUnder: 100,
+  softFactor: 0.5,
+  /** divisions par ligue (Bronze I, II, III…) */
+  divisions: 3,
+  /** largeur de la dernière ligue (pour y placer ses divisions) */
+  lastSpan: 600,
+  /** pièces offertes à chaque nouvelle division atteinte (hors 1re division d'une ligue, qui a sa récompense) */
+  divisionCoins: 100,
+  /** modes tirés au hasard */
+  modes: ["classic", "chaos", "koth"],
+  teamModes: ["koth"],
+  /** toujours 4 joueurs */
+  bots: 3,
   /**
-   * moins d'adversaires = moins de points (1 bot : ×⅓, 2 bots : ×⅔, 3 bots : ×1)
-   * → impossible de monter vite en jouant à 1 contre 1.
+   * Niveau des 3 adversaires selon l'échelon (ligue × division) : facile au
+   * début, puis de plus en plus dur. Au-delà de la liste : la dernière ligne.
    */
-  perOpponent: 1 / 3,
-  /** pas de perte de points tant qu'on est dans ces rangs (débutants) */
-  protectedRanks: ["bronze"],
-  /** parties classées : contre les bots (résultat calculé sur l'appareil) */
-  solo: true,
-  /**
-   * Parties privées en ligne : NON classées tant que le serveur ne valide
-   * pas lui-même les résultats (sinon on pourrait gonfler son rang entre amis).
-   */
-  online: false,
+  botsByStep: [
+    "eee", "eee", "een",   // Bronze I, II, III
+    "enn", "nnn", "nnh",   // Argent
+    "nhh", "hhh", "hhx",   // Or
+    "hxx", "xxx",          // Platine I, II → ensuite tout en Expert
+  ],
   historySize: 15,
+  /** version du système : changer la valeur remet tout le monde à 0 trophée */
+  season: 2,
 };
 
 // ----------------------------------------------------------------- succès

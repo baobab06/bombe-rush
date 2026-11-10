@@ -1,6 +1,6 @@
 import { CHARACTERS } from "../core/characters";
 import { EMOTE_SLOTS, getBoom, getEmote, getTitle, getTrail } from "../core/cosmetics";
-import { CHEST_ORDER, LEVEL_MAX, levelXp, MASTERY_MAX, masteryXp } from "./progress-config";
+import { CHEST_ORDER, LEVEL_MAX, levelXp, MASTERY_MAX, masteryXp, RANK_RULES } from "./progress-config";
 import { getItem } from "./catalog";
 import { DEFAULT_CHARACTERS, defaultProfile, type Profile } from "./profile";
 
@@ -126,6 +126,17 @@ export function migrate(data: Partial<Profile> & { ownedSkins?: string[]; versio
   if (!Array.isArray(p.rank.history)) p.rank.history = [];
   if (!Array.isArray(p.rank.rewarded)) p.rank.rewarded = ["bronze"];
   p.rank.points = Math.max(0, Math.floor(Number(p.rank.points) || 0));
+  // nouveau mode Compétition (trophées) : tout le monde repart de 0, une seule fois
+  if (data.rank?.season !== RANK_RULES.season) {
+    p.rank.season = RANK_RULES.season;
+    p.rank.points = 0;
+    p.rank.best = 0;
+    p.rank.bestPoints = 0;
+    p.rank.history = [];
+    if (p.lastSetup) p.lastSetup.comp = true;
+    if (p.world) p.world.points = p.world.pos = 0;
+  }
+  p.rank.bestPoints = Math.max(0, Math.floor(Number(p.rank.bestPoints) || 0), p.rank.points);
   for (const k of Object.keys(base.stats) as (keyof typeof base.stats)[]) p.stats[k] = Math.max(0, Math.floor(Number(p.stats[k]) || 0));
   p.stats.bestWinStreak = Math.max(p.stats.bestWinStreak, Math.floor(Number(data.winStreak) || 0));
   if (data.stats === undefined) p.stats.loginDays = Math.max(p.stats.loginDays, Math.floor(Number(p.daily.streak) || 0));

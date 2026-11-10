@@ -32,6 +32,7 @@ export interface RankEntry {
   place: number;
   players: number;
   stake: string;
+  mode?: string;
   delta: number;
   points: number;
 }
@@ -93,7 +94,7 @@ export interface Profile {
   /** coffres en réserve */
   chests: Record<ChestTier, number>;
   /** rang compétitif local */
-  rank: { points: number; best: number; rewarded: string[]; history: RankEntry[] };
+  rank: { points: number; best: number; bestPoints?: number; rewarded: string[]; history: RankEntry[]; season?: number };
   stats: ExtraStats;
   /** niveaux dont la récompense a déjà été donnée */
   levelRewardsUpTo: number;
@@ -112,7 +113,7 @@ export interface Profile {
   /** dernières transactions de pièces (historique) */
   ledger: import("./rewards").CoinTransaction[];
   winStreak: number;
-  lastSetup: { botCount: number; difficulty: "easy" | "normal" | "hard" | "expert"; mapId: string; modeId: string };
+  lastSetup: { botCount: number; difficulty: "easy" | "normal" | "hard" | "expert"; mapId: string; modeId: string; comp?: boolean };
   /**
    * Tutoriel : « new » = jamais proposé, « offered » = proposé (réponse en
    * attente), « skipped » = passé, « done » = terminé. Sauvegardé avec le
@@ -163,7 +164,7 @@ export function defaultProfile(): Profile {
     mastery: {},
     achievements: {},
     chests: { common: 0, rare: 0, epic: 0, legend: 0 },
-    rank: { points: 0, best: 0, rewarded: ["bronze"], history: [] },
+    rank: { points: 0, best: 0, bestPoints: 0, rewarded: ["bronze"], history: [], season: 2 },
     stats: { bestWinStreak: 0, expertWins: 0, hardWins: 0, chaosPlayed: 0, onlinePlayed: 0, chestsOpened: 0, missionsClaimed: 0, loginDays: 0 },
     levelRewardsUpTo: 1,
     clock: { max: 0, offset: 0 },
@@ -177,7 +178,7 @@ export function defaultProfile(): Profile {
     pending: null,
     ledger: [],
     winStreak: 0,
-    lastSetup: { botCount: 3, difficulty: "normal", mapId: "forest", modeId: "classic" },
+    lastSetup: { botCount: 3, difficulty: "normal", mapId: "forest", modeId: "classic", comp: true },
     settings: { music: true, sfx: true, vibration: true },
   };
 }

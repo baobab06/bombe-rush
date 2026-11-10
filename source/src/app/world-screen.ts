@@ -74,7 +74,7 @@ export class WorldScreen {
     const list = document.getElementById("worldList")!;
     const meEl = document.getElementById("worldMe")!;
     const info = document.getElementById("worldInfo")!;
-    const unit = b.board === "week" ? "pts cette semaine" : "pts";
+    const unit = b.board === "week" ? "🏆 cette semaine" : "🏆";
     list.innerHTML = b.entries.length
       ? `<ol class="world-rows">${b.entries
           .map((e, i) => {
@@ -82,16 +82,16 @@ export class WorldScreen {
             return `<li class="${e.me ? "me" : ""}${i < 3 ? ` top${i + 1}` : ""}"><span class="wr-pos">${medal(i + 1)}</span><span class="wr-ico" title="${r.name}" style="--rc:${r.color}">${r.icon}</span><b class="wr-name">${esc(e.n)}</b><span class="wr-pts">${fmt(e.p)}</span></li>`;
           })
           .join("")}</ol>`
-      : `<p class="world-empty">${b.board === "week" ? "Personne n'a encore marqué de points cette semaine.<br><b>Sois le premier !</b>" : "Le classement est encore vide.<br><b>Joue une partie pour y entrer !</b>"}</p>`;
+      : `<p class="world-empty">${b.board === "week" ? "Personne n'a encore gagné de trophées cette semaine.<br><b>Sois le premier !</b>" : "Le classement est encore vide.<br><b>Joue une partie pour y entrer !</b>"}</p>`;
     const r = b.me ? RANKS[b.me.r] ?? RANKS[0] : RANKS[0];
     meEl.innerHTML =
       b.me && b.me.pos
         ? `<span class="wr-pos">${b.me.pos}<small>e</small></span><span class="wr-ico" style="--rc:${r.color}">${r.icon}</span><b class="wr-name">${esc(b.me.n)}</b><span class="wr-pts">${fmt(b.me.p)} <small>${unit}</small></span>`
-        : `<span class="wr-hint">${p.world.id ? (b.board === "week" ? "Gagne des points cette semaine pour apparaître ici !" : "Termine une partie classée pour apparaître ici !") : "Joue une partie contre les bots (connecté à internet) pour entrer au classement !"}</span>`;
+        : `<span class="wr-hint">${p.world.id ? (b.board === "week" ? "Gagne des trophées cette semaine pour apparaître ici !" : "Termine une partie de Compétition pour apparaître ici !") : "Joue une partie de Compétition (connecté à internet) pour entrer au classement !"}</span>`;
     info.innerHTML =
       b.board === "week"
         ? `⏳ Fin de la semaine dans <b>${left(b.weekEnds - Date.now())}</b> · Récompenses : 1er coffre légendaire, top 3 coffre épique, top 10 coffre rare`
-        : `${fmt(b.total)} joueur${b.total > 1 ? "s" : ""} classé${b.total > 1 ? "s" : ""} · Parties contre les bots, rejouées et vérifiées par le serveur`;
+        : `${fmt(b.total)} joueur${b.total > 1 ? "s" : ""} classé${b.total > 1 ? "s" : ""} · Parties de Compétition, rejouées et vérifiées par le serveur`;
     this.claim(b);
   }
 

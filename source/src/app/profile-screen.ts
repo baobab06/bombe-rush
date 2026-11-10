@@ -53,7 +53,7 @@ export class ProfileScreen {
       <canvas class="prof-ava" width="160" height="160"></canvas>
       <div class="prof-id"><b id="profName"></b><button class="ptitle-btn" id="profTitle">🏷️ ${title?.name ?? "Sans titre"} ✏️</button></div>
       <div class="prof-lvl"><span class="lvl">${p.level}</span><span class="xpbar"><i style="width:${(p.xp / levelXp(p.level)) * 100}%"></i></span><small>${fmt(p.xp)} / ${fmt(levelXp(p.level))} XP</small></div>
-      <button class="prof-rank" id="profRank" style="--rc:${rp.rank.color}"><span>${rp.rank.icon}</span><b>${rp.rank.name}</b><small>${fmt(p.rank.points)} pts</small></button>
+      <button class="prof-rank" id="profRank" style="--rc:${rp.rank.color}"><span>${rp.rank.icon}</span><b>${rp.step.name}</b><small>${fmt(p.rank.points)} 🏆</small></button>
       <div class="prof-streak"><span>🔥 Série <b>${p.winStreak}</b></span><span>Record <b>${Math.max(p.stats.bestWinStreak, p.winStreak)}</b></span></div>
       <div class="prof-links"><button class="chip" id="profColl">🎒 Collection</button><button class="chip" id="profRename">✏️ Pseudo</button></div>`;
     card.querySelector<HTMLElement>("#profName")!.textContent = p.name;

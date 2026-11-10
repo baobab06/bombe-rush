@@ -33,6 +33,9 @@ export interface GameSetup {
   trailId?: string;
   boomId?: string;
   playerName: string;
+  /** mode Compétition : trophées en jeu, niveau de chaque adversaire imposé */
+  comp?: boolean;
+  botDifficulties?: Difficulty[];
   /** graine imposée (partie classée mondiale : choisie par le serveur) */
   seed?: number;
 }
@@ -202,8 +205,8 @@ export class GameScreen {
     const players: PlayerSlot[] = [
       { name: setup.playerName, characterId: setup.characterId, skinId: setup.skinId, accessoryId: setup.accessoryId, trailId: setup.trailId, boomId: setup.boomId, isBot: false },
       // Domination = 2 contre 2 : toujours 3 bots (un coéquipier, deux adversaires)
-      ...others.slice(0, setup.modeId === "koth" ? 3 : setup.botCount).map((id) => ({
-        name: getCharacter(id).name, characterId: id, ...randomLook(id, false), isBot: true, difficulty: setup.difficulty,
+      ...others.slice(0, setup.modeId === "koth" ? 3 : setup.botCount).map((id, i) => ({
+        name: getCharacter(id).name, characterId: id, ...randomLook(id, false), isBot: true, difficulty: setup.botDifficulties?.[i] ?? setup.difficulty,
       })),
     ];
     // Classique : la carte est toujours tirée au hasard (surprise)

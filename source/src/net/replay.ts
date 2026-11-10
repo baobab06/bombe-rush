@@ -63,7 +63,7 @@ export const DIFFICULTIES: Difficulty[] = ["easy", "normal", "hard", "expert"];
 export const MAX_TICKS = 60 * 60 * 8;
 
 /** Contrôle la forme de la partie envoyée (null = valide). */
-export function checkSpec(s: RankedSpec, expect?: { modeId: string; stake: string; bots: number }): string | null {
+export function checkSpec(s: RankedSpec, expect?: { modeId: string; bots: Difficulty[] }): string | null {
   if (!s || typeof s !== "object") return "partie illisible";
   if (!Number.isInteger(s.seed) || s.seed < 0 || s.seed > 2 ** 31) return "graine";
   if (!RANKED_MODES.includes(s.modeId) || !MODES.some((m) => m.id === s.modeId && !m.hidden)) return "mode";
@@ -79,12 +79,12 @@ export function checkSpec(s: RankedSpec, expect?: { modeId: string; stake: strin
     ids.add(p.characterId);
     if (p.isBot !== i > 0) return "joueurs";
     if (i > 0 && !DIFFICULTIES.includes(p.difficulty as Difficulty)) return "difficulté";
-    if (i > 0 && p.difficulty !== ps[1].difficulty) return "difficulté";
   }
   if (expect) {
     if (expect.modeId !== s.modeId) return "mode";
-    if (expect.stake !== ps[1].difficulty) return "difficulté";
-    if (expect.bots !== ps.length - 1) return "joueurs";
+    if (expect.bots.length !== ps.length - 1) return "joueurs";
+    // les adversaires doivent avoir exactement les niveaux imposés par le ticket
+    for (let i = 1; i < ps.length; i++) if (ps[i].difficulty !== expect.bots[i - 1]) return "difficulté";
   }
   return null;
 }

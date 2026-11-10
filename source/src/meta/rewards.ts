@@ -19,7 +19,7 @@ import { DRAW_COLUMN, PLACE_COLUMNS, STAKES, VOID_COINS, activeEvents, type Stak
 import type { Profile } from "./profile";
 import { grantAll, type Granted } from "./grants";
 import { STREAK_BONUSES } from "./progress-config";
-import { applyRank, isRanked, type RankResult } from "./rank";
+import { applyRank, type RankResult } from "./rank";
 
 /** Résumé de l'issue (pour l'historique et les statistiques). */
 export type Outcome = "win" | "place" | "loss" | "draw" | "abandon" | "void";
@@ -43,6 +43,8 @@ export interface MatchContext {
   stake: StakeId;
   modeId: string;
   online?: boolean;
+  /** partie du mode Compétition : fait gagner ou perdre des trophées */
+  comp?: boolean;
   /** joueurs au départ (4 par défaut) */
   players?: number;
 }
@@ -195,7 +197,7 @@ export function settleMatch(p: Profile, ctx: MatchContext, placement: Placement,
   }
   // rang : uniquement les parties classées, jamais pour une partie annulée
   const column = pl.void ? 0 : columnOf(pl);
-  const rank = !pl.void && isRanked(ctx.online) ? applyRank(p, column, ctx.stake, pl.players, pl.place, now.getTime()) : undefined;
+  const rank = !pl.void && ctx.comp && !ctx.online ? applyRank(p, column, pl.abandon ? pl.players : pl.place, pl.players, now.getTime(), ctx.modeId, !!pl.draw) : undefined;
   p.settled.push(ctx.matchId);
   if (p.settled.length > MAX_REMEMBERED) p.settled.splice(0, p.settled.length - MAX_REMEMBERED);
   if (p.pending?.matchId === ctx.matchId) p.pending = null;

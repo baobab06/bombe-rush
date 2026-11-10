@@ -24,22 +24,23 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { DT } from "../src/core/rules";
-import { RANK_RULES, RANKS } from "../src/meta/progress-config";
-import { rankDelta, rankIndex } from "../src/meta/rank";
+import type { Difficulty } from "../src/core/types";
+import { compBots, compMode, rankIndex, trophyDelta } from "../src/meta/rank";
 import { columnOf, type Placement } from "../src/meta/rewards";
 import { DIFFICULTIES, RANKED_MODES, Replay, checkSpec, type RankedSpec, type ReplayOutcome } from "../src/net/replay";
 import { MemoryStore, type KvStore } from "./accounts";
 import { adminOk } from "./updates";
 
-const KEY = "lb:v1";
+/** v2 : mode Compétition (trophées) — tout le monde est reparti de 0 */
+const KEY = "lb:v2";
 
 interface Ticket {
   id: string;
   seed: number;
   at: number;
   mode: string;
-  stake: string;
-  bots: number;
+  /** niveau de chaque adversaire (imposé selon les trophées) */
+  bots: Difficulty[];
 }
 export interface LbPlayer {
   /** pseudo */
@@ -181,15 +182,14 @@ export class LeaderboardService {
     return { id, secret, p };
   }
 
-  /** Applique des points (rang Bronze protégé, comme dans le jeu). */
-  private score(p: LbPlayer, column: number, stake: string, players: number, won: boolean): number {
+  /** Applique les trophées d'une partie (même barème que le jeu). */
+  private score(p: LbPlayer, column: number, mode: string, won: boolean, draw = false): number {
     const wk = weekOf(this.now());
     if (p.wk !== wk) {
       p.wk = wk;
       p.w = 0;
     }
-    let delta = rankDelta(column, stake as never, players);
-    if (delta < 0 && RANK_RULES.protectedRanks.includes(RANKS[rankIndex(p.p)].id)) delta = 0;
+    const delta = trophyDelta(column, p.p, mode, draw);
     const before = p.p;
     p.p = Math.max(0, p.p + delta);
     p.w = Math.max(0, p.w + delta);
@@ -206,16 +206,18 @@ export class LeaderboardService {
     if (!t) return;
     p.t = null;
     if (this.now() - t.at < ABANDON_AFTER_MS) return;
-    this.score(p, columnOf({ place: t.bots + 1, players: t.bots + 1, abandon: true }), t.stake, t.bots + 1, false);
+    this.score(p, 4, t.mode, false);
   }
 
-  async ticket(b: { id?: unknown; secret?: unknown; name?: unknown; modeId?: unknown; stake?: unknown; bots?: unknown }, canCreate: () => boolean) {
+  /**
+   * Ticket d'une partie de Compétition : le serveur tire le mode au hasard,
+   * choisit la graine et fixe le niveau des adversaires selon les trophées.
+   */
+  async ticket(b: { id?: unknown; secret?: unknown; name?: unknown; comp?: unknown; pts?: unknown }, canCreate: () => boolean) {
     await this.ready();
     this.rollWeek();
-    const modeId = String(b.modeId ?? "");
-    const stake = String(b.stake ?? "");
-    const bots = Number(b.bots);
-    if (!RANKED_MODES.includes(modeId) || !DIFFICULTIES.includes(stake as never) || !Number.isInteger(bots) || bots < 1 || bots > 3) return { error: "partie non classée", status: 400 };
+    // anciennes versions du jeu (avant les trophées) : partie non classée
+    if (b.comp !== 2) return { error: "Mets le jeu à jour pour jouer en Compétition.", status: 400 };
     let id = typeof b.id === "string" ? b.id : "";
     let secret: string | undefined;
     let p = this.player(b.id, b.secret);
@@ -226,11 +228,13 @@ export class LeaderboardService {
     }
     p.n = cleanLbName(b.name ?? p.n);
     this.settleOpen(p);
-    const t: Ticket = { id: randomBytes(8).toString("base64url"), seed: randomBytes(4).readUInt32BE(0) >>> 1, at: this.now(), mode: modeId, stake, bots: modeId === "koth" ? 3 : bots };
+    // trophées affichés sur l'appareil (parties hors ligne comprises) : ne peuvent que DURCIR les adversaires
+    const local = Math.max(0, Math.min(100000, Math.floor(Number(b.pts) || 0)));
+    const t: Ticket = { id: randomBytes(8).toString("base64url"), seed: randomBytes(4).readUInt32BE(0) >>> 1, at: this.now(), mode: compMode(() => randomBytes(4).readUInt32BE(0) / 2 ** 32), bots: compBots(Math.max(p.p, local)) };
     p.t = t;
     p.s = this.now();
     this.touch();
-    return { id, secret, ticket: t.id, seed: t.seed };
+    return { id, secret, ticket: t.id, seed: t.seed, modeId: t.mode, bots: t.bots, points: p.p };
   }
 
   async cancel(b: { id?: unknown; secret?: unknown; ticket?: unknown }) {
@@ -252,10 +256,10 @@ export class LeaderboardService {
     const t = p.t;
     if (!t || t.id !== b.ticket) return { ok: false, error: "ticket inconnu ou déjà utilisé", status: 409 };
     const spec = b.spec as RankedSpec;
-    const bad = checkSpec(spec, { modeId: t.mode, stake: t.stake, bots: t.bots });
+    const bad = checkSpec(spec, { modeId: t.mode, bots: t.bots });
     if (bad || spec.seed !== t.seed) {
       p.t = null;
-      this.score(p, columnOf({ place: t.bots + 1, players: t.bots + 1, abandon: true }), t.stake, t.bots + 1, false);
+      this.score(p, 4, t.mode, false);
       return { ok: false, error: "partie invalide (" + (bad ?? "graine") + ")", status: 400 };
     }
     if (this.queue.length > 40) return { ok: false, error: "serveur occupé, réessaie plus tard", status: 503 };
@@ -277,7 +281,7 @@ export class LeaderboardService {
       won = out.won;
     }
     if (b.name !== undefined) p.n = cleanLbName(b.name);
-    const delta = this.score(p, columnOf(pl), t.stake, out.players, won);
+    const delta = this.score(p, columnOf(pl), t.mode, won, !!pl.draw);
     return { ok: true, delta, points: p.p, week: p.w, place: pl.abandon ? null : pl.place, draw: !!pl.draw, note, pos: this.position(b.id as string, "all"), weekPos: this.position(b.id as string, "week") };
   }
 

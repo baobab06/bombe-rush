@@ -41,16 +41,15 @@ import { ProfileScreen } from "./profile-screen";
 import { RankScreen } from "./rank-screen";
 import { WorldScreen } from "./world-screen";
 import { WorldRank, type WorldTicket } from "../net/world";
-import { isRanked } from "../meta/rank";
 import { ChestsScreen } from "./chests-screen";
 import { achievementsToClaim, checkAchievements } from "../meta/achievements";
 import { chestCount, nextLevelReward, rewardText, type Granted } from "../meta/grants";
 import { masteryOf } from "../meta/mastery";
-import { rankProgress } from "../meta/rank";
+import { compBots, compMode, compStake, rankProgress, trophyDelta } from "../meta/rank";
 import { ensureWeekly, weeklyToClaim } from "../meta/weekly";
 import { setServerTime } from "../meta/clock";
 import { getTitle } from "../core/cosmetics";
-import { CHESTS, levelXp, masteryXp, MASTERY_MAX } from "../meta/progress-config";
+import { CHESTS, levelXp, masteryXp, MASTERY_MAX, RANK_RULES } from "../meta/progress-config";
 import { GameScreen, type GameResult, type GameSetup, type StandingRow } from "./game";
 import { UpdateChecker } from "../meta/update-check";
 import { UpdateUI } from "./update-ui";
@@ -137,7 +136,7 @@ class App implements AppCtx {
     this.world.onResult = (r) => {
       if (r.ok && r.delta !== undefined) {
         const pos = r.weekPos ? ` · ${r.weekPos}e cette semaine` : "";
-        this.toast(`🏆 Classement mondial : ${r.delta > 0 ? "+" : r.delta < 0 ? "−" : "±"}${Math.abs(r.delta)} pts${pos}`, r.delta > 0 ? "good" : "");
+        this.toast(`🌍 Classement mondial : ${r.delta > 0 ? "+" : r.delta < 0 ? "−" : "±"}${Math.abs(r.delta)} 🏆${pos}`, r.delta > 0 ? "good" : "");
       }
     };
     this.tutorial = new TutorialScreen(this, {
@@ -416,7 +415,17 @@ class App implements AppCtx {
         this.click();
         this.go(to);
       });
-    nav("btnPlaySetup", "setup");
+    // options : réglages d'une partie libre, ou « ma ligue » en Compétition
+    $("btnPlaySetup").addEventListener("click", () => {
+      this.click();
+      this.go(this._profile.lastSetup.comp ? "rank" : "setup");
+    });
+    $("homeComp").addEventListener("click", () => {
+      audio.play("tab");
+      this._profile.lastSetup.comp = true;
+      this.persist();
+      this.renderHome();
+    });
     nav("btnSettings", "settings");
     nav("homeProfile", "profile");
     nav("btnMissions", "missions");
@@ -426,6 +435,7 @@ class App implements AppCtx {
     // JOUER : partie immédiate avec le mode choisi et les derniers réglages
     $("btnPlay").addEventListener("click", () => {
       this.click();
+      if (this._profile.lastSetup.comp) return void this.launchComp();
       this.setupState = { ...this._profile.lastSetup };
       this.launch();
     });
@@ -433,6 +443,7 @@ class App implements AppCtx {
       b.addEventListener("click", () => {
         audio.play("tab");
         this._profile.lastSetup.modeId = b.dataset.mode!;
+        this._profile.lastSetup.comp = false;
         this.setupState.modeId = b.dataset.mode!;
         this.persist();
         this.renderHome();
@@ -621,7 +632,7 @@ class App implements AppCtx {
     $("homeNext").innerHTML = nx ? `🎁 Niv. ${nx.level} : <b>${nx.rewards.map(rewardText).join(" + ")}</b>` : "";
     const rp = rankProgress(p.rank.points);
     $("homeRankIco").textContent = rp.rank.icon;
-    $("homeRankIco").title = `Rang ${rp.rank.name}`;
+    $("homeRankIco").title = rp.step.name;
     const c = getCharacter(p.characterId);
     const skin = getSkin(c.id, this.equippedSkin(c.id));
     drawPortrait($<HTMLCanvasElement>("homeAvatar"), p.characterId, skin.id, 1, 0, p.equipped.accessory);
@@ -629,10 +640,16 @@ class App implements AppCtx {
     this.homeStage.idleEmotes = p.equipped.emotes;
     // mode de jeu (choix rapide)
     const modeId = MODES.some((m) => m.id === p.lastSetup.modeId && !m.hidden) ? p.lastSetup.modeId : "classic";
+    const comp = !!p.lastSetup.comp;
     $("homeModes").querySelectorAll<HTMLButtonElement>("button").forEach((b) => {
-      b.classList.toggle("sel", b.dataset.mode === modeId);
-      b.setAttribute("aria-checked", String(b.dataset.mode === modeId));
+      b.classList.toggle("sel", !comp && b.dataset.mode === modeId);
+      b.setAttribute("aria-checked", String(!comp && b.dataset.mode === modeId));
     });
+    $("homeComp").classList.toggle("sel", comp);
+    $("homeComp").setAttribute("aria-checked", String(comp));
+    ($("homeComp") as HTMLElement).style.setProperty("--rc", rp.rank.color);
+    $("homeCompSub").innerHTML = `${rp.rank.icon} ${esc(rp.step.name)} · <b>${fmt(p.rank.points)}</b> 🏆`;
+    $("btnPlaySetup").querySelector(".ps-title")!.textContent = comp ? "MA LIGUE" : "OPTIONS DE PARTIE";
     const map = MAPS.find((m) => m.id === p.lastSetup.mapId && mapAllows(m, modeId))?.name ?? "Carte au hasard";
     const sid = (p.lastSetup.difficulty as StakeId) in STAKES ? (p.lastSetup.difficulty as StakeId) : "normal";
     const tbl = stakeTable(sid, modeId === "koth" ? 4 : p.lastSetup.botCount + 1);
@@ -642,6 +659,10 @@ class App implements AppCtx {
     const allEv = ev.find((e) => !e.modeId);
     const mapLbl = modeId === "classic" ? "🎲 carte surprise" : map;
     $("playSub").innerHTML = `${allEv ? `<span class="ps-ev" title="${esc(allEv.name)}">${allEv.icon} ×${String(allEv.coinMultiplier).replace(".", ",")}</span> ` : ""}${STAKES[sid].label} · ${who} · ${mapLbl} <span class="ps-win">🥇 ${signed(tbl[0].amount)}</span> <span class="ps-loss">💀 ${signed(tbl[tbl.length - 1].amount)}</span>`;
+    if (comp) {
+      const lose = trophyDelta(4, Math.max(p.rank.points, 20));
+      $("playSub").innerHTML = `🎲 Mode au hasard · 4 joueurs <span class="ps-win">🥇 +${RANK_RULES.places[0]} 🏆</span> <span class="ps-loss">💀 −${-lose} 🏆</span>`;
+    }
     const deal = featured();
     const dp = priceOf(deal.dealId);
     $("shopRibbon").hidden = !dp.deal;
@@ -864,6 +885,7 @@ class App implements AppCtx {
     return {
       matchId: this.game.matchKey,
       stake: this.game.online ? ONLINE_STAKE : ((this.game.setup?.difficulty ?? "normal") as StakeId),
+      comp: !this.game.online && !!this.game.setup?.comp,
       modeId: this.game.session?.match.config.modeId ?? "classic",
       online: this.game.online,
       players: this.game.session?.match.players.length ?? 4,
@@ -885,7 +907,7 @@ class App implements AppCtx {
     const n = ctx.players ?? 4;
     const tx = settleMatch(this._profile, ctx, { place: n, players: n, abandon: true });
     this.persist();
-    if (tx) this.toast(`Partie abandonnée : −${fmt(-tx.applied)} 🪙`, "bad");
+    if (tx) this.toast(`Partie abandonnée : −${fmt(-tx.applied)} 🪙${tx.rank && tx.rank.delta < 0 ? ` · −${-tx.rank.delta} 🏆` : ""}`, "bad");
     return tx;
   }
 
@@ -928,27 +950,65 @@ class App implements AppCtx {
     this.history = [];
   }
 
-  /** Rejouer (même réglages), avec un nouveau ticket du classement mondial. */
+  /** Rejouer : mêmes réglages en partie libre, nouveau tirage en Compétition. */
   private async relaunch() {
     const setup = this.game.setup;
     if (!setup || this.launching) return;
     this.game.setPaused(false);
+    if (setup.comp) return this.launchComp();
     await this.startSolo(setup);
   }
 
   /**
-   * Partie contre les bots : demande d'abord un ticket au serveur (graine
-   * choisie par lui) pour qu'elle compte au classement mondial. Sans réseau,
-   * la partie se joue quand même (rang personnel seulement).
+   * COMPÉTITION : mode de jeu tiré au hasard, 4 joueurs, adversaires de plus
+   * en plus forts avec les trophées. Connecté, c'est le serveur qui tire le
+   * mode, la graine et le niveau (partie vérifiée pour le classement mondial) ;
+   * hors ligne, le jeu fait le tirage lui-même (trophées personnels seulement).
    */
+  private async launchComp() {
+    if (this.launching) return;
+    const p = this._profile;
+    this.launching = true;
+    document.body.classList.add("launching");
+    this.worldTicket = null;
+    try {
+      const t = await this.world.ticket().catch(() => undefined);
+      this.worldTicket = t ?? null;
+      const modeId = t?.modeId ?? compMode();
+      const bots = t?.bots ?? compBots(p.rank.points);
+      this.game.start({
+        comp: true,
+        modeId,
+        mapId: RANDOM_MAP,
+        botCount: RANK_RULES.bots,
+        botDifficulties: bots,
+        difficulty: compStake(p.rank.points),
+        characterId: p.characterId,
+        skinId: this.equippedSkin(p.characterId),
+        accessoryId: p.equipped.accessory ?? undefined,
+        trailId: p.equipped.trail,
+        boomId: p.equipped.boom,
+        playerName: "Toi",
+        seed: t?.seed,
+      });
+      const m = MODES.find((x) => x.id === modeId);
+      this.toast(`🎲 Mode tiré au sort : ${m?.emoji ?? ""} ${(m?.name ?? modeId).toUpperCase()}`, "good");
+    } finally {
+      this.launching = false;
+      document.body.classList.remove("launching");
+    }
+    this.history = [];
+    this.startStake();
+    this.go("game");
+  }
+
+  /** Partie libre contre les bots (aucun trophée en jeu). */
   private async startSolo(setup: GameSetup) {
     this.launching = true;
     document.body.classList.add("launching");
     this.worldTicket = null;
     try {
-      const t = isRanked(false) ? await this.world.ticket(setup.modeId, setup.difficulty, setup.botCount).catch(() => undefined) : undefined;
-      this.worldTicket = t ?? null;
-      this.game.start({ ...setup, seed: t?.seed });
+      this.game.start({ ...setup, comp: false, botDifficulties: undefined, seed: undefined });
     } finally {
       this.launching = false;
       document.body.classList.remove("launching");
@@ -2066,7 +2126,10 @@ class App implements AppCtx {
     box.className = `stake-result ${kind} t-${tier}`;
     box.dataset.tier = tx.stake;
     const placeLbl = tx.outcome === "draw" ? "égalité" : tx.outcome === "abandon" ? "abandon" : `${placeName(tx.place)} place`;
-    $("resDiff").innerHTML = `${k.label.toUpperCase()} ${k.emoji} · <b>${placeLbl}</b>${this.game.online ? " · en ligne" : ""}`;
+    const rk = tx.rank;
+    $("resDiff").innerHTML = rk
+      ? `🏆 COMPÉTITION · <b>${placeLbl}</b> <span class="sr-trophy ${rk.delta > 0 ? "up" : rk.delta < 0 ? "down" : ""}">${rk.delta > 0 ? "+" : rk.delta < 0 ? "−" : "±"}${Math.abs(rk.delta)} 🏆</span>`
+      : `${k.label.toUpperCase()} ${k.emoji} · <b>${placeLbl}</b>${this.game.online ? " · en ligne" : ""}`;
     mods.innerHTML = tx.modifiers.length
       ? [`<span>Barème <b>${signed(tx.base)}</b></span>`, ...tx.modifiers.map((m) => `<span>${m.icon ?? "✨"} ${m.label} <b>+${fmt(m.amount)}</b></span>`)].join("")
       : "";
@@ -2129,10 +2192,11 @@ class App implements AppCtx {
     if (rk) {
       const rp = rankProgress(rk.after);
       const sgn = rk.delta > 0 ? `+${rk.delta}` : rk.delta < 0 ? `−${-rk.delta}` : "±0";
+      const up = rk.stepAfter > rk.stepBefore, down = rk.stepAfter < rk.stepBefore;
       chips.push(
-        `<div class="rp rank${rk.tierAfter > rk.tierBefore ? " up" : rk.tierAfter < rk.tierBefore ? " down" : ""}" style="--rc:${rp.rank.color}"><small>Rang</small><b>${rp.rank.icon} ${rp.rank.name}</b><span class="xpbar"><i style="width:${rp.ratio * 100}%"></i></span><em class="${rk.delta < 0 ? "neg" : ""}">${sgn} pts${rk.protected ? " 🛡️" : ""}</em></div>`,
+        `<div class="rp rank${up ? " up" : down ? " down" : ""}" style="--rc:${rp.rank.color}"><small>${fmt(rk.after)} 🏆</small><b>${rp.rank.icon} ${esc(rp.step.name)}${up ? " ⬆️" : down ? " ⬇️" : ""}</b><span class="xpbar"><i style="width:${rp.ratio * 100}%"></i></span><em class="${rk.delta < 0 ? "neg" : ""}">${sgn} 🏆${rk.protected ? " 🛡️" : ""}</em></div>`,
       );
-    } else chips.push(`<div class="rp rank off"><small>Rang</small><b>Non classée</b><em>partie en ligne</em></div>`);
+    } else chips.push(`<div class="rp rank off"><small>Trophées</small><b>Partie libre</b><em>${this.game.online ? "partie en ligne" : "joue en Compétition 🏆"}</em></div>`);
     const st = s.tx.streak ?? 0;
     chips.push(`<div class="rp streak${st >= 3 ? " hot" : ""}"><small>Série</small><b>🔥 ${st}</b><em>${st ? `victoire${st > 1 ? "s" : ""} d'affilée` : "remise à zéro"}</em></div>`);
     box.innerHTML = chips.join("");

@@ -30,7 +30,7 @@ export interface UpdateConfig {
   notes: PatchNote[];
   storeUrl: string;
   /**
-   * Annonce envoyée en notification sur les téléphones (appli 1.12.2+), une seule
+   * Annonce envoyée en notification sur les téléphones (appli 1.13.0+), une seule
    * fois par identifiant : changer l'identifiant = nouvelle notification.
    */
   push?: { id: string; title: string; body: string } | null;

@@ -1,17 +1,22 @@
 /**
- * RANG COMPÉTITIF (Bronze → Élite).
+ * MODE COMPÉTITION — trophées, ligues et divisions.
  *
- * Points gagnés ou perdus selon la place, la difficulté et le nombre
- * d'adversaires (RANK_RULES). Parties classées : contre les bots, résultat
- * calculé sur l'appareil. C'est le rang PERSONNEL ; le classement mondial
- * (server/leaderboard.ts) utilise le même barème, mais sur des parties
- * rejouées et vérifiées par le serveur.
+ * On démarre à 0 trophée. Chaque partie de Compétition (mode de jeu tiré au
+ * hasard, toujours 4 joueurs) fait gagner ou perdre des trophées selon la
+ * place : +20 / +10 / −10 / −20 (RANK_RULES). Les trophées donnent une ligue
+ * (Bronze → Élite), chacune découpée en divisions I, II, III ; plus on monte,
+ * plus les adversaires sont forts.
+ *
+ * Le classement mondial (server/leaderboard.ts) applique exactement ce barème
+ * sur des parties rejouées et vérifiées par le serveur.
  */
+import type { Difficulty } from "../core/types";
 import { grantAll, type Granted } from "./grants";
-import { RANKS, RANK_RULES, type RankDef } from "./progress-config";
+import { RANKS, RANK_RULES, type RankDef, type Reward } from "./progress-config";
 import type { Profile, RankEntry } from "./profile";
 import type { StakeId } from "./economy";
 
+/** Ligue (0 = Bronze). */
 export function rankIndex(points: number): number {
   let i = 0;
   for (let k = 0; k < RANKS.length; k++) if (points >= RANKS[k].min) i = k;
@@ -19,62 +24,121 @@ export function rankIndex(points: number): number {
 }
 export const rankOf = (points: number): RankDef => RANKS[rankIndex(points)];
 
-/** Progression vers le rang suivant (0..1) et points manquants. */
-export function rankProgress(points: number): { rank: RankDef; next: RankDef | null; ratio: number; missing: number } {
-  const i = rankIndex(points);
-  const rank = RANKS[i];
-  const next = RANKS[i + 1] ?? null;
-  if (!next) return { rank, next, ratio: 1, missing: 0 };
-  return { rank, next, ratio: (points - rank.min) / (next.min - rank.min), missing: next.min - points };
+/** Un échelon = une division d'une ligue (« Or II »). */
+export interface RankStep {
+  /** rang dans l'échelle complète (0 = Bronze I) */
+  index: number;
+  league: number;
+  /** 1, 2 ou 3 */
+  div: number;
+  id: string;
+  name: string;
+  min: number;
+  rank: RankDef;
+  /** récompense donnée la première fois qu'on l'atteint */
+  reward: Reward[];
+}
+const ROMAN = ["I", "II", "III", "IV", "V"];
+export const STEPS: RankStep[] = RANKS.flatMap((r, li) => {
+  const span = (RANKS[li + 1]?.min ?? r.min + RANK_RULES.lastSpan) - r.min;
+  return Array.from({ length: RANK_RULES.divisions }, (_, d) => ({
+    index: li * RANK_RULES.divisions + d,
+    league: li,
+    div: d + 1,
+    id: d === 0 ? r.id : `${r.id}-${d + 1}`,
+    name: `${r.name} ${ROMAN[d]}`,
+    min: r.min + Math.round((span * d) / RANK_RULES.divisions / 10) * 10,
+    rank: r,
+    reward: d === 0 ? r.reward : [{ kind: "coins" as const, amount: RANK_RULES.divisionCoins }],
+  }));
+});
+
+export function stepIndex(points: number): number {
+  let i = 0;
+  for (let k = 0; k < STEPS.length; k++) if (points >= STEPS[k].min) i = k;
+  return i;
+}
+export const stepOf = (points: number): RankStep => STEPS[stepIndex(points)];
+
+/** Progression vers la division suivante (0..1) et trophées manquants. */
+export function rankProgress(points: number): { rank: RankDef; step: RankStep; next: RankStep | null; ratio: number; missing: number } {
+  const step = stepOf(points);
+  const next = STEPS[step.index + 1] ?? null;
+  if (!next) return { rank: step.rank, step, next, ratio: 1, missing: 0 };
+  return { rank: step.rank, step, next, ratio: Math.min(1, (points - step.min) / (next.min - step.min)), missing: next.min - points };
+}
+
+export const isTeamMode = (modeId: string | undefined) => RANK_RULES.teamModes.includes(modeId ?? "");
+
+/**
+ * Trophées gagnés ou perdus. `column` : colonne du barème (1 à 4, voir
+ * columnOf) ; en équipe : 1 = victoire, égalité, sinon défaite.
+ * Sous `softUnder` trophées, les pertes sont réduites de moitié.
+ */
+export function trophyDelta(column: number, points: number, modeId?: string, draw = false): number {
+  const c = Math.min(4, Math.max(1, Math.round(column)));
+  let d: number;
+  if (isTeamMode(modeId)) d = draw ? RANK_RULES.team.draw : c === 1 ? RANK_RULES.team.win : RANK_RULES.team.loss;
+  else d = RANK_RULES.places[c - 1];
+  if (d < 0 && points < RANK_RULES.softUnder) d = -Math.round(-d * RANK_RULES.softFactor);
+  return Math.max(-points, d);
+}
+
+const LETTER: Record<string, Difficulty> = { e: "easy", n: "normal", h: "hard", x: "expert" };
+/** Niveau des adversaires en Compétition selon les trophées. */
+export function compBots(points: number): Difficulty[] {
+  const t = RANK_RULES.botsByStep;
+  const row = t[Math.min(stepIndex(points), t.length - 1)];
+  return [...row].slice(0, RANK_RULES.bots).map((c) => LETTER[c] ?? "normal");
+}
+/** Barème de pièces utilisé en Compétition : celui du niveau le plus fréquent en face. */
+export function compStake(points: number): StakeId {
+  const b = compBots(points);
+  return b[1] as StakeId;
+}
+/** Mode de jeu tiré au hasard. */
+export function compMode(rand: () => number = Math.random): string {
+  const m = RANK_RULES.modes;
+  return m[Math.min(m.length - 1, Math.floor(rand() * m.length))];
 }
 
 export interface RankResult {
   delta: number;
   before: number;
   after: number;
+  /** ligue avant / après */
   tierBefore: number;
   tierAfter: number;
-  /** points négatifs annulés (rang protégé) */
+  /** échelon (division) avant / après */
+  stepBefore: number;
+  stepAfter: number;
+  /** perte réduite (débutant) */
   protected: boolean;
   granted: Granted[];
 }
 
-/** La partie compte-t-elle pour le rang ? */
-export function isRanked(online: boolean | undefined): boolean {
-  return online ? RANK_RULES.online : RANK_RULES.solo;
-}
-
-/** Variation de points pour une colonne du barème (1 à 4). */
-export function rankDelta(column: number, stake: StakeId, players: number): number {
-  const base = RANK_RULES.places[Math.min(4, Math.max(1, column)) - 1];
-  const opp = Math.min(1, Math.max(1, players - 1) * RANK_RULES.perOpponent);
-  return Math.round(base * (RANK_RULES.difficulty[stake] ?? 1) * opp);
-}
-
-/** Applique une partie réglée au rang (appelé une seule fois par partie, par settleMatch). */
-export function applyRank(p: Profile, column: number, stake: StakeId, players: number, place: number, at: number): RankResult {
+/** Applique une partie de Compétition réglée (appelé une seule fois par partie, par settleMatch). */
+export function applyRank(p: Profile, column: number, place: number, players: number, at: number, modeId?: string, draw = false): RankResult {
   const before = p.rank.points;
   const tierBefore = rankIndex(before);
-  let delta = column > 0 ? rankDelta(column, stake, players) : 0;
-  let prot = false;
-  if (delta < 0 && RANK_RULES.protectedRanks.includes(RANKS[tierBefore].id)) {
-    delta = 0;
-    prot = true;
-  }
+  const stepBefore = stepIndex(before);
+  const delta = column > 0 ? trophyDelta(column, before, modeId, draw) : 0;
   const after = Math.max(0, before + delta);
   p.rank.points = after;
   const tierAfter = rankIndex(after);
+  const stepAfter = stepIndex(after);
   const granted: Granted[] = [];
-  // récompense du rang : la 1re fois seulement
-  for (let i = 1; i <= tierAfter; i++) {
-    const r = RANKS[i];
-    if (p.rank.rewarded.includes(r.id)) continue;
-    p.rank.rewarded.push(r.id);
-    grantAll(p, r.reward, granted, `Rang ${r.name}`);
+  // récompense d'un échelon : la 1re fois seulement
+  for (let i = 1; i <= stepAfter; i++) {
+    const s = STEPS[i];
+    if (p.rank.rewarded.includes(s.id)) continue;
+    p.rank.rewarded.push(s.id);
+    grantAll(p, s.reward, granted, s.name);
   }
   p.rank.best = Math.max(p.rank.best, tierAfter);
-  const entry: RankEntry = { at, place, players, stake, delta: after - before, points: after };
+  p.rank.bestPoints = Math.max(p.rank.bestPoints ?? 0, after);
+  const entry: RankEntry = { at, place, players, stake: compStake(before), mode: modeId, delta: after - before, points: after };
   p.rank.history.push(entry);
   if (p.rank.history.length > RANK_RULES.historySize) p.rank.history.splice(0, p.rank.history.length - RANK_RULES.historySize);
-  return { delta: after - before, before, after, tierBefore, tierAfter, protected: prot, granted };
+  return { delta: after - before, before, after, tierBefore, tierAfter, stepBefore, stepAfter, protected: delta < 0 && before < RANK_RULES.softUnder, granted };
 }
