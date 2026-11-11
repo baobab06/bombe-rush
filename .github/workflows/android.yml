@@ -1,5 +1,6 @@
 # Compile l'appli Android AVEC AdMob (projet source/android-gradle) à chaque mise à jour.
-# Les fichiers produits (.aab et .apk NON signés) et le journal de compilation sont
+# Les fichiers produits (.aab et .apk NON signés, plus BombeRush-TEST.apk installable
+# tel quel) et le journal de compilation sont
 # publiés sur la branche « android-builds » de ce dépôt.
 name: Android (AdMob)
 on:
@@ -36,6 +37,13 @@ jobs:
         run: |
           set -o pipefail
           gradle --no-daemon --stacktrace -PwwwDir="$GITHUB_WORKSPACE/www" :app:bundleRelease :app:assembleRelease 2>&1 | tee "$GITHUB_WORKSPACE/build.log"
+      - name: Compiler la version de TEST (APK installable, à côté de la version du Play Store)
+        id: test
+        continue-on-error: true
+        working-directory: source/android-gradle
+        run: |
+          set -o pipefail
+          gradle --no-daemon --stacktrace -PwwwDir="$GITHUB_WORKSPACE/www" :app:assembleDebug 2>&1 | tee "$GITHUB_WORKSPACE/build-test.log"
       - name: Publier les résultats sur la branche android-builds
         if: always()
         run: |
@@ -43,6 +51,9 @@ jobs:
           cp build.log out/ 2>/dev/null || true
           cp source/android-gradle/app/build/outputs/bundle/release/*.aab out/ 2>/dev/null || true
           cp source/android-gradle/app/build/outputs/apk/release/*.apk out/ 2>/dev/null || true
+          cp build-test.log out/ 2>/dev/null || true
+          cp source/android-gradle/app/build/outputs/apk/debug/app-debug.apk out/BombeRush-TEST.apk 2>/dev/null || true
+          echo "${{ steps.test.outcome }} ${{ github.sha }}" > out/STATUS-TEST
           echo "${{ steps.build.outcome }} ${{ github.sha }} $(date -u +%FT%TZ)" > out/STATUS
           cd out
           git init -q

@@ -7,6 +7,7 @@
  *
  *   gradle :app:bundleRelease   → app/build/outputs/bundle/release/app-release.aab (non signé)
  *   gradle :app:assembleRelease → app/build/outputs/apk/release/app-release-unsigned.apk
+ *   gradle :app:assembleDebug   → app/build/outputs/apk/debug/app-debug.apk (version de TEST, installable telle quelle)
  */
 plugins {
     id("com.android.application")
@@ -29,6 +30,14 @@ android {
     }
 
     buildTypes {
+        // VERSION DE TEST (« Bombe Rush TEST ») : autre identifiant, donc elle s'installe
+        // À CÔTÉ de la version du Play Store sans la remplacer ni toucher à sa sauvegarde.
+        // Signée automatiquement avec la clé de test d'Android (aucune clé dans le dépôt).
+        // Pubs : toujours celles de test (l'appli ne vient pas du Play Store, voir AdsBridge).
+        debug {
+            applicationIdSuffix = ".test"
+            versionNameSuffix = "-test"
+        }
         release {
             isMinifyEnabled = false
             // pas de signature ici : le .aab est signé avec la clé d'importation du propriétaire,

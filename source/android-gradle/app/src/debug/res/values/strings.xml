@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Version de TEST : nom différent pour la reconnaître à côté de la version du Play Store. -->
+<resources>
+    <string name="app_name">Bombe Rush TEST</string>
+</resources>
