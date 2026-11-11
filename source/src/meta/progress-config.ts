@@ -167,11 +167,11 @@ export interface RankDef {
 }
 export const RANKS: RankDef[] = [
   { id: "bronze", name: "Bronze", icon: "🥉", color: "#d08a4c", min: 0, reward: [] },
-  { id: "argent", name: "Argent", icon: "🥈", color: "#c9d6e3", min: 150, reward: [{ kind: "chest", tier: "rare" }] },
-  { id: "or", name: "Or", icon: "🥇", color: "#ffd23f", min: 350, reward: [{ kind: "chest", tier: "rare" }, { kind: "coins", amount: 300 }] },
-  { id: "platine", name: "Platine", icon: "💠", color: "#5fe0d0", min: 600, reward: [{ kind: "chest", tier: "epic" }] },
-  { id: "diamant", name: "Diamant", icon: "💎", color: "#7cc7ff", min: 900, reward: [{ kind: "item", id: "title-diamond" }, { kind: "chest", tier: "epic" }] },
-  { id: "elite", name: "Élite", icon: "👑", color: "#ff5fa2", min: 1300, reward: [{ kind: "item", id: "title-elite" }, { kind: "item", id: "boom-gold" }, { kind: "chest", tier: "legend" }] },
+  { id: "argent", name: "Argent", icon: "🥈", color: "#c9d6e3", min: 200, reward: [{ kind: "chest", tier: "rare" }] },
+  { id: "or", name: "Or", icon: "🥇", color: "#ffd23f", min: 450, reward: [{ kind: "chest", tier: "rare" }, { kind: "coins", amount: 300 }] },
+  { id: "platine", name: "Platine", icon: "💠", color: "#5fe0d0", min: 800, reward: [{ kind: "chest", tier: "epic" }] },
+  { id: "diamant", name: "Diamant", icon: "💎", color: "#7cc7ff", min: 1200, reward: [{ kind: "item", id: "title-diamond" }, { kind: "chest", tier: "epic" }] },
+  { id: "elite", name: "Élite", icon: "👑", color: "#ff5fa2", min: 1700, reward: [{ kind: "item", id: "title-elite" }, { kind: "item", id: "boom-gold" }, { kind: "chest", tier: "legend" }] },
 ];
 /**
  * MODE COMPÉTITION : trophées.
@@ -188,7 +188,7 @@ export const RANK_RULES = {
   /** divisions par ligue (Bronze I, II, III…) */
   divisions: 3,
   /** largeur de la dernière ligue (pour y placer ses divisions) */
-  lastSpan: 600,
+  lastSpan: 450,
   /** pièces offertes à chaque nouvelle division atteinte (hors 1re division d'une ligue, qui a sa récompense) */
   divisionCoins: 100,
   /** modes tirés au hasard */

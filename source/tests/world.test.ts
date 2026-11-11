@@ -84,10 +84,10 @@ console.log("Serveur : Compétition, trophées, triche");
   check(!again.ok, "même ticket envoyé deux fois : refusé");
 
   // plus de trophées → adversaires plus forts, imposés par le serveur
-  P[tA.id].p = 700;
+  P[tA.id].p = 950;
   const t2 = (await svc.ticket({ id: tA.id, secret: tA.secret, name: "Alice", comp: 2 }, ok)) as T;
-  check(t2.bots.includes("expert") && !t2.bots.includes("easy"), `à 700 trophées (Platine) : adversaires ${t2.bots.join(", ")}`);
-  const tl = (await svc.ticket({ name: "Horsligne", comp: 2, pts: 480 }, ok)) as T;
+  check(t2.bots.includes("expert") && !t2.bots.includes("easy"), `à 950 trophées (Platine) : adversaires ${t2.bots.join(", ")}`);
+  const tl = (await svc.ticket({ name: "Horsligne", comp: 2, pts: 600 }, ok)) as T;
   check(tl.bots.includes("hard") && !tl.bots.includes("easy"), "trophées gagnés hors ligne : les adversaires sont quand même au bon niveau");
   const g2 = play(t2.seed, t2.modeId, t2.bots, 3, "expert");
   now += 500; // envoyé tout de suite : impossible d'avoir joué si vite

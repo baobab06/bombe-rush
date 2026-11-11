@@ -6072,11 +6072,11 @@ function masteryXp(level) {
 var CHEST_ORDER = ["common", "rare", "epic", "legend"];
 var RANKS = [
   { id: "bronze", name: "Bronze", icon: "\uD83E\uDD49", color: "#d08a4c", min: 0, reward: [] },
-  { id: "argent", name: "Argent", icon: "\uD83E\uDD48", color: "#c9d6e3", min: 150, reward: [{ kind: "chest", tier: "rare" }] },
-  { id: "or", name: "Or", icon: "\uD83E\uDD47", color: "#ffd23f", min: 350, reward: [{ kind: "chest", tier: "rare" }, { kind: "coins", amount: 300 }] },
-  { id: "platine", name: "Platine", icon: "\uD83D\uDCA0", color: "#5fe0d0", min: 600, reward: [{ kind: "chest", tier: "epic" }] },
-  { id: "diamant", name: "Diamant", icon: "\uD83D\uDC8E", color: "#7cc7ff", min: 900, reward: [{ kind: "item", id: "title-diamond" }, { kind: "chest", tier: "epic" }] },
-  { id: "elite", name: "Élite", icon: "\uD83D\uDC51", color: "#ff5fa2", min: 1300, reward: [{ kind: "item", id: "title-elite" }, { kind: "item", id: "boom-gold" }, { kind: "chest", tier: "legend" }] }
+  { id: "argent", name: "Argent", icon: "\uD83E\uDD48", color: "#c9d6e3", min: 200, reward: [{ kind: "chest", tier: "rare" }] },
+  { id: "or", name: "Or", icon: "\uD83E\uDD47", color: "#ffd23f", min: 450, reward: [{ kind: "chest", tier: "rare" }, { kind: "coins", amount: 300 }] },
+  { id: "platine", name: "Platine", icon: "\uD83D\uDCA0", color: "#5fe0d0", min: 800, reward: [{ kind: "chest", tier: "epic" }] },
+  { id: "diamant", name: "Diamant", icon: "\uD83D\uDC8E", color: "#7cc7ff", min: 1200, reward: [{ kind: "item", id: "title-diamond" }, { kind: "chest", tier: "epic" }] },
+  { id: "elite", name: "Élite", icon: "\uD83D\uDC51", color: "#ff5fa2", min: 1700, reward: [{ kind: "item", id: "title-elite" }, { kind: "item", id: "boom-gold" }, { kind: "chest", tier: "legend" }] }
 ];
 var RANK_RULES = {
   places: [20, 10, -10, -20],
@@ -6084,7 +6084,7 @@ var RANK_RULES = {
   softUnder: 100,
   softFactor: 0.5,
   divisions: 3,
-  lastSpan: 600,
+  lastSpan: 450,
   divisionCoins: 100,
   modes: ["classic", "chaos", "koth"],
   teamModes: ["koth"],
