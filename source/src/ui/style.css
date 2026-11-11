@@ -1649,3 +1649,10 @@ body.launching #btnPlay, body.launching #btnLaunch, body.launching #btnAgain, bo
 .rank-ladder li .mrw { min-width: 0; overflow: hidden; justify-content: flex-end; }
 @container (max-height: 380px) { .rank-ladder .rl-div small { display: none; } }
 @container (max-width: 760px) { .rank-ladder li { grid-template-columns: auto minmax(0, 1fr) auto; } .rank-ladder li .mrw { grid-column: 1 / -1; justify-content: flex-start; flex-wrap: wrap; } }
+.rank-ladder.steps li { grid-template-columns: auto minmax(15cqh, max-content) minmax(9cqh, auto) minmax(0, 1fr) 3cqh; }
+.rank-ladder.steps .rl-min { font-weight: 800; color: var(--muted); white-space: nowrap; font-size: .9em; }
+.rank-ladder.steps .mrw { justify-content: flex-start; flex-wrap: wrap; }
+.rank-ladder.steps li:not(.ok):not(.cur) { opacity: .78; }
+.season-left { float: right; font-family: var(--ui); font-weight: 800; letter-spacing: 0; text-transform: none; color: #ffd23f; }
+@container (max-width: 760px) { .rank-ladder.steps li { grid-template-columns: auto minmax(0, 1fr) auto 3cqh; } .rank-ladder.steps li .mrw { grid-column: 1 / -1; } }
+@container (max-width: 760px) { .rank-ladder.steps li .rl-ok { grid-row: 1; grid-column: 4; } .rank-ladder.steps li .mrw { grid-row: 2; } .rank-ladder.steps li { row-gap: .4cqh; } }

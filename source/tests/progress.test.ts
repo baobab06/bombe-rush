@@ -10,7 +10,7 @@ import {
   ACHIEVEMENTS, CHESTS, CHEST_ORDER, LEVEL_MAX, LEVEL_REWARDS, LEVEL_UP_COINS, LOGIN_REWARDS, MASTERY_STEPS, RANKS, STREAK_BONUSES,
   WEEKLY_PER_WEEK, XP_BY_PLACE, levelXp, masteryXp,
 } from "../src/meta/progress-config";
-import { STEPS, compBots, rankIndex, rankProgress, stepOf, trophyDelta } from "../src/meta/rank";
+import { STEPS, compBots, rankIndex, rankProgress, rollSeason, seasonId, stepOf, trophyDelta } from "../src/meta/rank";
 import { settleAbandoned, beginMatch } from "../src/meta/rewards";
 import { SaveSystem, memoryBackend, migrate } from "../src/meta/save";
 import { buy, claimDaily, claimMission, dailyState, ensureMissions, equip, isEquipped, owns } from "../src/meta/store";
@@ -270,6 +270,26 @@ console.log("12. Compétition : trophées, ligues et divisions");
   d.rank.points = STEPS[1].min - 10;
   const sd = applyMatch(d, O(1), C("easy", false, true), day(5))!;
   check(sd.tx.rank!.stepAfter === 1 && sd.granted.some((g) => g.reward.kind === "coins") && d.coins > coins, "nouvelle division (Bronze II) : pièces offertes");
+  check(STEPS.slice(1).every((x) => x.reward.length > 0), "une récompense à CHAQUE échelon (17 sur 17)");
+  // saisons : chaque mois, tout le monde repart de 0
+  const se = defaultProfile();
+  const nov = Date.UTC(2026, 10, 20), dec = Date.UTC(2026, 11, 1, 0, 5);
+  check(rollSeason(se, nov) === null && se.rank.month === "2026-11" && seasonId(dec) === "2026-12", "première partie : la saison du mois démarre");
+  se.rank.points = 600;
+  se.rank.rewarded = STEPS.filter((x) => x.min <= 600).map((x) => x.id);
+  se.rank.history.push({ at: nov, place: 1, players: 4, stake: "hard", delta: 20, points: 600 });
+  check(rollSeason(se, nov + 86400_000) === null && se.rank.points === 600, "même mois : rien ne change");
+  const c0 = se.coins;
+  const end = rollSeason(se, dec);
+  check(!!end && end.points === 600 && end.step.name === "Or II" && se.rank.points === 0 && se.rank.history.length === 0, "nouveau mois : retour à 0 trophée (saison finie en Or II)");
+  check(se.coins > c0 && se.rank.last?.points === 600, "prime de fin de saison selon la division atteinte");
+  check(se.rank.rewarded.length === 1, "les récompenses d'échelon se regagnent à la nouvelle saison");
+  const c1 = se.coins;
+  se.rank.points = STEPS[1].min - 10;
+  applyMatch(se, O(1), { matchId: "s2", stake: "easy", modeId: "classic", online: false, comp: true }, new Date(dec + 3600_000));
+  check(se.coins > c1 + 100 - 1 && se.rank.rewarded.includes(STEPS[1].id), "…et Bronze II redonne bien sa récompense");
+  check(rollSeason(se, dec + 5000) === null, "une seule remise à zéro par mois");
+
   const ab = defaultProfile();
   ab.rank.points = 900;
   beginMatch(ab, { matchId: "ab", stake: "hard", modeId: "classic", players: 4, comp: true });

@@ -45,7 +45,7 @@ import { ChestsScreen } from "./chests-screen";
 import { achievementsToClaim, checkAchievements } from "../meta/achievements";
 import { chestCount, nextLevelReward, rewardText, type Granted } from "../meta/grants";
 import { masteryOf } from "../meta/mastery";
-import { compBots, compMode, compStake, rankProgress, trophyDelta } from "../meta/rank";
+import { compBots, compMode, compStake, rankProgress, rollSeason, trophyDelta } from "../meta/rank";
 import { ensureWeekly, weeklyToClaim } from "../meta/weekly";
 import { setServerTime } from "../meta/clock";
 import { getTitle } from "../core/cosmetics";
@@ -623,6 +623,19 @@ class App implements AppCtx {
 
   // ------------------------------------------------------------------ accueil
   private renderHome() {
+    // nouvelle saison (chaque mois) : tout le monde repart de 0 trophée
+    {
+      const before = this._profile.rank.month;
+      const ended = rollSeason(this._profile);
+      if (before !== this._profile.rank.month) this.persist();
+      if (ended)
+        window.setTimeout(() => {
+          const sub = `Saison terminée en ${ended.step.rank.icon} ${ended.step.name} avec ${fmt(ended.points)} 🏆. Tout le monde repart de 0 : à toi de remonter !`;
+          if (ended.granted.length) showGranted(this, "🏆 Nouvelle saison !", ended.granted, { sub });
+          else this.toast(`🏆 Nouvelle saison ! ${sub}`, "good");
+          this.renderBadges();
+        }, 700);
+    }
     const p = this._profile;
     $("homeName").textContent = p.name;
     $("homeLevel").textContent = String(p.level);

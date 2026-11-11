@@ -49,7 +49,7 @@ export const STEPS: RankStep[] = RANKS.flatMap((r, li) => {
     name: `${r.name} ${ROMAN[d]}`,
     min: r.min + Math.round((span * d) / RANK_RULES.divisions / 10) * 10,
     rank: r,
-    reward: d === 0 ? r.reward : [{ kind: "coins" as const, amount: RANK_RULES.divisionCoins }],
+    reward: RANK_RULES.stepRewards[li * RANK_RULES.divisions + d] ?? [],
   }));
 });
 
@@ -102,6 +102,43 @@ export function compMode(rand: () => number = Math.random): string {
   return m[Math.min(m.length - 1, Math.floor(rand() * m.length))];
 }
 
+// ------------------------------------------------------------- saisons
+/** Saison = mois (UTC) : « 2026-11 ». Chaque mois, tout le monde repart de 0 trophée. */
+export const seasonId = (now: number = Date.now()): string => new Date(now).toISOString().slice(0, 7);
+/** Début de la saison suivante (ms). */
+export function seasonEnd(now: number = Date.now()): number {
+  const d = new Date(now);
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1);
+}
+export interface SeasonEnd {
+  month: string;
+  points: number;
+  step: RankStep;
+  granted: Granted[];
+}
+/**
+ * Nouvelle saison ? Remet les trophées à 0, rend toutes les récompenses
+ * d'échelon regagnables et offre la prime de fin de saison. Renvoie la saison
+ * terminée (pour l'annoncer), ou null si rien n'a changé.
+ */
+export function rollSeason(p: Profile, now: number = Date.now()): SeasonEnd | null {
+  const id = seasonId(now);
+  if (p.rank.month === id) return null;
+  const first = !p.rank.month;
+  const month = p.rank.month ?? id;
+  p.rank.month = id;
+  if (first) return null;
+  const points = p.rank.points;
+  const step = stepOf(points);
+  const granted: Granted[] = [];
+  if (step.index > 0) grantAll(p, [{ kind: "coins", amount: step.index * RANK_RULES.seasonEndCoins }], granted, "Fin de saison");
+  p.rank.last = { month, points };
+  p.rank.points = 0;
+  p.rank.history = [];
+  p.rank.rewarded = [STEPS[0].id];
+  return points > 0 ? { month, points, step, granted } : null;
+}
+
 export interface RankResult {
   delta: number;
   before: number;
@@ -119,6 +156,7 @@ export interface RankResult {
 
 /** Applique une partie de Compétition réglée (appelé une seule fois par partie, par settleMatch). */
 export function applyRank(p: Profile, column: number, place: number, players: number, at: number, modeId?: string, draw = false): RankResult {
+  rollSeason(p, at);
   const before = p.rank.points;
   const tierBefore = rankIndex(before);
   const stepBefore = stepIndex(before);

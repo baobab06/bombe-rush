@@ -82,7 +82,7 @@ export class WorldScreen {
             return `<li class="${e.me ? "me" : ""}${i < 3 ? ` top${i + 1}` : ""}"><span class="wr-pos">${medal(i + 1)}</span><span class="wr-ico" title="${r.name}" style="--rc:${r.color}">${r.icon}</span><b class="wr-name">${esc(e.n)}</b><span class="wr-pts">${fmt(e.p)}</span></li>`;
           })
           .join("")}</ol>`
-      : `<p class="world-empty">${b.board === "week" ? "Personne n'a encore gagné de trophées cette semaine.<br><b>Sois le premier !</b>" : "Le classement est encore vide.<br><b>Joue une partie pour y entrer !</b>"}</p>`;
+      : `<p class="world-empty">${b.board === "week" ? "Personne n'a encore gagné de trophées cette semaine.<br><b>Sois le premier !</b>" : "Personne n'a encore de trophées cette saison.<br><b>Joue en Compétition pour y entrer !</b>"}</p>`;
     const r = b.me ? RANKS[b.me.r] ?? RANKS[0] : RANKS[0];
     meEl.innerHTML =
       b.me && b.me.pos
@@ -91,7 +91,7 @@ export class WorldScreen {
     info.innerHTML =
       b.board === "week"
         ? `⏳ Fin de la semaine dans <b>${left(b.weekEnds - Date.now())}</b> · Récompenses : 1er coffre légendaire, top 3 coffre épique, top 10 coffre rare`
-        : `${fmt(b.total)} joueur${b.total > 1 ? "s" : ""} classé${b.total > 1 ? "s" : ""} · Parties de Compétition, rejouées et vérifiées par le serveur`;
+        : `${fmt(b.total)} joueur${b.total > 1 ? "s" : ""} classé${b.total > 1 ? "s" : ""} · 📅 Saison d'un mois${b.seasonEnds ? ` : fin dans <b>${left(b.seasonEnds - Date.now())}</b>` : ""}, puis tout le monde repart de 0`;
     this.claim(b);
   }
 

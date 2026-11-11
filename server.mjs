@@ -6085,7 +6085,27 @@ var RANK_RULES = {
   softFactor: 0.5,
   divisions: 3,
   lastSpan: 450,
-  divisionCoins: 100,
+  stepRewards: [
+    [],
+    [{ kind: "coins", amount: 100 }],
+    [{ kind: "coins", amount: 150 }, { kind: "xp", amount: 100 }],
+    [{ kind: "chest", tier: "rare" }],
+    [{ kind: "coins", amount: 250 }],
+    [{ kind: "chest", tier: "rare" }, { kind: "coins", amount: 150 }],
+    [{ kind: "chest", tier: "rare" }, { kind: "coins", amount: 300 }],
+    [{ kind: "coins", amount: 400 }, { kind: "bombers", amount: 5 }],
+    [{ kind: "chest", tier: "epic" }],
+    [{ kind: "chest", tier: "epic" }, { kind: "coins", amount: 300 }],
+    [{ kind: "coins", amount: 600 }, { kind: "bombers", amount: 10 }],
+    [{ kind: "chest", tier: "epic" }, { kind: "coins", amount: 500 }],
+    [{ kind: "item", id: "title-diamond" }, { kind: "chest", tier: "epic" }],
+    [{ kind: "coins", amount: 800 }, { kind: "bombers", amount: 15 }],
+    [{ kind: "chest", tier: "legend" }],
+    [{ kind: "item", id: "title-elite" }, { kind: "item", id: "boom-gold" }, { kind: "chest", tier: "legend" }],
+    [{ kind: "coins", amount: 1500 }, { kind: "bombers", amount: 25 }],
+    [{ kind: "chest", tier: "legend", count: 2 }, { kind: "coins", amount: 2000 }]
+  ],
+  seasonEndCoins: 60,
   modes: ["classic", "chaos", "koth"],
   teamModes: ["koth"],
   bots: 3,
@@ -6167,7 +6187,7 @@ var STEPS = RANKS.flatMap((r, li) => {
     name: `${r.name} ${ROMAN[d]}`,
     min: r.min + Math.round(span * d / RANK_RULES.divisions / 10) * 10,
     rank: r,
-    reward: d === 0 ? r.reward : [{ kind: "coins", amount: RANK_RULES.divisionCoins }]
+    reward: RANK_RULES.stepRewards[li * RANK_RULES.divisions + d] ?? []
   }));
 });
 function stepIndex(points) {
@@ -6198,6 +6218,11 @@ function compBots(points) {
 function compMode(rand = Math.random) {
   const m = RANK_RULES.modes;
   return m[Math.min(m.length - 1, Math.floor(rand() * m.length))];
+}
+var seasonId = (now = Date.now()) => new Date(now).toISOString().slice(0, 7);
+function seasonEnd(now = Date.now()) {
+  const d = new Date(now);
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1);
 }
 
 // src/meta/rewards.ts
@@ -6405,6 +6430,14 @@ class LeaderboardService {
     }
   }
   rollWeek() {
+    const month = seasonId(this.now());
+    if (this.doc.month !== month) {
+      if (this.doc.month)
+        for (const p of Object.values(this.doc.players))
+          p.p = 0;
+      this.doc.month = month;
+      this.touch();
+    }
     const prev = weekOf(this.now() - 7 * 86400000);
     if (this.doc.last?.week === prev)
       return;
@@ -6561,7 +6594,7 @@ class LeaderboardService {
     if (cached)
       return cached;
     const P = this.doc.players;
-    const ids = board === "all" ? Object.keys(P).filter((id) => !P[id].x && P[id].g > 0).sort((a, b) => P[b].p - P[a].p || P[a].s - P[b].s) : Object.keys(P).filter((id) => !P[id].x && P[id].wk === wk && P[id].w > 0).sort((a, b) => P[b].w - P[a].w || P[a].s - P[b].s);
+    const ids = board === "all" ? Object.keys(P).filter((id) => !P[id].x && P[id].p > 0).sort((a, b) => P[b].p - P[a].p || P[a].s - P[b].s) : Object.keys(P).filter((id) => !P[id].x && P[id].wk === wk && P[id].w > 0).sort((a, b) => P[b].w - P[a].w || P[a].s - P[b].s);
     this.sorted[board] = ids;
     return ids;
   }
@@ -6585,6 +6618,7 @@ class LeaderboardService {
       total: ids.length,
       me,
       weekEnds: weekEnd(this.now()),
+      seasonEnds: seasonEnd(this.now()),
       last: last ? { week: last.week, pos: lastPos >= 0 ? lastPos + 1 : null } : null
     };
   }

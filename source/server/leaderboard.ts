@@ -25,7 +25,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { DT } from "../src/core/rules";
 import type { Difficulty } from "../src/core/types";
-import { compBots, compMode, rankIndex, trophyDelta } from "../src/meta/rank";
+import { compBots, compMode, rankIndex, seasonEnd, seasonId, trophyDelta } from "../src/meta/rank";
 import { columnOf, type Placement } from "../src/meta/rewards";
 import { DIFFICULTIES, RANKED_MODES, Replay, checkSpec, type RankedSpec, type ReplayOutcome } from "../src/net/replay";
 import { MemoryStore, type KvStore } from "./accounts";
@@ -67,6 +67,8 @@ interface Doc {
   players: Record<string, LbPlayer>;
   /** dernière semaine terminée : top 10 */
   last?: { week: string; top: string[] };
+  /** saison en cours (mois UTC) : à chaque nouveau mois, tout le monde repart de 0 */
+  month?: string;
 }
 
 export interface LbEntry {
@@ -154,6 +156,12 @@ export class LeaderboardService {
 
   /** Change de semaine : garde le top 10 de la semaine passée (récompenses). */
   private rollWeek() {
+    const month = seasonId(this.now());
+    if (this.doc.month !== month) {
+      if (this.doc.month) for (const p of Object.values(this.doc.players)) p.p = 0;
+      this.doc.month = month;
+      this.touch();
+    }
     const prev = weekOf(this.now() - 7 * 86400_000);
     if (this.doc.last?.week === prev) return;
     const top = Object.entries(this.doc.players)
@@ -318,7 +326,7 @@ export class LeaderboardService {
     const P = this.doc.players;
     const ids =
       board === "all"
-        ? Object.keys(P).filter((id) => !P[id].x && P[id].g > 0).sort((a, b) => P[b].p - P[a].p || P[a].s - P[b].s)
+        ? Object.keys(P).filter((id) => !P[id].x && P[id].p > 0).sort((a, b) => P[b].p - P[a].p || P[a].s - P[b].s)
         : Object.keys(P).filter((id) => !P[id].x && P[id].wk === wk && P[id].w > 0).sort((a, b) => P[b].w - P[a].w || P[a].s - P[b].s);
     this.sorted[board] = ids;
     return ids;
@@ -345,6 +353,7 @@ export class LeaderboardService {
       total: ids.length,
       me,
       weekEnds: weekEnd(this.now()),
+      seasonEnds: seasonEnd(this.now()),
       last: last ? { week: last.week, pos: lastPos >= 0 ? lastPos + 1 : null } : null,
     };
   }

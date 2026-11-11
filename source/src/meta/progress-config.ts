@@ -189,8 +189,20 @@ export const RANK_RULES = {
   divisions: 3,
   /** largeur de la dernière ligue (pour y placer ses divisions) */
   lastSpan: 450,
-  /** pièces offertes à chaque nouvelle division atteinte (hors 1re division d'une ligue, qui a sa récompense) */
-  divisionCoins: 100,
+  /**
+   * Récompense de CHAQUE échelon (Bronze I → Élite III), donnée en l'atteignant.
+   * Tout se regagne à chaque saison ; un objet déjà possédé est converti en pièces.
+   */
+  stepRewards: [
+    [], [{ kind: "coins", amount: 100 }], [{ kind: "coins", amount: 150 }, { kind: "xp", amount: 100 }],
+    [{ kind: "chest", tier: "rare" }], [{ kind: "coins", amount: 250 }], [{ kind: "chest", tier: "rare" }, { kind: "coins", amount: 150 }],
+    [{ kind: "chest", tier: "rare" }, { kind: "coins", amount: 300 }], [{ kind: "coins", amount: 400 }, { kind: "bombers", amount: 5 }], [{ kind: "chest", tier: "epic" }],
+    [{ kind: "chest", tier: "epic" }, { kind: "coins", amount: 300 }], [{ kind: "coins", amount: 600 }, { kind: "bombers", amount: 10 }], [{ kind: "chest", tier: "epic" }, { kind: "coins", amount: 500 }],
+    [{ kind: "item", id: "title-diamond" }, { kind: "chest", tier: "epic" }], [{ kind: "coins", amount: 800 }, { kind: "bombers", amount: 15 }], [{ kind: "chest", tier: "legend" }],
+    [{ kind: "item", id: "title-elite" }, { kind: "item", id: "boom-gold" }, { kind: "chest", tier: "legend" }], [{ kind: "coins", amount: 1500 }, { kind: "bombers", amount: 25 }], [{ kind: "chest", tier: "legend", count: 2 }, { kind: "coins", amount: 2000 }],
+  ] as Reward[][],
+  /** fin de saison (chaque mois, tout le monde repart de 0) : pièces par échelon atteint */
+  seasonEndCoins: 60,
   /** modes tirés au hasard */
   modes: ["classic", "chaos", "koth"],
   teamModes: ["koth"],

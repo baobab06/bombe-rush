@@ -40,6 +40,7 @@ export interface WorldBoard {
   total: number;
   me: { pos: number | null; p: number; r: number; n: string } | null;
   weekEnds: number;
+  seasonEnds?: number;
   last: { week: string; pos: number | null } | null;
 }
 interface Pending {

@@ -141,6 +141,12 @@ console.log("Serveur : Compétition, trophées, triche");
   check(next.entries.length === 0 && next.last?.pos === 1, "nouvelle semaine : classement de la semaine vide, l'ancien 1er est récompensable");
   const all = await svc.top("all", tA.id, 10);
   check(all.me!.p === P[tA.id].p, "le classement général, lui, continue");
+  // nouvelle saison (mois suivant) : tout le monde repart de 0
+  const had = P[tB.id].p;
+  now = Date.parse("2026-12-01T00:10:00Z");
+  const dec = await svc.top("all", tB.id, 10);
+  check(had > 0 && P[tB.id].p === 0 && dec.entries.length === 0, "nouveau mois : tous les trophées du classement repartent de 0");
+  P[tA.id].p = 40;
   await svc.hide(tA.id, true);
   check(!(await svc.top("all", null, 10)).entries.some((e) => e.n.startsWith("Alice")), "administration : pseudo retiré du classement");
 

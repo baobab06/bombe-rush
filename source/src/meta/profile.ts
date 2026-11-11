@@ -94,7 +94,7 @@ export interface Profile {
   /** coffres en réserve */
   chests: Record<ChestTier, number>;
   /** rang compétitif local */
-  rank: { points: number; best: number; bestPoints?: number; rewarded: string[]; history: RankEntry[]; season?: number };
+  rank: { points: number; best: number; bestPoints?: number; rewarded: string[]; history: RankEntry[]; season?: number; /** saison en cours (mois UTC) */ month?: string; /** saison précédente */ last?: { month: string; points: number } };
   stats: ExtraStats;
   /** niveaux dont la récompense a déjà été donnée */
   levelRewardsUpTo: number;
