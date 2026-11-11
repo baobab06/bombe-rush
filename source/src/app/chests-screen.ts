@@ -1,18 +1,18 @@
 /**
  * Écran COFFRES : réserve de coffres gagnés en jouant, aperçu du contenu
- * possible (probabilités), puis ouverture animée.
+ * possible (probabilités), puis cinématique d'ouverture (chest-cinematic.ts).
  * Le contenu est tiré ET sauvegardé avant l'animation.
  */
-import { audio } from "../audio/audio";
 import { RARITY_LABEL, RARITY_ORDER } from "../core/characters";
-import { chestPool, openChest, type ChestOpening, type Granted } from "../meta/grants";
+import { chestPool, openChest } from "../meta/grants";
 import { CHESTS, CHEST_ORDER, DUPLICATE_COINS, type ChestTier } from "../meta/progress-config";
 import { owns } from "../meta/store";
-import { haptics } from "../platform/haptics";
+import { chestImage } from "../ui/chest-art";
+import { ChestCinematic } from "./chest-cinematic";
 import { fmt, type AppCtx } from "./ctx";
-import { grantCard } from "./rewards";
 
-export const chestArt = (tier: ChestTier, extra = "") => `<span class="chest-art c-${tier} ${extra}"><i class="lid"></i><i class="box"></i><i class="lock"></i></span>`;
+/** Vignette d'un coffre (dessin de src/ui/chest-art.ts). */
+export const chestArt = (tier: ChestTier, extra = "") => `<span class="chest-art c-${tier} ${extra}"><img alt="" draggable="false" src="${chestImage(tier)}"></span>`;
 
 export class ChestsScreen {
   constructor(private ctx: AppCtx, private onChange: () => void) {}
@@ -125,150 +125,3 @@ export class ChestsScreen {
 }
 
 const TIER_LABEL: Record<ChestTier, string> = { common: "Commun", rare: "Rare", epic: "Épique", legend: "Légendaire" };
-
-/**
- * Cinématique d'ouverture (étapes 2 à 5) : apparition, secousses de plus en
- * plus fortes, lumière qui s'échappe, explosion à la couleur du coffre,
- * révélation des récompenses (effet renforcé pour Épique / Légendaire),
- * RÉCUPÉRER ou OUVRIR UN AUTRE. Touche l'écran (ou PASSER) pour aller
- * directement aux récompenses.
- */
-class ChestCinematic {
-  private el: HTMLElement;
-  private timers: number[] = [];
-  private revealed = false;
-  private closed = false;
-
-  constructor(
-    private ctx: AppCtx,
-    private res: ChestOpening,
-    private before: number,
-    private hooks: { onClose: () => void; again: () => (() => void) | null },
-  ) {
-    const tier = res.tier;
-    const el = document.createElement("div");
-    el.className = `chest-fx c-${tier}`;
-    el.id = "chestFx";
-    el.innerHTML = `
-      <div class="cf-top"><span class="cf-name">${CHESTS[tier].name}</span><div class="wallet" data-wallet data-wallet-top><i class="coin"></i><b data-coins>0</b></div></div>
-      <div class="cf-rays"></div>
-      <div class="cf-stage">${chestArt(tier, "cf-chest")}<i class="cf-leak"></i></div>
-      <div class="cf-cards" hidden></div>
-      <div class="cf-actions" hidden></div>
-      <button class="cf-skip" id="btnChestSkip">PASSER ⏩</button>
-      <p class="cf-hint">Touche l'écran pour ouvrir plus vite</p>`;
-    const app = document.getElementById("app")!;
-    app.insertBefore(el, document.getElementById("uiFx"));
-    this.el = el;
-    // le compteur affiche l'ancien solde jusqu'à la révélation
-    el.querySelector<HTMLElement>("[data-coins]")!.textContent = fmt(before);
-    el.addEventListener("click", (e) => {
-      if ((e.target as HTMLElement).closest(".cf-actions")) return;
-      this.reveal();
-    });
-    el.querySelector("#btnChestSkip")!.addEventListener("click", (e) => {
-      e.stopPropagation();
-      this.reveal();
-    });
-    // étape 2 : préparation (apparition + petite vibration), étape 3 : secousses → lumière → explosion
-    audio.play("whoosh");
-    this.at(450, () => el.classList.add("prep"));
-    this.at(1000, () => {
-      el.classList.add("shake");
-      audio.play("rumble", 0.6);
-      haptics.pulse(20);
-    });
-    this.at(1600, () => {
-      el.classList.add("leak");
-      const c = this.ctx.fx.center(el.querySelector(".cf-stage")!);
-      this.ctx.fx.sparkle(c.x, c.y, 18, CHESTS[tier].color);
-      haptics.pulse(30);
-    });
-    this.at(2300, () => this.reveal());
-  }
-
-  private at(ms: number, fn: () => void) {
-    this.timers.push(window.setTimeout(() => !this.closed && !this.revealed && fn(), ms));
-  }
-
-  /** Étape 4 : explosion de lumière puis révélation (exactement ce qui a été donné). */
-  reveal() {
-    if (this.revealed || this.closed) return;
-    this.revealed = true;
-    for (const t of this.timers) window.clearTimeout(t);
-    const el = this.el;
-    const tier = this.res.tier;
-    el.classList.remove("shake", "prep");
-    el.classList.add("leak", "burst");
-    el.querySelector(".cf-hint")?.remove();
-    el.querySelector(".cf-skip")?.remove();
-    audio.play("unlock");
-    haptics.pulse(tier === "legend" ? 90 : 45);
-    const stage = el.querySelector(".cf-stage")!;
-    const c = this.ctx.fx.center(stage);
-    const big = tier === "legend" || tier === "epic";
-    this.ctx.fx.confetti(c.x, c.y, big ? 110 : 55, big ? 1.4 : 1);
-    this.ctx.fx.sparkle(c.x, c.y, big ? 36 : 20, CHESTS[tier].color);
-    const cards = el.querySelector<HTMLElement>(".cf-cards")!;
-    const res = this.res;
-    const coinG: Granted = { reward: { kind: "coins", amount: res.coins }, label: `+${fmt(res.coins)} pièces`, icon: "🪙", coins: res.coins };
-    const list: Granted[] = [coinG, ...res.items];
-    window.setTimeout(() => {
-      if (this.closed) return;
-      el.classList.add("revealed");
-      cards.hidden = false;
-      list.forEach((g, i) => {
-        const card = grantCard(g, this.ctx);
-        const rare = g.rarity === "epic" || g.rarity === "legend";
-        if (rare) card.classList.add("shine");
-        card.style.animationDelay = `${0.05 + i * 0.32}s`;
-        if (g.rarity) card.insertAdjacentHTML("afterbegin", `<span class="gc-rar">${RARITY_LABEL[g.rarity].toUpperCase()}${g.rarity === "legend" ? " !" : ""}</span>`);
-        cards.appendChild(card);
-        window.setTimeout(() => {
-          if (this.closed) return;
-          if (rare) {
-            const cc = this.ctx.fx.center(card);
-            this.ctx.fx.sparkle(cc.x, cc.y, 22, g.rarity === "legend" ? "#ffd23f" : "#c27bff");
-            audio.play("levelup", 0.7);
-          }
-        }, 150 + i * 320);
-      });
-      const gained = res.coins + res.items.reduce((a, g) => a + g.coins, 0);
-      window.setTimeout(() => !this.closed && this.ctx.wallet.earn(this.ctx.fx, cards, gained, this.before), 300);
-      // étape 5 : RÉCUPÉRER / OUVRIR UN AUTRE
-      const actions = el.querySelector<HTMLElement>(".cf-actions")!;
-      const ok = document.createElement("button");
-      ok.className = "btn btn-yellow";
-      ok.id = "btnChestOk";
-      ok.innerHTML = "<span>RÉCUPÉRER</span>";
-      ok.addEventListener("click", () => {
-        this.ctx.click();
-        this.close();
-      });
-      actions.appendChild(ok);
-      const again = this.hooks.again();
-      if (again) {
-        const b = document.createElement("button");
-        b.className = "btn btn-blue";
-        b.id = "btnChestAgain";
-        b.innerHTML = `<span>OUVRIR UN AUTRE (${this.ctx.profile.chests[tier]})</span>`;
-        b.addEventListener("click", () => {
-          this.ctx.click();
-          this.close();
-          again();
-        });
-        actions.appendChild(b);
-      }
-      window.setTimeout(() => !this.closed && (actions.hidden = false), 150 + list.length * 220);
-    }, 380);
-  }
-
-  close() {
-    if (this.closed) return;
-    this.closed = true;
-    for (const t of this.timers) window.clearTimeout(t);
-    this.el.remove();
-    this.ctx.wallet.sync();
-    this.hooks.onClose();
-  }
-}

@@ -37,6 +37,12 @@ jobs:
         run: |
           set -o pipefail
           gradle --no-daemon --stacktrace -PwwwDir="$GITHUB_WORKSPACE/www" :app:bundleRelease :app:assembleRelease 2>&1 | tee "$GITHUB_WORKSPACE/build.log"
+      # La clé de test d'Android est gardée d'une compilation à l'autre (cache GitHub, jamais dans le dépôt) :
+      # une nouvelle version de TEST s'installe ainsi PAR-DESSUS l'ancienne, sans la désinstaller.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: bombe-rush-test-keystore-v1
       - name: Compiler la version de TEST (APK installable, à côté de la version du Play Store)
         id: test
         continue-on-error: true

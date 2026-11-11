@@ -2,6 +2,7 @@
  * Récompenses à l'écran : calendrier de connexion (7 jours) et fenêtre
  * « Tu as gagné… » commune à toutes les sources (missions, succès, rangs…).
  */
+import { chestImage } from "../ui/chest-art";
 import { audio } from "../audio/audio";
 import { RARITY_LABEL, getCharacter } from "../core/characters";
 import { getItem } from "../meta/catalog";
@@ -18,7 +19,7 @@ export function rewardChip(r: Reward): string {
   if (r.kind === "coins") return `<span class="rw-chip coins"><i class="coin"></i>${fmt(r.amount)}</span>`;
   if (r.kind === "bombers") return `<span class="rw-chip bombers"><i class="bomber"></i>${fmt(r.amount)}</span>`;
   if (r.kind === "xp") return `<span class="rw-chip xp">${fmt(r.amount)} XP</span>`;
-  if (r.kind === "chest") return `<span class="rw-chip chest c-${r.tier}">🎁 ${CHESTS[r.tier].name.replace("Coffre ", "")}</span>`;
+  if (r.kind === "chest") return `<span class="rw-chip chest c-${r.tier}"><img class="rw-chest" alt="" draggable="false" src="${chestImage(r.tier, 96)}">${r.count && r.count > 1 ? `${r.count} × ` : ""}${CHESTS[r.tier].name.replace("Coffre ", "")}</span>`;
   const it = getItem(r.id);
   return `<span class="rw-chip item r-${it?.rarity ?? "common"}">${rewardIcon(r)} ${rewardText(r)}</span>`;
 }
@@ -41,7 +42,7 @@ export function grantCard(g: Granted, ctx: AppCtx): HTMLElement {
     const name = it.kind === "skin" ? `${getCharacter(it.characterId!).name} ${it.name}` : it.name;
     el.insertAdjacentHTML("beforeend", `<small>${kind} ${RARITY_LABEL[it.rarity].toLowerCase()}</small><b>${name}</b>${g.duplicate ? `<em>doublon → <i class="coin"></i>+${fmt(g.coins)}</em>` : `<em class="new">NOUVEAU !</em>`}`);
   } else {
-    const big = g.reward.kind === "coins" ? '<i class="coin big"></i>' : g.reward.kind === "bombers" ? '<i class="bomber big"></i>' : g.reward.kind === "chest" ? '<span class="gc-emo">🎁</span>' : '<span class="gc-emo">✨</span>';
+    const big = g.reward.kind === "coins" ? '<i class="coin big"></i>' : g.reward.kind === "bombers" ? '<i class="bomber big"></i>' : g.reward.kind === "chest" ? `<img class="gc-chest" alt="" draggable="false" src="${chestImage(g.reward.tier)}">` : '<span class="gc-emo">✨</span>';
     el.innerHTML = `${big}<b>${g.label}</b>`;
   }
   if (g.source) el.title = g.source;

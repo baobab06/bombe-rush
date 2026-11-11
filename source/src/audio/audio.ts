@@ -37,7 +37,17 @@ export type Sfx =
   | "gas"
   | "chain"
   | "cough"
-  | "stunned";
+  | "stunned"
+  // ouverture des coffres
+  | "chestLand"
+  | "chestHop"
+  | "chestCharge"
+  | "chestBurst"
+  | "orb"
+  | "revealCommon"
+  | "revealRare"
+  | "revealEpic"
+  | "revealLegend";
 
 type Track = "menu" | "game" | null;
 
@@ -291,6 +301,51 @@ class AudioEngine {
         [523, 659, 784, 1046, 1318, 1568].forEach((f, i) => this.osc("triangle", f, f, t + i * 0.075, 0.3, 0.2));
         [262, 392, 523].forEach((f) => this.osc("sine", f, f, t + 0.45, 0.9, 0.16));
         this.burst(t + 0.4, 0.6, 0.12, "highpass", 8000, 4000);
+        break;
+      // ------------------------------------------------ coffres
+      case "chestLand": // le coffre tombe sur le sol
+        this.osc("sine", 120, 38, t, 0.3, 0.6 * v);
+        this.osc("triangle", 240, 150, t, 0.07, 0.25 * v);
+        this.burst(t, 0.2, 0.3 * v, "lowpass", 800, 140);
+        break;
+      case "chestHop": // il sautille : bois et ferraille
+        this.osc("triangle", 300, 190, t, 0.06, 0.22 * v);
+        this.burst(t, 0.07, 0.2 * v, "bandpass", 2200, 900);
+        this.osc("square", 1400, 1100, t + 0.02, 0.03, 0.05 * v);
+        break;
+      case "chestCharge": // la lumière monte
+        this.osc("sawtooth", 110, 520, t, 0.9, 0.07 * v);
+        this.osc("sine", 220, 1040, t, 0.9, 0.09 * v);
+        this.burst(t, 0.9, 0.07 * v, "highpass", 2500, 9000);
+        break;
+      case "chestBurst": // le couvercle saute
+        this.osc("sine", 170, 34, t, 0.55, 0.7 * v);
+        this.burst(t, 0.5, 0.45 * v, "lowpass", 2600, 180);
+        this.burst(t, 0.6, 0.12 * v, "highpass", 6000, 11000);
+        [784, 988, 1175, 1568, 1976].forEach((f, i) => this.osc("triangle", f, f, t + 0.05 + i * 0.05, 0.28, 0.13 * v));
+        break;
+      case "orb": // une récompense jaillit
+        this.osc("sine", 480, 1150, t, 0.17, 0.22 * v);
+        this.burst(t, 0.13, 0.08 * v, "bandpass", 1500, 3800);
+        break;
+      case "revealCommon":
+        [659, 880].forEach((f, i) => this.osc("triangle", f, f, t + i * 0.07, 0.2, 0.17 * v));
+        break;
+      case "revealRare":
+        [659, 880, 1175].forEach((f, i) => this.osc("triangle", f, f, t + i * 0.07, 0.24, 0.18 * v));
+        this.osc("sine", 440, 440, t + 0.1, 0.5, 0.12 * v);
+        break;
+      case "revealEpic":
+        [523, 659, 784, 1046, 1318].forEach((f, i) => this.osc("triangle", f, f, t + i * 0.065, 0.3, 0.17 * v));
+        [262, 330, 392].forEach((f) => this.osc("sine", f, f, t + 0.3, 0.8, 0.13 * v));
+        this.burst(t + 0.25, 0.6, 0.1 * v, "highpass", 7000, 4000);
+        break;
+      case "revealLegend":
+        this.osc("sine", 150, 40, t, 0.5, 0.5 * v);
+        [392, 523, 659, 784, 1046, 1318, 1568].forEach((f, i) => this.osc("triangle", f, f, t + i * 0.075, 0.36, 0.17 * v));
+        [196, 262, 330, 392, 523].forEach((f) => this.osc("sine", f, f, t + 0.5, 1.3, 0.12 * v));
+        this.burst(t + 0.45, 1.0, 0.13 * v, "highpass", 8000, 3500);
+        [1568, 2093, 2637].forEach((f, i) => this.osc("sine", f, f, t + 0.75 + i * 0.11, 0.3, 0.07 * v));
         break;
       case "deny":
         this.osc("square", 220, 160, t, 0.12, 0.12);
