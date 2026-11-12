@@ -6731,19 +6731,19 @@ function leaderboardRoutes(svc, adminToken, corsOrigin) {
 }
 // server/announce.json
 var announce_default = {
-  rev: "2026-11-09-v1.12.1",
+  rev: "2026-11-12-v1.13.0",
   config: {
     enabled: true,
-    latestVersion: "1.12.1",
+    latestVersion: "1.13.0",
     minVersion: "1.0.0",
     mandatory: false,
-    title: "Nouvelle mise à jour !",
-    description: "La version 1.12.1 de Bombe Rush est disponible sur le Play Store.",
+    title: "Nouveau : mode Compétition !",
+    description: "La version 1.13.0 de Bombe Rush est disponible sur le Play Store.",
     notes: [
-      { kind: "new", text: "Tutoriel pour les nouveaux joueurs, avec un terrain d'entraînement." },
-      { kind: "fix", text: "Vidéos récompensées réparées : tu peux de nouveau gagner des pièces en regardant une vidéo." },
-      { kind: "improve", text: "Bots plus malins (surtout en Domination) et niveaux de difficulté rééquilibrés." },
-      { kind: "improve", text: "Menus mieux affichés sur tous les écrans." }
+      { kind: "new", text: "Mode Compétition : mode de jeu tiré au hasard, gagne ou perds des trophées selon ta place." },
+      { kind: "new", text: "18 paliers de Bronze à Élite, avec une récompense à chaque palier." },
+      { kind: "new", text: "Une nouvelle saison chaque mois : tout le monde repart de 0." },
+      { kind: "improve", text: "Classement mondial avec tes trophées, et nouveaux coffres avec une animation d'ouverture." }
     ],
     storeUrl: "https://play.google.com/store/apps/details?id=com.bomberush.game",
     push: null
