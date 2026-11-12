@@ -663,6 +663,363 @@ function penguin(ctx: Ctx, cx: number, by: number, s: number, c: Palette, pose: 
   return { headCx: cx, headTop: hy - s * 0.29, headW: s * 0.5, eyeY: hy - s * 0.08, neckY: hy + s * 0.07, bodyY: hy + s * 0.12, bodyW: s * 0.26, faceRx: s * 0.17, faceRy: s * 0.13, faceY: hy - s * 0.05 };
 }
 
+/** Bébé dragon : cornes, ailes qui battent, queue en pointe, petite flamme en posant une bombe. */
+function dragon(ctx: Ctx, cx: number, by: number, s: number, c: Palette, pose: CharPose, ink: string, look: Look): Anchor {
+  const back = pose.faceY < 0;
+  const side = pose.faceX !== 0 ? -pose.faceX : 1;
+  const t = pose.t;
+  const flap = Math.sin(t * (pose.moving ? 14 : 4)) * (pose.celebrate ? 0.35 : 0.18);
+  const hy = by - s * 0.08;
+  // queue (derrière, côté opposé au regard)
+  ctx.save();
+  ctx.translate(cx + side * s * 0.17, by + s * 0.22);
+  ctx.rotate(side * (1.15 + Math.sin(t * 4) * 0.12));
+  ell(ctx, 0, -s * 0.1, s * 0.055, s * 0.13, c.main, true);
+  poly(ctx, [[0, -s * 0.33], [s * 0.07, -s * 0.23], [0, -s * 0.19], [-s * 0.07, -s * 0.23]], c.accent, true);
+  ctx.restore();
+  const wings = () => {
+    for (const sx of [-1, 1]) {
+      ctx.save();
+      ctx.translate(cx + sx * s * 0.1, by + s * 0.04);
+      ctx.rotate(sx * (-0.1 - flap));
+      ctx.fillStyle = shaded(ctx, c.dark, sx * s * 0.16, -s * 0.12, s * 0.16, s * 0.12);
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.quadraticCurveTo(sx * s * 0.08, -s * 0.24, sx * s * 0.32, -s * 0.24);
+      ctx.quadraticCurveTo(sx * s * 0.27, -s * 0.15, sx * s * 0.3, -s * 0.07);
+      ctx.quadraticCurveTo(sx * s * 0.22, -s * 0.1, sx * s * 0.2, -s * 0.02);
+      ctx.quadraticCurveTo(sx * s * 0.12, -s * 0.06, 0, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.save();
+      ctx.globalAlpha = 0.45;
+      ctx.lineWidth = Math.max(1, s * 0.015);
+      ctx.beginPath();
+      ctx.moveTo(sx * s * 0.04, -s * 0.03);
+      ctx.lineTo(sx * s * 0.26, -s * 0.2);
+      ctx.moveTo(sx * s * 0.04, -s * 0.03);
+      ctx.lineTo(sx * s * 0.24, -s * 0.09);
+      ctx.stroke();
+      ctx.restore();
+      ctx.restore();
+    }
+  };
+  if (!back) wings();
+  // corps
+  ell(ctx, cx, by + s * 0.13, s * 0.21, s * 0.16, c.main, true);
+  if (!back) {
+    ell(ctx, cx, by + s * 0.15, s * 0.13, s * 0.11, c.light);
+    ctx.save();
+    ctx.globalAlpha = 0.3;
+    ctx.lineWidth = Math.max(1, s * 0.014);
+    for (const k of [0, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(cx - s * 0.09, by + s * (0.12 + k * 0.05));
+      ctx.quadraticCurveTo(cx, by + s * (0.14 + k * 0.05), cx + s * 0.09, by + s * (0.12 + k * 0.05));
+      ctx.stroke();
+    }
+    ctx.restore();
+    ctx.lineWidth = Math.max(1.2, s * 0.045);
+  }
+  // cornes
+  const lw0 = ctx.lineWidth;
+  ctx.lineWidth = Math.max(1, s * 0.03);
+  for (const sx of [-1, 1]) poly(ctx, [[cx + sx * s * 0.09, hy - s * 0.16], [cx + sx * s * 0.2, hy - s * 0.34], [cx + sx * s * 0.2, hy - s * 0.12]], c.accent, true);
+  ctx.lineWidth = lw0;
+  // tête
+  ell(ctx, cx, hy, s * 0.25, s * 0.21, c.main, true);
+  // crête
+  ctx.lineWidth = Math.max(1, s * 0.03);
+  for (const k of [-1, 0, 1]) poly(ctx, [[cx + k * s * 0.06 - s * 0.03, hy - s * 0.19], [cx + k * s * 0.06, hy - s * (k ? 0.26 : 0.29)], [cx + k * s * 0.06 + s * 0.03, hy - s * 0.19]], c.accent, true);
+  ctx.lineWidth = lw0;
+  if (!back) {
+    const mx = cx + pose.faceX * s * 0.08;
+    ell(ctx, mx, hy + s * 0.08, s * 0.15, s * 0.09, c.light);
+    for (const sx of [-1, 1]) ell(ctx, mx + sx * s * 0.04 + pose.faceX * s * 0.03, hy + s * 0.045, s * 0.014, s * 0.01, ink, false, 0, true);
+    const open = pose.action ? Math.sin(pose.action * Math.PI) : 0;
+    mouth(ctx, mx + pose.faceX * s * 0.05, hy + s * 0.11, s * 0.08, pose, ink, open);
+    eyes(ctx, cx, hy - s * 0.04, s, s * 0.1, s * 0.045, pose, ink, look);
+    cheeks(ctx, cx, hy + s * 0.05, s, s * 0.17, pose);
+    // petite flamme en posant une bombe
+    if (open > 0.25) {
+      const fx = mx + pose.faceX * s * 0.16;
+      const fy = hy + s * 0.2 + (pose.faceX ? -s * 0.08 : 0);
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, open * 1.4);
+      ell(ctx, fx, fy, s * 0.06 * open, s * 0.08 * open, "#ff7a1a", false, 0, true);
+      ell(ctx, fx, fy + s * 0.01, s * 0.035 * open, s * 0.05 * open, "#ffe066", false, 0, true);
+      ctx.restore();
+    }
+  } else {
+    // pointes le long du dos
+    for (const k of [0, 1, 2]) poly(ctx, [[cx - s * 0.035, by + s * (0.02 + k * 0.08)], [cx, by + s * (-0.03 + k * 0.08)], [cx + s * 0.035, by + s * (0.02 + k * 0.08)]], c.accent, true);
+    wings();
+  }
+  ell(ctx, cx - s * 0.15, hy - s * 0.1, s * 0.05, s * 0.03, "rgba(255,255,255,0.4)", false, -0.6, true);
+  return { headCx: cx, headTop: hy - s * 0.21, headW: s * 0.5, eyeY: hy - s * 0.04, neckY: hy + s * 0.18, bodyY: by + s * 0.13, bodyW: s * 0.21, faceRx: s * 0.19, faceRy: s * 0.15, faceY: hy + s * 0.03 };
+}
+
+/** Axolotl : grosse tête ronde, branchies en plumeaux de chaque côté, grand sourire. */
+function axolotl(ctx: Ctx, cx: number, by: number, s: number, c: Palette, pose: CharPose, ink: string, look: Look): Anchor {
+  const back = pose.faceY < 0;
+  const side = pose.faceX !== 0 ? -pose.faceX : 1;
+  const t = pose.t;
+  const hy = by - s * 0.05;
+  // queue en nageoire
+  ctx.save();
+  ctx.translate(cx + side * s * 0.15, by + s * 0.22);
+  ctx.rotate(side * (1.25 + Math.sin(t * (pose.moving ? 10 : 4)) * 0.15));
+  ell(ctx, 0, -s * 0.11, s * 0.07, s * 0.15, c.main, true);
+  ell(ctx, 0, -s * 0.15, s * 0.03, s * 0.09, c.light, false, 0, true);
+  ctx.restore();
+  // corps
+  ell(ctx, cx, by + s * 0.15, s * 0.19, s * 0.14, c.main, true);
+  if (!back) ell(ctx, cx, by + s * 0.17, s * 0.12, s * 0.09, c.light);
+  // branchies (3 de chaque côté)
+  for (const sx of [-1, 1]) {
+    for (let k = 0; k < 3; k++) {
+      const a = sx * (0.55 + k * 0.5) + Math.sin(t * 5 + k + (sx > 0 ? 1 : 0)) * 0.08;
+      ctx.save();
+      ctx.translate(cx + sx * s * 0.22, hy - s * 0.03 + k * s * 0.04);
+      ctx.rotate(a);
+      ctx.lineWidth = Math.max(1, s * 0.028);
+      ell(ctx, 0, -s * 0.11, s * 0.045, s * 0.11, c.accent, true);
+      ctx.save();
+      ctx.globalAlpha = 0.45;
+      for (const j of [0.06, 0.11, 0.16]) ell(ctx, 0, -s * j, s * 0.022, s * 0.013, "#ffffff", false, 0, true);
+      ctx.restore();
+      ctx.lineWidth = Math.max(1.2, s * 0.045);
+      ctx.restore();
+    }
+  }
+  // tête large
+  ell(ctx, cx, hy, s * 0.29, s * 0.2, c.main, true);
+  if (!back) {
+    const ex = pose.faceX * s * 0.05;
+    for (const sx of [-1, 1]) eye(ctx, cx + sx * s * 0.15 + ex, hy - s * 0.02, s * 0.038, pose, ink, look, sx);
+    const mx = cx + pose.faceX * s * 0.06;
+    const e = pose.expr ?? "normal";
+    const open = pose.action ? Math.sin(pose.action * Math.PI) : 0;
+    if (e === "happy" || open > 0.2 || e === "scared" || e === "dizzy" || e === "angry") mouth(ctx, mx, hy + s * 0.06, s * 0.12, pose, ink, open);
+    else {
+      ctx.beginPath();
+      ctx.arc(mx, hy + s * 0.01, s * 0.1, 0.35, Math.PI - 0.35);
+      ctx.stroke();
+    }
+    cheeks(ctx, cx, hy + s * 0.05, s, s * 0.2, pose);
+  } else {
+    for (const [dx, dy] of [[-0.1, -0.06], [0.08, -0.1], [0.02, 0.02]] as const) ell(ctx, cx + dx * s, hy + dy * s, s * 0.025, s * 0.02, c.dark, false, 0, true);
+  }
+  ell(ctx, cx - s * 0.17, hy - s * 0.1, s * 0.06, s * 0.03, "rgba(255,255,255,0.45)", false, -0.5, true);
+  return { headCx: cx, headTop: hy - s * 0.2, headW: s * 0.58, eyeY: hy - s * 0.02, neckY: hy + s * 0.17, bodyY: by + s * 0.15, bodyW: s * 0.19, faceRx: s * 0.23, faceRy: s * 0.13, faceY: hy + s * 0.02 };
+}
+
+/** Petit extraterrestre : grosse tête, grands yeux en amande, deux antennes lumineuses. */
+function alien(ctx: Ctx, cx: number, by: number, s: number, c: Palette, pose: CharPose, ink: string, look: Look): Anchor {
+  const back = pose.faceY < 0;
+  const t = pose.t;
+  const hy = by - s * 0.1;
+  // antennes
+  for (const sx of [-1, 1]) {
+    const tx = cx + sx * s * 0.17 + Math.sin(t * 3 + sx) * s * 0.015;
+    const ty = hy - s * 0.42 + Math.sin(t * 4 + sx * 2) * s * 0.02;
+    ctx.beginPath();
+    ctx.moveTo(cx + sx * s * 0.07, hy - s * 0.2);
+    ctx.quadraticCurveTo(cx + sx * s * 0.08, hy - s * 0.34, tx, ty);
+    ctx.stroke();
+    ctx.save();
+    ctx.globalAlpha = 0.3 + 0.15 * Math.sin(t * 5 + sx);
+    ell(ctx, tx, ty, s * 0.09, s * 0.09, c.accent, false, 0, true);
+    ctx.restore();
+    const lw = ctx.lineWidth;
+    ctx.lineWidth = Math.max(1, s * 0.028);
+    ell(ctx, tx, ty, s * 0.052, s * 0.052, c.accent, true);
+    ell(ctx, tx - s * 0.015, ty - s * 0.017, s * 0.016, s * 0.013, "rgba(255,255,255,0.8)", false, 0, true);
+    ctx.lineWidth = lw;
+  }
+  // corps en petite combinaison
+  ell(ctx, cx, by + s * 0.15, s * 0.17, s * 0.14, c.main, true);
+  rrect(ctx, cx - s * 0.13, by + s * 0.05, s * 0.26, s * 0.04, s * 0.02, c.dark, false, true);
+  if (!back) {
+    ell(ctx, cx, by + s * 0.16, s * 0.05, s * 0.05, c.light, true);
+    ell(ctx, cx, by + s * 0.16, s * 0.022, s * 0.022, c.accent, false, 0, true);
+  }
+  // grosse tête (plus large en haut)
+  ctx.fillStyle = shaded(ctx, c.main, cx, hy, s * 0.3, s * 0.24);
+  ctx.beginPath();
+  ctx.moveTo(cx, hy + s * 0.2);
+  ctx.bezierCurveTo(cx - s * 0.2, hy + s * 0.2, cx - s * 0.32, hy + s * 0.02, cx - s * 0.3, hy - s * 0.08);
+  ctx.bezierCurveTo(cx - s * 0.27, hy - s * 0.26, cx + s * 0.27, hy - s * 0.26, cx + s * 0.3, hy - s * 0.08);
+  ctx.bezierCurveTo(cx + s * 0.32, hy + s * 0.02, cx + s * 0.2, hy + s * 0.2, cx, hy + s * 0.2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  if (!back) {
+    const e = pose.expr ?? "normal";
+    const ex = pose.faceX * s * 0.05;
+    for (const sx of [-1, 1]) {
+      const x = cx + sx * s * 0.115 + ex;
+      const y = hy - s * 0.02 + pose.faceY * s * 0.01;
+      if (e === "happy" || e === "dizzy" || blinking(pose) || look.eyes === "glow") eye(ctx, x, y, s * 0.05, pose, ink, look, sx);
+      else {
+        const k = e === "scared" ? 1.18 : 1;
+        ell(ctx, x, y, s * 0.085 * k, s * 0.058 * k, ink, false, -sx * 0.45, true);
+        ell(ctx, x - s * 0.025 + pose.faceX * s * 0.015, y - s * 0.02, s * 0.022, s * 0.016, "#ffffff", false, -sx * 0.45, true);
+        ell(ctx, x + s * 0.03 + pose.faceX * s * 0.015, y + s * 0.012, s * 0.009, s * 0.008, "#ffffff", false, 0, true);
+        if (e === "angry") {
+          ctx.beginPath();
+          ctx.moveTo(x - sx * s * 0.09, y - s * 0.09);
+          ctx.lineTo(x + sx * s * 0.05, y - s * 0.05);
+          ctx.stroke();
+        }
+      }
+    }
+    mouth(ctx, cx + pose.faceX * s * 0.05, hy + s * 0.11, s * 0.06, pose, ink, pose.action ? Math.sin(pose.action * Math.PI) : 0);
+    cheeks(ctx, cx, hy + s * 0.08, s, s * 0.17, pose);
+  } else {
+    ell(ctx, cx, hy - s * 0.02, s * 0.14, s * 0.1, c.dark);
+  }
+  ell(ctx, cx - s * 0.17, hy - s * 0.13, s * 0.06, s * 0.03, "rgba(255,255,255,0.45)", false, -0.5, true);
+  return { headCx: cx, headTop: hy - s * 0.24, headW: s * 0.58, eyeY: hy - s * 0.02, neckY: hy + s * 0.2, bodyY: by + s * 0.15, bodyW: s * 0.17, faceRx: s * 0.24, faceRy: s * 0.15, faceY: hy + s * 0.02 };
+}
+
+/** Fantôme : flotte au-dessus du sol, bas ondulé, grands yeux ronds. */
+function ghost(ctx: Ctx, cx: number, by: number, s: number, c: Palette, pose: CharPose, ink: string, look: Look): Anchor {
+  const back = pose.faceY < 0;
+  const t = pose.t;
+  const fl = Math.sin(t * 3) * s * 0.025;
+  const hy = by - s * 0.06 + fl;
+  const r = s * 0.27;
+  const bot = by + s * 0.22 + fl;
+  const drift = pose.moving ? -pose.faceX * s * 0.04 : 0;
+  ctx.fillStyle = shaded(ctx, c.main, cx, hy + s * 0.05, r, r * 1.3);
+  ctx.beginPath();
+  ctx.moveTo(cx - r, hy);
+  ctx.arc(cx, hy, r, Math.PI, 0);
+  ctx.lineTo(cx + r + drift, bot);
+  const n = 4;
+  for (let i = 0; i < n; i++) {
+    const x0 = cx + r + drift - (i * 2 * r) / n;
+    const x1 = x0 - (2 * r) / n;
+    const w = Math.sin(t * 6 + i * 1.7) * s * 0.02;
+    ctx.quadraticCurveTo((x0 + x1) / 2, bot + s * 0.08 + w, x1, bot);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  if (!back) {
+    const e = pose.expr ?? "normal";
+    const ex = pose.faceX * s * 0.06;
+    for (const sx of [-1, 1]) {
+      const x = cx + sx * s * 0.09 + ex;
+      const y = hy - s * 0.01 + pose.faceY * s * 0.01;
+      if (e === "happy" || e === "dizzy" || blinking(pose) || look.eyes === "glow") eye(ctx, x, y, s * 0.045, pose, ink, look, sx);
+      else {
+        const k = e === "scared" ? 1.2 : 1;
+        ell(ctx, x, y, s * 0.045 * k, s * 0.066 * k, ink, false, 0, true);
+        ell(ctx, x - s * 0.015, y - s * 0.025, s * 0.016, s * 0.02, "#ffffff", false, 0, true);
+        if (e === "angry") {
+          ctx.beginPath();
+          ctx.moveTo(x - sx * s * 0.06, y - s * 0.1);
+          ctx.lineTo(x + sx * s * 0.04, y - s * 0.07);
+          ctx.stroke();
+        }
+      }
+    }
+    const mx = cx + pose.faceX * s * 0.05;
+    const open = pose.action ? Math.sin(pose.action * Math.PI) : 0;
+    if (e === "normal" && open < 0.2) {
+      // « Bouh ! » : petite bouche ronde
+      ell(ctx, mx, hy + s * 0.09, s * 0.035, s * 0.04, "#5a1f2b", true, 0, true);
+    } else mouth(ctx, mx, hy + s * 0.08, s * 0.08, pose, ink, open);
+    cheeks(ctx, cx, hy + s * 0.06, s, s * 0.16, pose);
+  }
+  ell(ctx, cx - s * 0.15, hy - s * 0.14, s * 0.06, s * 0.035, "rgba(255,255,255,0.6)", false, -0.6, true);
+  return { headCx: cx, headTop: hy - r, headW: s * 0.54, eyeY: hy - s * 0.01, neckY: hy + s * 0.16, bodyY: hy + s * 0.15, bodyW: s * 0.25, faceRx: s * 0.2, faceRy: s * 0.14, faceY: hy + s * 0.03 };
+}
+
+/** Cactus grincheux dans son pot, avec une fleur sur la tête. */
+function cactus(ctx: Ctx, cx: number, by: number, s: number, c: Palette, pose: CharPose, ink: string, look: Look): Anchor {
+  const back = pose.faceY < 0;
+  const top = by - s * 0.34;
+  // tige
+  rrect(ctx, cx - s * 0.19, top, s * 0.38, s * 0.5, s * 0.18, c.main, true);
+  // côtes
+  ctx.save();
+  ctx.globalAlpha = 0.45;
+  ctx.strokeStyle = c.light;
+  ctx.lineWidth = Math.max(1, s * 0.018);
+  for (const k of [-1, 0, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(cx + k * s * 0.085, top + s * 0.06);
+    ctx.quadraticCurveTo(cx + k * s * 0.1, top + s * 0.22, cx + k * s * 0.085, top + s * 0.4);
+    ctx.stroke();
+  }
+  ctx.restore();
+  // épines
+  ctx.save();
+  ctx.lineWidth = Math.max(1, s * 0.016);
+  for (const [dx, dy, ax] of [[-0.19, 0.12, -1], [-0.19, 0.27, -1], [0.19, 0.16, 1], [0.19, 0.31, 1], [-0.11, 0.03, -0.4], [0.12, 0.05, 0.4]] as const) {
+    const x = cx + dx * s;
+    const y = top + dy * s;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + ax * s * 0.05, y - s * 0.025);
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + ax * s * 0.05, y + s * 0.02);
+    ctx.stroke();
+  }
+  ctx.restore();
+  // fleur
+  const fx = cx + s * 0.06;
+  const fy = top - s * 0.005;
+  const lw = ctx.lineWidth;
+  ctx.lineWidth = Math.max(1, s * 0.022);
+  for (let k = 0; k < 5; k++) {
+    const a = (k / 5) * Math.PI * 2 + Math.sin(pose.t * 2) * 0.1;
+    ell(ctx, fx + Math.cos(a) * s * 0.06, fy + Math.sin(a) * s * 0.045, s * 0.05, s * 0.035, c.accent, true, a);
+  }
+  ell(ctx, fx, fy, s * 0.035, s * 0.03, "#ffe14d", true);
+  ctx.lineWidth = lw;
+  const ey = by - s * 0.13;
+  if (!back) {
+    const e = pose.expr ?? "normal";
+    eyes(ctx, cx, ey, s, s * 0.075, s * 0.04, pose, ink, look);
+    // sourcils froncés : il est grincheux (sauf quand il est content)
+    if (e === "normal" || e === "angry") {
+      const ex = pose.faceX * s * 0.06;
+      for (const sx of [-1, 1]) {
+        ctx.beginPath();
+        ctx.moveTo(cx + sx * s * 0.12 + ex, ey - s * 0.08);
+        ctx.lineTo(cx + sx * s * 0.035 + ex, ey - s * (e === "angry" ? 0.04 : 0.055));
+        ctx.stroke();
+      }
+    }
+    const mx = cx + pose.faceX * s * 0.05;
+    const open = pose.action ? Math.sin(pose.action * Math.PI) : 0;
+    if (e === "normal" && open < 0.2) {
+      ctx.beginPath();
+      ctx.moveTo(mx - s * 0.04, ey + s * 0.1);
+      ctx.quadraticCurveTo(mx, ey + s * 0.075, mx + s * 0.04, ey + s * 0.1);
+      ctx.stroke();
+    } else mouth(ctx, mx, ey + s * 0.08, s * 0.07, pose, ink, open);
+  }
+  // pot en terre cuite
+  ctx.fillStyle = shaded(ctx, c.dark, cx, by + s * 0.24, s * 0.18, s * 0.1);
+  ctx.beginPath();
+  ctx.moveTo(cx - s * 0.18, by + s * 0.15);
+  ctx.lineTo(cx + s * 0.18, by + s * 0.15);
+  ctx.lineTo(cx + s * 0.13, by + s * 0.33);
+  ctx.lineTo(cx - s * 0.13, by + s * 0.33);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  rrect(ctx, cx - s * 0.22, by + s * 0.1, s * 0.44, s * 0.07, s * 0.025, mix(c.dark, "#ffffff", 0.15), true);
+  ell(ctx, cx - s * 0.12, top + s * 0.1, s * 0.035, s * 0.06, "rgba(255,255,255,0.35)", false, 0.2, true);
+  return { headCx: cx, headTop: top, headW: s * 0.42, eyeY: ey, neckY: by + s * 0.07, bodyY: by + s * 0.01, bodyW: s * 0.19, faceRx: s * 0.15, faceRy: s * 0.12, faceY: ey + s * 0.03 };
+}
+
 // --------------------------------------------------------------- mains
 function hands(ctx: Ctx, a: Anchor, s: number, c: Palette, look: Look, pose: CharPose) {
   const kind = look.kind;
@@ -1152,6 +1509,11 @@ const BODY: Record<BodyKind, (ctx: Ctx, cx: number, by: number, s: number, c: Pa
   mushroom,
   bear,
   penguin,
+  dragon,
+  axolotl,
+  alien,
+  ghost,
+  cactus,
 };
 
 /** Ordre de dessin des accessoires : cou, puis visage, puis tête. */
@@ -1219,6 +1581,9 @@ export function drawCharacter(ctx: Ctx, cx: number, cy: number, s: number, look:
       const swing = pose.moving ? Math.sin(pose.walk * Math.PI) * s * 0.04 : 0;
       for (const k of [-1, 1]) rrect(g, cx + k * s * 0.12 - s * 0.07, footY - s * 0.08 + swing * k, s * 0.14, s * 0.09, s * 0.03, c.dark, true);
     } else if (look.kind === "penguin") feet(g, cx, footY, s, pose, c.accent, 0.11, 0.08);
+    else if (look.kind === "ghost" || look.kind === "cactus") {
+      /* flotte / posé dans son pot : pas de pieds */
+    } else if (look.kind === "dragon" || look.kind === "alien") feet(g, cx, footY, s, pose, c.dark, 0.11, 0.08);
     else feet(g, cx, footY, s, pose, c.dark);
     const back = pose.faceY < 0;
     // les mains passent derrière en vue de dos
@@ -1292,5 +1657,5 @@ export function drawCharacter(ctx: Ctx, cx: number, cy: number, s: number, look:
 
 /** Point d'ancrage au-dessus de la tête (bulles d'emote, repères). */
 export function headTopOffset(kind: BodyKind): number {
-  return kind === "mushroom" || kind === "ninja" ? 0.62 : kind === "frog" ? 0.5 : 0.6;
+  return kind === "alien" || kind === "cactus" ? 0.68 : kind === "mushroom" || kind === "ninja" || kind === "dragon" ? 0.62 : kind === "frog" || kind === "axolotl" ? 0.52 : 0.6;
 }

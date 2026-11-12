@@ -14,7 +14,12 @@ var CHARACTERS = [
   { id: "kage", name: "Kage", kind: "ninja", tagline: "Ninja discret", bio: "On ne l'entend jamais arriver. Sa bombe, si." },
   { id: "champi", name: "Champi", kind: "mushroom", tagline: "Champignon têtu", bio: "Petit, têtu, et franchement explosif." },
   { id: "bruno", name: "Bruno", kind: "bear", tagline: "Ourson costaud", bio: "Un gros câlin, puis un gros BOUM." },
-  { id: "pingo", name: "Pingo", kind: "penguin", tagline: "Pingouin glisseur", bio: "Il glisse partout, même là où il n'y a pas de glace.", locked: true, rarity: "epic" }
+  { id: "pingo", name: "Pingo", kind: "penguin", tagline: "Pingouin glisseur", bio: "Il glisse partout, même là où il n'y a pas de glace.", locked: true, rarity: "epic" },
+  { id: "bulle", name: "Bulle", kind: "axolotl", tagline: "Axolotl rigolo", bio: "Toujours le sourire, même au milieu des explosions.", locked: true, rarity: "epic" },
+  { id: "piquant", name: "Piquant", kind: "cactus", tagline: "Cactus grincheux", bio: "Ne le touche pas. Il pique… et il explose.", locked: true, rarity: "rare", exclusive: "rank" },
+  { id: "pouf", name: "Pouf", kind: "ghost", tagline: "Fantôme farceur", bio: "Bouh ! Il adore faire peur… et faire BOUM.", locked: true, rarity: "epic", exclusive: "rank" },
+  { id: "zorg", name: "Zorg", kind: "alien", tagline: "Petit extraterrestre", bio: "Venu d'une autre galaxie pour tout faire sauter.", locked: true, rarity: "epic", exclusive: "rank" },
+  { id: "drako", name: "Drako", kind: "dragon", tagline: "Bébé dragon", bio: "Tout petit, mais il crache déjà des étincelles.", locked: true, rarity: "legend", exclusive: "rank" }
 ];
 var P = (main, dark, light, accent) => ({ main, dark, light, accent });
 var CLASSIC = {
@@ -24,7 +29,12 @@ var CLASSIC = {
   kage: { name: "Classique", palette: P("#3b3f6b", "#1e2140", "#ffd9b8", "#ff4b4b") },
   champi: { name: "Classique", palette: P("#ff4d4d", "#b81c2a", "#fff3e0", "#ffffff") },
   bruno: { name: "Classique", palette: P("#a8693a", "#6b3e1c", "#f2d2a8", "#3a2414") },
-  pingo: { name: "Classique", palette: P("#2f3e5c", "#18223a", "#ffffff", "#ffb020"), wear: ["scarf"] }
+  pingo: { name: "Classique", palette: P("#2f3e5c", "#18223a", "#ffffff", "#ffb020"), wear: ["scarf"] },
+  bulle: { name: "Classique", palette: P("#ff9fc8", "#d9578f", "#ffe6f1", "#ff4f8b"), aura: "bubbles" },
+  piquant: { name: "Classique", palette: P("#46b866", "#d0683a", "#c8f5b8", "#ff5fa2") },
+  pouf: { name: "Classique", palette: P("#f1eeff", "#a99fe0", "#ffffff", "#7b6cff") },
+  zorg: { name: "Classique", palette: P("#9be15d", "#4f9a2a", "#e9ffd6", "#ff5fd2") },
+  drako: { name: "Classique", palette: P("#8a5cf6", "#5532b0", "#ffe3a3", "#ffb020"), aura: "embers" }
 };
 var LEGACY = [
   { id: "renard-arctique", characterId: "renard", name: "Arctique", rarity: "rare", palette: P("#e9f4ff", "#9cb8d6", "#ffffff", "#3e5f8a"), wear: ["scarf"], aura: "snow" },
@@ -5977,7 +5987,8 @@ var EMOTE_PRICES = {
   legend: 2500
 };
 var CHARACTER_PRICES = {
-  pingo: 4000
+  pingo: 4000,
+  bulle: 4000
 };
 var BOMBER_PRICES = {
   common: 50,
@@ -5992,7 +6003,8 @@ var BOMBER_EMOTE_PRICES = {
   legend: 250
 };
 var BOMBER_CHARACTER_PRICES = {
-  pingo: 400
+  pingo: 400,
+  bulle: 400
 };
 var PLACE_COLUMNS = {
   2: [1, 4],
@@ -6033,10 +6045,11 @@ function build() {
       kind: "character",
       name: c.name,
       rarity: c.rarity ?? "common",
-      price: c.locked ? CHARACTER_PRICES[c.id] ?? PRICES.epic : 0,
+      price: c.locked && !c.exclusive ? CHARACTER_PRICES[c.id] ?? PRICES.epic : 0,
       desc: c.bio,
       free: !c.locked,
-      characterId: c.id
+      characterId: c.id,
+      exclusive: c.exclusive
     });
   return out;
 }
@@ -6092,16 +6105,16 @@ var RANK_RULES = {
     [{ kind: "chest", tier: "rare" }],
     [{ kind: "coins", amount: 250 }],
     [{ kind: "chest", tier: "rare" }, { kind: "coins", amount: 150 }],
-    [{ kind: "chest", tier: "rare" }, { kind: "coins", amount: 300 }],
+    [{ kind: "item", id: "chr-piquant" }, { kind: "chest", tier: "rare" }, { kind: "coins", amount: 300 }],
     [{ kind: "coins", amount: 400 }, { kind: "bombers", amount: 5 }],
     [{ kind: "chest", tier: "epic" }],
-    [{ kind: "chest", tier: "epic" }, { kind: "coins", amount: 300 }],
+    [{ kind: "item", id: "chr-pouf" }, { kind: "chest", tier: "epic" }, { kind: "coins", amount: 300 }],
     [{ kind: "coins", amount: 600 }, { kind: "bombers", amount: 10 }],
     [{ kind: "chest", tier: "epic" }, { kind: "coins", amount: 500 }],
-    [{ kind: "item", id: "title-diamond" }, { kind: "chest", tier: "epic" }],
+    [{ kind: "item", id: "chr-zorg" }, { kind: "item", id: "title-diamond" }, { kind: "chest", tier: "epic" }],
     [{ kind: "coins", amount: 800 }, { kind: "bombers", amount: 15 }],
     [{ kind: "chest", tier: "legend" }],
-    [{ kind: "item", id: "title-elite" }, { kind: "item", id: "boom-gold" }, { kind: "chest", tier: "legend" }],
+    [{ kind: "item", id: "chr-drako" }, { kind: "item", id: "title-elite" }, { kind: "item", id: "boom-gold" }, { kind: "chest", tier: "legend" }],
     [{ kind: "coins", amount: 1500 }, { kind: "bombers", amount: 25 }],
     [{ kind: "chest", tier: "legend", count: 2 }, { kind: "coins", amount: 2000 }]
   ],

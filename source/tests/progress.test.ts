@@ -10,7 +10,7 @@ import {
   ACHIEVEMENTS, CHESTS, CHEST_ORDER, LEVEL_MAX, LEVEL_REWARDS, LEVEL_UP_COINS, LOGIN_REWARDS, MASTERY_STEPS, RANKS, STREAK_BONUSES,
   WEEKLY_PER_WEEK, XP_BY_PLACE, levelXp, masteryXp,
 } from "../src/meta/progress-config";
-import { STEPS, compBots, rankIndex, rankProgress, rollSeason, seasonId, stepOf, trophyDelta } from "../src/meta/rank";
+import { STEPS, catchUpRankCharacters, compBots, rankIndex, rankProgress, rollSeason, seasonId, stepOf, trophyDelta } from "../src/meta/rank";
 import { settleAbandoned, beginMatch } from "../src/meta/rewards";
 import { SaveSystem, memoryBackend, migrate } from "../src/meta/save";
 import { buy, claimDaily, claimMission, dailyState, ensureMissions, equip, isEquipped, owns } from "../src/meta/store";
@@ -353,6 +353,23 @@ console.log("Publicités (règles)");
   check(!interstitialDue(q, 8, 1e12 + 60000), "délai minimum entre deux pubs respecté");
   check(interstitialDue(q, 8, 1e12 + ADS.interstitial.minSecondsBetween * 1000), "… puis de nouveau possible");
   check(ADS.webPublisherId === "", "aucun faux identifiant de production dans le projet");
+}
+
+
+console.log("13. Nouveaux personnages (paliers de Compétition)");
+{
+  const p = defaultProfile();
+  for (const id of ["piquant", "pouf", "zorg", "drako", "bulle"]) check(!p.ownedCharacters.includes(id), `${id} n'est pas offert au départ`);
+  check(getItem("chr-drako")?.exclusive === "rank" && getItem("chr-drako")?.price === 0, "Drako ne se vend pas (Élite)");
+  check(buy(p, "chr-drako").ok === false, "impossible d'acheter Drako");
+  check((getItem("chr-bulle")?.price ?? 0) > 0, "Bulle se vend en boutique");
+  const where = (id: string) => STEPS.find((s) => s.reward.some((r) => r.kind === "item" && r.id === id))?.name;
+  check(where("chr-piquant") === "Or I" && where("chr-pouf") === "Platine I" && where("chr-zorg") === "Diamant I" && where("chr-drako") === "Élite I", "Piquant Or I, Pouf Platine I, Zorg Diamant I, Drako Élite I");
+  // joueur ayant déjà passé Or I et Platine I cette saison avant la mise à jour
+  p.rank.rewarded.push("or", "platine");
+  const got = catchUpRankCharacters(p);
+  check(got.length === 2 && p.ownedCharacters.includes("piquant") && p.ownedCharacters.includes("pouf") && !p.ownedCharacters.includes("zorg"), "rattrapage : Piquant et Pouf donnés, pas Zorg");
+  check(catchUpRankCharacters(p).length === 0, "rattrapage une seule fois");
 }
 
 console.log(failures ? `\n${failures} échec(s)` : "\nTout est vert ✅");

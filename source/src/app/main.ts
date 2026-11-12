@@ -45,7 +45,7 @@ import { ChestsScreen } from "./chests-screen";
 import { achievementsToClaim, checkAchievements } from "../meta/achievements";
 import { chestCount, nextLevelReward, rewardText, type Granted } from "../meta/grants";
 import { masteryOf } from "../meta/mastery";
-import { compBots, compMode, compStake, rankProgress, rollSeason, trophyDelta } from "../meta/rank";
+import { catchUpRankCharacters, compBots, compMode, compStake, rankProgress, rollSeason, trophyDelta } from "../meta/rank";
 import { ensureWeekly, weeklyToClaim } from "../meta/weekly";
 import { setServerTime } from "../meta/clock";
 import { getTitle } from "../core/cosmetics";
@@ -635,6 +635,12 @@ class App implements AppCtx {
           else this.toast(`🏆 Nouvelle saison ! ${sub}`, "good");
           this.renderBadges();
         }, 700);
+      // nouveaux personnages de Compétition : donnés à ceux qui ont déjà passé le palier
+      const caught = catchUpRankCharacters(this._profile);
+      if (caught.length) {
+        this.persist();
+        window.setTimeout(() => showGranted(this, "🎉 Nouveau personnage !", caught, { sub: "Ta récompense du mode Compétition" }), ended ? 2600 : 700);
+      }
     }
     const p = this._profile;
     $("homeName").textContent = p.name;

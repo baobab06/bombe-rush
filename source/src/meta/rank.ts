@@ -11,7 +11,7 @@
  * sur des parties rejouées et vérifiées par le serveur.
  */
 import type { Difficulty } from "../core/types";
-import { grantAll, type Granted } from "./grants";
+import { grant, grantAll, type Granted } from "./grants";
 import { RANKS, RANK_RULES, type RankDef, type Reward } from "./progress-config";
 import type { Profile, RankEntry } from "./profile";
 import type { StakeId } from "./economy";
@@ -179,4 +179,18 @@ export function applyRank(p: Profile, column: number, place: number, players: nu
   p.rank.history.push(entry);
   if (p.rank.history.length > RANK_RULES.historySize) p.rank.history.splice(0, p.rank.history.length - RANK_RULES.historySize);
   return { delta: after - before, before, after, tierBefore, tierAfter, stepBefore, stepAfter, protected: delta < 0 && before < RANK_RULES.softUnder, granted };
+}
+
+/**
+ * Personnages ajoutés aux paliers après coup : on les donne tout de suite à
+ * ceux qui ont déjà passé ce palier pendant la saison en cours.
+ */
+export function catchUpRankCharacters(p: Profile): Granted[] {
+  const out: Granted[] = [];
+  for (const s of STEPS) {
+    if (!p.rank.rewarded.includes(s.id)) continue;
+    for (const r of s.reward)
+      if (r.kind === "item" && r.id.startsWith("chr-") && !p.ownedCharacters.includes(r.id.slice(4))) grant(p, r, out, s.name);
+  }
+  return out;
 }

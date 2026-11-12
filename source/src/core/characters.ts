@@ -11,7 +11,7 @@
  * - Le prix d'un skin dépend de sa rareté (voir meta/economy.ts) sauf
  *   s'il précise `price`.
  */
-export type BodyKind = "fox" | "robot" | "frog" | "ninja" | "mushroom" | "bear" | "penguin";
+export type BodyKind = "fox" | "robot" | "frog" | "ninja" | "mushroom" | "bear" | "penguin" | "dragon" | "axolotl" | "alien" | "ghost" | "cactus";
 export type Rarity = "common" | "rare" | "epic" | "legend";
 
 /** Objets portés. Le « slot » évite d'empiler deux chapeaux. */
@@ -80,6 +80,8 @@ export interface CharacterDef {
   /** personnage à débloquer en boutique (sinon offert) */
   locked?: boolean;
   rarity?: Rarity;
+  /** se gagne uniquement (paliers du mode Compétition), pas vendu en boutique */
+  exclusive?: "rank";
   stats?: Partial<{ speed: number; bombs: number; range: number }>;
 }
 
@@ -114,6 +116,12 @@ export const CHARACTERS: CharacterDef[] = [
   { id: "champi", name: "Champi", kind: "mushroom", tagline: "Champignon têtu", bio: "Petit, têtu, et franchement explosif." },
   { id: "bruno", name: "Bruno", kind: "bear", tagline: "Ourson costaud", bio: "Un gros câlin, puis un gros BOUM." },
   { id: "pingo", name: "Pingo", kind: "penguin", tagline: "Pingouin glisseur", bio: "Il glisse partout, même là où il n'y a pas de glace.", locked: true, rarity: "epic" },
+  { id: "bulle", name: "Bulle", kind: "axolotl", tagline: "Axolotl rigolo", bio: "Toujours le sourire, même au milieu des explosions.", locked: true, rarity: "epic" },
+  // personnages à gagner dans le mode Compétition (voir RANK_RULES.stepRewards)
+  { id: "piquant", name: "Piquant", kind: "cactus", tagline: "Cactus grincheux", bio: "Ne le touche pas. Il pique… et il explose.", locked: true, rarity: "rare", exclusive: "rank" },
+  { id: "pouf", name: "Pouf", kind: "ghost", tagline: "Fantôme farceur", bio: "Bouh ! Il adore faire peur… et faire BOUM.", locked: true, rarity: "epic", exclusive: "rank" },
+  { id: "zorg", name: "Zorg", kind: "alien", tagline: "Petit extraterrestre", bio: "Venu d'une autre galaxie pour tout faire sauter.", locked: true, rarity: "epic", exclusive: "rank" },
+  { id: "drako", name: "Drako", kind: "dragon", tagline: "Bébé dragon", bio: "Tout petit, mais il crache déjà des étincelles.", locked: true, rarity: "legend", exclusive: "rank" },
 ];
 
 const P = (main: string, dark: string, light: string, accent: string): Palette => ({ main, dark, light, accent });
@@ -134,6 +142,11 @@ const CLASSIC: Record<string, BaseSkin> = {
   champi: { name: "Classique", palette: P("#ff4d4d", "#b81c2a", "#fff3e0", "#ffffff") },
   bruno: { name: "Classique", palette: P("#a8693a", "#6b3e1c", "#f2d2a8", "#3a2414") },
   pingo: { name: "Classique", palette: P("#2f3e5c", "#18223a", "#ffffff", "#ffb020"), wear: ["scarf"] },
+  bulle: { name: "Classique", palette: P("#ff9fc8", "#d9578f", "#ffe6f1", "#ff4f8b"), aura: "bubbles" },
+  piquant: { name: "Classique", palette: P("#46b866", "#d0683a", "#c8f5b8", "#ff5fa2") },
+  pouf: { name: "Classique", palette: P("#f1eeff", "#a99fe0", "#ffffff", "#7b6cff") },
+  zorg: { name: "Classique", palette: P("#9be15d", "#4f9a2a", "#e9ffd6", "#ff5fd2") },
+  drako: { name: "Classique", palette: P("#8a5cf6", "#5532b0", "#ffe3a3", "#ffb020"), aura: "embers" },
 };
 
 /** Skins historiques (V1) : on les garde tous, avec leurs identifiants. */

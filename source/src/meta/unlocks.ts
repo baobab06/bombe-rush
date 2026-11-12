@@ -5,6 +5,7 @@
 import { CHARACTERS } from "../core/characters";
 import { getItem } from "./catalog";
 import { ACHIEVEMENTS, LEVEL_REWARDS, MASTERY_STEPS, RANKS, masteryRewards, type Reward } from "./progress-config";
+import { STEPS } from "./rank";
 
 const hasItem = (list: Reward[] | undefined, id: string) => !!list?.some((r) => r.kind === "item" && r.id === id);
 
@@ -18,8 +19,14 @@ export function unlockText(id: string): string {
     for (const s of MASTERY_STEPS) if (hasItem(tbl[s], id)) return `Maîtrise ${c.name} niveau ${s}`;
   }
   for (const a of ACHIEVEMENTS) if (hasItem(a.reward, id)) return `Succès « ${a.name} »`;
+  for (const st of STEPS) if (hasItem(st.reward, id)) return `Atteins ${st.name} en Compétition`;
   for (const r of RANKS) if (hasItem(r.reward, id)) return `Atteins le rang ${r.name}`;
   if (it.exclusive === "chest") return "Uniquement dans les coffres";
   if (it.kind === "character") return "Boutique";
   return "Boutique ou coffres";
+}
+
+/** Palier de Compétition qui donne cet objet (« Diamant I »), sinon null. */
+export function rankStepFor(id: string): string | null {
+  return STEPS.find((st) => hasItem(st.reward, id))?.name ?? null;
 }

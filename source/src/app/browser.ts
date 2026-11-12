@@ -7,7 +7,7 @@
 import { audio } from "../audio/audio";
 import { CHARACTERS, RARITY_LABEL, RARITY_ORDER, getCharacter } from "../core/characters";
 import { CATALOG, CATEGORIES, getItem, isBuyable, type CatalogItem, type ItemKind } from "../meta/catalog";
-import { unlockText } from "../meta/unlocks";
+import { rankStepFor, unlockText } from "../meta/unlocks";
 import { countOwned, equip, equippedSkin, featured, isEquipped, owns, priceOf } from "../meta/store";
 import { icon } from "../ui/icons";
 import { itemCard } from "../ui/items";
@@ -153,7 +153,8 @@ export class ItemBrowser {
     if (this.tab === "bank") return [];
     let list = CATALOG.filter((i) => i.kind === this.tab);
     // boutique : uniquement ce qui se vend (les exclusifs se gagnent)
-    if (this.mode === "shop") list = list.filter((i) => isBuyable(i) || i.free);
+    // … sauf les personnages de Compétition, montrés avec leur palier pour donner envie
+    if (this.mode === "shop") list = list.filter((i) => isBuyable(i) || i.free || (i.kind === "character" && i.exclusive === "rank"));
     if (this.tab === "skin") list = list.filter((i) => i.characterId === this.charFilter);
     const rank = (i: CatalogItem) => (i.free ? -1 : RARITY_ORDER.indexOf(i.rarity));
     return list.slice().sort((a, b) => rank(a) - rank(b) || a.price - b.price);
@@ -193,7 +194,7 @@ export class ItemBrowser {
           deal: pr.deal,
           affordable: p.coins >= pr.price || (!!pr.bombers && p.bombers >= pr.bombers),
           bombers: this.mode === "shop" && !it.exclusive ? pr.bombers : undefined,
-          sub: it.exclusive && !own ? "🔒 Exclusif" : it.kind === "skin" && (this.tab === "featured" || this.mode === "collection") ? getCharacter(it.characterId!).name : undefined,
+          sub: it.exclusive && !own ? (it.exclusive === "rank" ? "🏆 Compétition" : "🔒 Exclusif") : it.kind === "skin" && (this.tab === "featured" || this.mode === "collection") ? getCharacter(it.characterId!).name : undefined,
           isNew: !!feat && !p.seen.includes(it.id) && !it.free,
           dim: this.mode === "collection" ? undefined : false,
           big: !!feat && i === 0,
@@ -287,7 +288,7 @@ export class ItemBrowser {
     this.rarEl.dataset.r = it.rarity;
     this.nameEl.textContent = it.kind === "skin" ? `${getCharacter(it.characterId!).name} ${it.name}` : it.name;
     this.descEl.textContent = it.desc;
-    if (this.mode === "collection") {
+    if (this.mode === "collection" || (it.exclusive && !owns(p, it.id))) {
       const how = owns(p, it.id) ? "✔ Possédé" : `Comment l'obtenir : ${unlockText(it.id)}`;
       this.descEl.insertAdjacentHTML("beforeend", `<br><small class="how">${how}</small>`);
     }
@@ -329,10 +330,11 @@ export class ItemBrowser {
       }
       return;
     }
-    if (this.mode === "collection" && it.exclusive) {
+    if (it.exclusive) {
       btn.classList.add("btn-ghost");
       btn.disabled = true;
-      btn.innerHTML = `${icon("lock")}<span>${unlockText(it.id)}</span>`;
+      const step = rankStepFor(it.id);
+      btn.innerHTML = step ? `<span>🏆 ${step.toUpperCase()}</span>` : `${icon("lock")}<span>${unlockText(it.id)}</span>`;
       return;
     }
     if (this.mode === "collection") {

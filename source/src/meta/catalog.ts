@@ -54,8 +54,9 @@ function build(): Omit<CatalogItem, "bomberPrice">[] {
   for (const t of TITLES) out.push({ id: t.id, kind: "title", name: t.name, rarity: t.rarity, price: 0, desc: t.desc, free: !!t.free, exclusive: t.exclusive ?? (t.free ? undefined : "chest") });
   for (const c of CHARACTERS)
     out.push({
-      id: `chr-${c.id}`, kind: "character", name: c.name, rarity: c.rarity ?? "common", price: c.locked ? CHARACTER_PRICES[c.id] ?? PRICES.epic : 0,
-      desc: c.bio, free: !c.locked, characterId: c.id,
+      id: `chr-${c.id}`, kind: "character", name: c.name, rarity: c.rarity ?? "common",
+      price: c.locked && !c.exclusive ? CHARACTER_PRICES[c.id] ?? PRICES.epic : 0,
+      desc: c.bio, free: !c.locked, characterId: c.id, exclusive: c.exclusive,
     });
   return out;
 }
