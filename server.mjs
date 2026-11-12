@@ -6744,22 +6744,26 @@ function leaderboardRoutes(svc, adminToken, corsOrigin) {
 }
 // server/announce.json
 var announce_default = {
-  rev: "2026-11-12-v1.13.0",
+  rev: "2026-11-12-v1.14.0",
   config: {
     enabled: true,
-    latestVersion: "1.13.0",
+    latestVersion: "1.14.0",
     minVersion: "1.0.0",
     mandatory: false,
-    title: "Nouveau : mode Compétition !",
-    description: "La version 1.13.0 de Bombe Rush est disponible sur le Play Store.",
+    title: "5 nouveaux persos !",
+    description: "La version 1.14.0 de Bombe Rush est disponible sur le Play Store.",
     notes: [
-      { kind: "new", text: "Mode Compétition : mode de jeu tiré au hasard, gagne ou perds des trophées selon ta place." },
-      { kind: "new", text: "18 paliers de Bronze à Élite, avec une récompense à chaque palier." },
-      { kind: "new", text: "Une nouvelle saison chaque mois : tout le monde repart de 0." },
-      { kind: "improve", text: "Classement mondial avec tes trophées, et nouveaux coffres avec une animation d'ouverture." }
+      { kind: "new", text: "Drako, le bébé dragon légendaire : à gagner au rang Élite en Compétition." },
+      { kind: "new", text: "Piquant (rang Or), Pouf (rang Platine) et Zorg (rang Diamant) : à gagner en Compétition." },
+      { kind: "new", text: "Bulle l'axolotl : disponible en boutique." },
+      { kind: "improve", text: "Tous les skins à thème marchent aussi sur les nouveaux persos." }
     ],
     storeUrl: "https://play.google.com/store/apps/details?id=com.bomberush.game",
-    push: null
+    push: {
+      id: "v1-14-0-nouveaux-persos",
+      title: "🐉 5 nouveaux persos !",
+      body: "Drako le dragon légendaire et 4 autres persos débarquent dans Bombe Rush. Mets à jour et viens les gagner !"
+    }
   }
 };
 
