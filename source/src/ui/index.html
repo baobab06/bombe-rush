@@ -84,10 +84,18 @@
     </div>
   </section>
 
-  <!-- Accueil : logo + pièces + réglages / personnage + JOUER / boutique, coffres, missions -->
+  <!-- Accueil : profil + pièces + réglages / personnage + mode + JOUER / boutique, missions, classement -->
   <section class="screen home" id="home" hidden>
     <header class="home-top">
-      <div class="home-logo logo"><span class="logo-a">BOMBE</span><span class="logo-b">RUSH</span></div>
+      <button class="hero-card" id="homeProfile" aria-label="Profil">
+        <canvas class="avatar" id="homeAvatar" width="96" height="96"></canvas>
+        <span class="hc-info">
+          <span class="pname"><b id="homeName">Joueur</b><em class="ptitle" id="homeTitle"></em></span>
+          <span class="lvl-row"><span class="lvl" id="homeLevel">1</span><span class="xpbar"><i id="homeXpBar"></i></span><span class="hc-rank" id="homeRankIco" title="Rang">🥉</span></span>
+          <span class="next-rw" id="homeNext"></span>
+        </span>
+        <span class="dot" id="profileDot" hidden>!</span>
+      </button>
       <div class="top-r">
         <div class="wallet bwallet" data-bwallet><i class="bomber"></i><b data-bombers>0</b><button class="wallet-plus" data-bank aria-label="Acheter des bombers"><i data-icon="plus"></i></button></div>
         <div class="wallet" data-wallet><i class="coin"></i><b data-coins>0</b><button class="wallet-plus" data-go="shop" aria-label="Boutique"><i data-icon="plus"></i></button></div>
@@ -96,34 +104,24 @@
     </header>
     <div class="home-body">
       <div class="home-hero">
+        <div class="home-logo logo"><span class="logo-a">BOMBE</span><span class="logo-b">RUSH</span></div>
         <canvas class="stage" id="homeStage" aria-label="Ton personnage"></canvas>
-        <button class="hero-card" id="homeProfile" aria-label="Profil">
-          <canvas class="avatar" id="homeAvatar" width="96" height="96"></canvas>
-          <span class="hc-info">
-            <span class="pname"><b id="homeName">Joueur</b><em class="ptitle" id="homeTitle"></em></span>
-            <span class="lvl-row"><span class="lvl" id="homeLevel">1</span><span class="xpbar"><i id="homeXpBar"></i></span><span class="hc-rank" id="homeRankIco" title="Rang">🥉</span></span>
-            <span class="next-rw" id="homeNext"></span>
-          </span>
-          <span class="dot" id="profileDot" hidden>!</span>
-        </button>
       </div>
       <div class="home-menu">
-        <button class="comp-tab" id="homeComp" role="radio" aria-label="Mode Compétition"><span class="ct-ico">🏆</span><b>COMPÉTITION</b><small id="homeCompSub">Bronze I · 0 🏆</small></button>
-        <div class="mode-switch" id="homeModes" role="radiogroup" aria-label="Mode de jeu">
-          <button data-mode="classic" role="radio"><span>🎮 CLASSIQUE</span></button>
-          <button data-mode="chaos" role="radio"><span>💀 CHAOS</span><em class="ev-tag" id="homeEvent" hidden></em></button>
-          <button data-mode="koth" role="radio"><span>👑 DOMINATION</span></button>
-        </div>
+        <button class="mode-card" id="homeModeCard" aria-label="Changer de mode de jeu">
+          <span class="mc-ico" id="homeModeIco">🏆</span>
+          <span class="mc-txt"><b id="homeModeName">COMPÉTITION</b><small id="playSub">Bronze I · 0 🏆</small></span>
+          <span class="mc-change">CHANGER <i>▾</i></span>
+          <em class="ev-tag" id="homeEvent" hidden></em>
+        </button>
         <button class="btn btn-play" id="btnPlay"><i data-icon="play"></i><span class="lbl">JOUER</span></button>
-        <button class="play-setup" id="btnPlaySetup"><i data-icon="gear"></i><span class="ps-txt"><b class="ps-title">OPTIONS DE PARTIE</b><span id="playSub">Normal · 3 bots</span></span></button>
         <button class="btn btn-blue btn-private" id="btnPrivate"><i data-icon="users"></i><span>JOUER ENTRE AMIS</span></button>
       </div>
     </div>
     <nav class="home-dock">
-      <button class="dock t-pink" id="btnShop"><i data-icon="shop"></i><span>BOUTIQUE</span><em class="ribbon" id="shopRibbon" hidden>PROMO</em></button>
-      <button class="dock t-gold" id="btnChests"><span class="emo-ico">🎁</span><span>COFFRES</span><span class="dot" id="chestDot" hidden>1</span></button>
+      <button class="dock t-pink" id="btnShop"><i data-icon="shop"></i><span>BOUTIQUE</span><em class="ribbon" id="shopRibbon" hidden>PROMO</em><span class="dot" id="chestDot" hidden>1</span></button>
       <button class="dock t-green" id="btnMissions"><i data-icon="missions"></i><span>MISSIONS</span><span class="dot" id="missionDot" hidden>1</span></button>
-      <button class="dock t-blue" id="btnWorld"><span class="emo-ico">🏆</span><span>MONDIAL</span></button>
+      <button class="dock t-blue" id="btnRanking"><span class="emo-ico">🏆</span><span>CLASSEMENT</span></button>
     </nav>
   </section>
 
@@ -217,7 +215,7 @@
 
   <!-- Boutique -->
   <section class="screen" id="shop" hidden>
-    <header class="bar"><button class="back" data-back aria-label="Retour"><i data-icon="back"></i></button><h2>Boutique</h2><span class="bar-note" id="shopTimer"></span><button class="chip bar-chip" id="btnMyCollection">🎒 Ma collection</button><div class="wallet bwallet" data-bwallet><i class="bomber"></i><b data-bombers>0</b><button class="wallet-plus" data-bank aria-label="Acheter des bombers"><i data-icon="plus"></i></button></div><div class="wallet" data-wallet><i class="coin"></i><b data-coins>0</b></div></header>
+    <header class="bar"><button class="back" data-back aria-label="Retour"><i data-icon="back"></i></button><h2>Boutique</h2><span class="bar-note" id="shopTimer"></span><div class="wallet bwallet" data-bwallet><i class="bomber"></i><b data-bombers>0</b><button class="wallet-plus" data-bank aria-label="Acheter des bombers"><i data-icon="plus"></i></button></div><div class="wallet" data-wallet><i class="coin"></i><b data-coins>0</b></div></header>
     <div class="browser" id="shopBrowser"></div>
   </section>
 
@@ -260,7 +258,7 @@
 
   <!-- Rang -->
   <section class="screen" id="rank" hidden>
-    <header class="bar"><button class="back" data-back aria-label="Retour"><i data-icon="back"></i></button><h2>Compétition</h2><span class="bar-note">Trophées · ligues et divisions</span></header>
+    <header class="bar"><button class="back" data-back aria-label="Retour"><i data-icon="back"></i></button><h2>Compétition</h2></header>
     <div class="rank-grid" id="rankBody"></div>
   </section>
 

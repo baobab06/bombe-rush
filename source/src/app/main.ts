@@ -59,6 +59,7 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 
 /** écrans interdits tant qu'une mise à jour obligatoire n'est pas faite */
 const BLOCKED_BY_UPDATE: ScreenId[] = ["setup", "game", "pause", "private", "lobby", "invite"];
+const MODE_ICONS: Record<string, string> = { classic: "🎮", chaos: "💀", koth: "👑" };
 const SCREENS: ScreenId[] = ["home", "setup", "settings", "pause", "results", "private", "lobby", "boot", "welcome", "invite", "shop", "collection", "missions", "profile", "rank", "chests", "tutorial", "world"];
 const MENU_SCREENS: ScreenId[] = ["setup", "settings", "private", "lobby", "welcome", "invite", "shop", "collection", "missions", "profile", "rank", "chests", "tutorial", "world"];
 
@@ -415,23 +416,16 @@ class App implements AppCtx {
         this.click();
         this.go(to);
       });
-    // options : réglages d'une partie libre, ou « ma ligue » en Compétition
-    $("btnPlaySetup").addEventListener("click", () => {
+    // carte « mode » : ouvre le choix du mode (Compétition ou partie libre)
+    $("homeModeCard").addEventListener("click", () => {
       this.click();
-      this.go(this._profile.lastSetup.comp ? "rank" : "setup");
-    });
-    $("homeComp").addEventListener("click", () => {
-      audio.play("tab");
-      this._profile.lastSetup.comp = true;
-      this.persist();
-      this.renderHome();
+      this.openModePicker();
     });
     nav("btnSettings", "settings");
     nav("homeProfile", "profile");
     nav("btnMissions", "missions");
-    nav("btnWorld", "world");
-    nav("btnChests", "chests");
-    nav("btnMyCollection", "collection");
+    nav("btnRanking", "rank");
+    this.setupSectionTabs();
     // JOUER : partie immédiate avec le mode choisi et les derniers réglages
     $("btnPlay").addEventListener("click", () => {
       this.click();
@@ -439,16 +433,6 @@ class App implements AppCtx {
       this.setupState = { ...this._profile.lastSetup };
       this.launch();
     });
-    $("homeModes").querySelectorAll<HTMLButtonElement>("button").forEach((b) =>
-      b.addEventListener("click", () => {
-        audio.play("tab");
-        this._profile.lastSetup.modeId = b.dataset.mode!;
-        this._profile.lastSetup.comp = false;
-        this.setupState.modeId = b.dataset.mode!;
-        this.persist();
-        this.renderHome();
-      }),
-    );
     $("btnShop").addEventListener("click", () => {
       this.click();
       this.openShop(undefined, "featured");
@@ -657,44 +641,145 @@ class App implements AppCtx {
     drawPortrait($<HTMLCanvasElement>("homeAvatar"), p.characterId, skin.id, 1, 0, p.equipped.accessory);
     this.homeStage.set({ characterId: c.id, skinId: skin.id, accessoryId: p.equipped.accessory, trailId: p.equipped.trail }, skin.free ? null : skin.rarity);
     this.homeStage.idleEmotes = p.equipped.emotes;
-    // mode de jeu (choix rapide)
+    // mode de jeu : une seule carte (Compétition ou partie libre)
     const modeId = MODES.some((m) => m.id === p.lastSetup.modeId && !m.hidden) ? p.lastSetup.modeId : "classic";
     const comp = !!p.lastSetup.comp;
-    $("homeModes").querySelectorAll<HTMLButtonElement>("button").forEach((b) => {
-      b.classList.toggle("sel", !comp && b.dataset.mode === modeId);
-      b.setAttribute("aria-checked", String(!comp && b.dataset.mode === modeId));
-    });
-    $("homeComp").classList.toggle("sel", comp);
-    $("homeComp").setAttribute("aria-checked", String(comp));
-    ($("homeComp") as HTMLElement).style.setProperty("--rc", rp.rank.color);
-    $("homeCompSub").innerHTML = `${rp.rank.icon} ${esc(rp.step.name)} · <b>${fmt(p.rank.points)}</b> 🏆`;
-    $("btnPlaySetup").querySelector(".ps-title")!.textContent = comp ? "MA LIGUE" : "OPTIONS DE PARTIE";
-    const map = MAPS.find((m) => m.id === p.lastSetup.mapId && mapAllows(m, modeId))?.name ?? "Carte au hasard";
-    const sid = (p.lastSetup.difficulty as StakeId) in STAKES ? (p.lastSetup.difficulty as StakeId) : "normal";
-    const tbl = stakeTable(sid, modeId === "koth" ? 4 : p.lastSetup.botCount + 1);
-    const bots = p.lastSetup.botCount;
-    const who = modeId === "koth" ? "2 contre 2" : `${bots} bot${bots > 1 ? "s" : ""}`;
     const ev = activeEvents();
     const allEv = ev.find((e) => !e.modeId);
-    const mapLbl = modeId === "classic" ? "🎲 carte surprise" : map;
-    $("playSub").innerHTML = `${allEv ? `<span class="ps-ev" title="${esc(allEv.name)}">${allEv.icon} ×${String(allEv.coinMultiplier).replace(".", ",")}</span> ` : ""}${STAKES[sid].label} · ${who} · ${mapLbl} <span class="ps-win">🥇 ${signed(tbl[0].amount)}</span> <span class="ps-loss">💀 ${signed(tbl[tbl.length - 1].amount)}</span>`;
+    const card = $("homeModeCard");
+    card.dataset.mode = comp ? "comp" : modeId;
     if (comp) {
       const lose = trophyDelta(4, Math.max(p.rank.points, 20));
-      $("playSub").innerHTML = `🎲 Mode au hasard · 4 joueurs <span class="ps-win">🥇 +${RANK_RULES.places[0]} 🏆</span> <span class="ps-loss">💀 −${-lose} 🏆</span>`;
+      $("homeModeIco").textContent = "🏆";
+      $("homeModeName").textContent = "COMPÉTITION";
+      $("playSub").innerHTML = `${rp.rank.icon} ${esc(rp.step.name)} · <b>${fmt(p.rank.points)}</b> 🏆 <span class="ps-win">🥇 +${RANK_RULES.places[0]}</span> <span class="ps-loss">💀 −${-lose}</span>`;
+    } else {
+      const m = MODES.find((x) => x.id === modeId)!;
+      $("homeModeIco").textContent = MODE_ICONS[modeId] ?? "🎮";
+      $("homeModeName").textContent = m.name.toUpperCase();
+      $("playSub").innerHTML = this.freeSetupLabel(allEv);
     }
     const deal = featured();
     const dp = priceOf(deal.dealId);
     $("shopRibbon").hidden = !dp.deal;
     $("shopRibbon").textContent = `-${Math.round((1 - dp.price / dp.full) * 100)}%`;
-    // événement en cours : petite étiquette sur le mode concerné
-    const tag = $("homeEvent");
-    const chaosEv = ev.find((e) => e.modeId === "chaos");
-    tag.hidden = !chaosEv;
-    if (chaosEv) {
-      tag.textContent = `×${String(chaosEv.coinMultiplier).replace(".", ",")}`;
-      tag.title = `${chaosEv.name} : ${chaosEv.desc}`;
-    }
+    // événement en cours sur le mode choisi : rappelé au début de la ligne
+    $("homeEvent").hidden = true;
+    const chaosEv = !comp && modeId === "chaos" ? ev.find((e) => e.modeId === "chaos") : undefined;
+    if (chaosEv)
+      $("playSub").insertAdjacentHTML("afterbegin", `<span class="ps-ev" title="${esc(chaosEv.name)} : ${esc(chaosEv.desc)}">${chaosEv.icon} ×${String(chaosEv.coinMultiplier).replace(".", ",")}</span> `);
     this.renderBadges();
+  }
+
+  /** Réglages de la partie libre (difficulté, adversaires, carte, gains). */
+  private freeSetupLabel(allEv?: { icon: string; name: string; coinMultiplier: number }): string {
+    const p = this._profile;
+    const modeId = MODES.some((m) => m.id === p.lastSetup.modeId && !m.hidden) ? p.lastSetup.modeId : "classic";
+    const map = MAPS.find((m) => m.id === p.lastSetup.mapId && mapAllows(m, modeId))?.name ?? "Carte au hasard";
+    const sid = (p.lastSetup.difficulty as StakeId) in STAKES ? (p.lastSetup.difficulty as StakeId) : "normal";
+    const tbl = stakeTable(sid, modeId === "koth" ? 4 : p.lastSetup.botCount + 1);
+    const bots = p.lastSetup.botCount;
+    const who = modeId === "koth" ? "2 contre 2" : `${bots} bot${bots > 1 ? "s" : ""}`;
+    const mapLbl = modeId === "classic" ? "🎲 carte surprise" : map;
+    return `${allEv ? `<span class="ps-ev" title="${esc(allEv.name)}">${allEv.icon} ×${String(allEv.coinMultiplier).replace(".", ",")}</span> ` : ""}${STAKES[sid].label} · ${who} · ${mapLbl} <span class="ps-win">🥇 ${signed(tbl[0].amount)}</span> <span class="ps-loss">💀 ${signed(tbl[tbl.length - 1].amount)}</span>`;
+  }
+
+  /** Fenêtre « Choisis ton mode » : Compétition en grand, parties libres à côté. */
+  private openModePicker() {
+    const p = this._profile;
+    const comp = !!p.lastSetup.comp;
+    const cur = MODES.some((m) => m.id === p.lastSetup.modeId && !m.hidden) ? p.lastSetup.modeId : "classic";
+    const rp = rankProgress(p.rank.points);
+    const lose = trophyDelta(4, Math.max(p.rank.points, 20));
+    const ev = activeEvents();
+    const chaosEv = ev.find((e) => e.modeId === "chaos");
+    const free = [
+      { id: "classic", desc: "Le dernier debout gagne" },
+      { id: "chaos", desc: "Malus surprises, explosions max" },
+      { id: "koth", desc: "2 contre 2 · tiens la zone" },
+    ];
+    this.modal.open(
+      (sheet, close) => {
+        sheet.innerHTML += `<h2 class="mp-title">CHOISIS TON MODE</h2>
+          <div class="mp-grid">
+            <button class="mp-comp${comp ? " sel" : ""}" data-pick="comp">
+              ${comp ? '<span class="mp-on">✔ CHOISI</span>' : ""}
+              <span class="mp-big">🏆</span><b>COMPÉTITION</b>
+              <small>Mode tiré au hasard 🎲<br>1er <b class="w">+${RANK_RULES.places[0]} 🏆</b> · 4e <b class="l">−${-lose} 🏆</b></small>
+              <span class="mp-league">${rp.rank.icon} ${esc(rp.step.name)} · ${fmt(p.rank.points)} 🏆</span>
+            </button>
+            <div class="mp-free">
+              <small class="mp-label">PARTIE LIBRE · sans trophées</small>
+              ${free
+                .map((f) => {
+                  const m = MODES.find((x) => x.id === f.id)!;
+                  const on = !comp && cur === f.id;
+                  const tag = f.id === "chaos" && chaosEv ? `<em class="ev-tag">×${String(chaosEv.coinMultiplier).replace(".", ",")} 🪙</em>` : "";
+                  return `<button class="mp-mode${on ? " sel" : ""}" data-pick="${f.id}" data-mode="${f.id}"><span class="mp-ico">${MODE_ICONS[f.id]}</span><span class="mp-txt"><b>${esc(m.name.toUpperCase())}</b><small>${f.desc}</small></span>${on ? '<span class="mp-on">✔</span>' : ""}${tag}</button>`;
+                })
+                .join("")}
+              <button class="mp-opts" data-pick="opts"><span>⚙️ Options :</span> <b>${this.freeSetupLabel()}</b></button>
+            </div>
+          </div>`;
+        sheet.querySelectorAll<HTMLButtonElement>("[data-pick]").forEach((b) =>
+          b.addEventListener("click", () => {
+            const v = b.dataset.pick!;
+            audio.play("tab");
+            if (v === "opts") {
+              close();
+              this.go("setup");
+              return;
+            }
+            if (v === "comp") p.lastSetup.comp = true;
+            else {
+              p.lastSetup.comp = false;
+              p.lastSetup.modeId = v;
+              this.setupState.modeId = v;
+            }
+            this.persist();
+            close();
+            this.renderHome();
+          }),
+        );
+      },
+      { cls: "mode-picker" },
+    );
+  }
+
+  /**
+   * Écrans regroupés derrière des onglets dans l'en-tête :
+   * Boutique (offres, coffres, collection) et Classement (ma ligue, mondial).
+   * Passer d'un onglet à l'autre ne s'empile pas : « retour » ramène à l'accueil.
+   */
+  private setupSectionTabs() {
+    const groups: { title: string; tabs: [ScreenId, string, string][] }[] = [
+      { title: "Boutique", tabs: [["shop", "⭐", "Offres"], ["chests", "🎁", "Coffres"], ["collection", "🎒", "Collection"]] },
+      { title: "Classement", tabs: [["rank", "🏅", "Ma ligue"], ["world", "🌍", "Mondial"]] },
+    ];
+    for (const g of groups)
+      for (const [id] of g.tabs) {
+        const bar = $(id).querySelector("header.bar");
+        const h2 = bar?.querySelector("h2");
+        if (!bar || !h2) continue;
+        h2.textContent = g.title;
+        const navEl = document.createElement("nav");
+        navEl.className = "sect-tabs";
+        navEl.setAttribute("role", "tablist");
+        navEl.innerHTML = g.tabs
+          .map(
+            ([to, ico, label]) =>
+              `<button role="tab" data-to="${to}" class="${to === id ? "sel" : ""}" aria-selected="${to === id}"><span class="st-ico">${ico}</span><span class="st-lbl">${label}</span>${to === "chests" ? '<span class="dot" data-chest-dot hidden>1</span>' : ""}</button>`,
+          )
+          .join("");
+        h2.after(navEl);
+        navEl.querySelectorAll<HTMLButtonElement>("button").forEach((b) =>
+          b.addEventListener("click", () => {
+            if (b.dataset.to === id) return;
+            audio.play("tab");
+            this.go(b.dataset.to as ScreenId, false);
+          }),
+        );
+      }
   }
 
   private renderBadges() {
@@ -709,10 +794,15 @@ class App implements AppCtx {
     const a = achievementsToClaim(p);
     $("profileDot").hidden = !a;
     $("profileDot").textContent = String(a);
+    // coffres : rangés dans la Boutique (onglet « Coffres »)
     const ch = chestCount(p);
     $("chestDot").hidden = !ch;
     $("chestDot").textContent = String(ch);
-    $("btnChests").classList.toggle("has", ch > 0);
+    $("btnShop").classList.toggle("has", ch > 0);
+    document.querySelectorAll<HTMLElement>("[data-chest-dot]").forEach((d) => {
+      d.hidden = !ch;
+      d.textContent = String(ch);
+    });
   }
 
   /** Arrivée sur l'accueil : cadeau de bienvenue, puis récompense du jour. */
