@@ -2,7 +2,7 @@ import { Connection, type NetStatus } from "../net/connection";
 import { appVersion } from "../platform/app-version";
 import { serverBase, wsUrl } from "../net/config";
 import { OnlineSession } from "../net/onlineSession";
-import { PROTOCOL_VERSION, type ClientMsg, type RoomEventKind, type RoomView, type ServerMsg } from "../net/protocol";
+import { PROTOCOL_VERSION, type ClientMsg, type QueuePlayer, type RoomEventKind, type RoomView, type ServerMsg } from "../net/protocol";
 
 export interface OnlineIdentity {
   name: string;
@@ -36,6 +36,10 @@ export class OnlineController {
   onMatchStart: (s: OnlineSession) => void = () => {};
   onMatchEnd: () => void = () => {};
   onEmote: (player: number, id: string) => void = () => {};
+  /** état de la file « Partie rapide » (null = sorti de la file) */
+  onQueue: (q: { players: QueuePlayer[]; waited: number; maxWait: number } | null) => void = () => {};
+  /** dans la file « Partie rapide » */
+  inQueue = false;
 
   constructor(private identity: () => OnlineIdentity) {}
 
@@ -45,6 +49,11 @@ export class OnlineController {
 
   get isHost(): boolean {
     return !!this.room && this.room.hostId === this.you;
+  }
+
+  /** Jeton secret de l'appareil (multijoueur + parrainage). */
+  deviceToken(): string {
+    return this.token();
   }
 
   private token(): string {
@@ -101,7 +110,7 @@ export class OnlineController {
       if (s === "online" && this.pendingAction) {
         conn.send(this.pendingAction);
         this.pendingAction = null;
-      }
+      } else if (s === "online" && this.inQueue) conn.send({ t: "quickJoin" }); // reconnexion : on reprend sa place dans la file
     };
     conn.onMessage = (m) => this.handle(m);
     this.conn = conn;
@@ -148,6 +157,17 @@ export class OnlineController {
   }
   start() {
     this.conn?.send({ t: "start" });
+  }
+  /** « Partie rapide » : entrer dans la file d'attente publique. */
+  quickJoin() {
+    this.inQueue = true;
+    this.act({ t: "quickJoin" });
+  }
+  quickLeave() {
+    if (!this.inQueue) return;
+    this.inQueue = false;
+    if (this.pendingAction?.t === "quickJoin") this.pendingAction = null;
+    this.conn?.send({ t: "quickLeave" });
   }
   updateIdentity() {
     const id = this.identity();
@@ -203,6 +223,13 @@ export class OnlineController {
         break;
       case "emote":
         this.onEmote(m.player, m.id);
+        break;
+      case "queue":
+        if (m.players) this.onQueue({ players: m.players, waited: m.waited, maxWait: m.maxWait });
+        else {
+          this.inQueue = false;
+          this.onQueue(null);
+        }
         break;
       case "matchEnd":
         if (this.session) this.session.serverEnded = true;

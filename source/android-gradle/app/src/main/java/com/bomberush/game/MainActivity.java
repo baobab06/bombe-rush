@@ -1,6 +1,8 @@
 package com.bomberush.game;
 
 import android.app.Activity;
+import com.google.android.play.core.review.ReviewManager;
+import com.google.android.play.core.review.ReviewManagerFactory;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageInfo;
@@ -55,9 +57,11 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         Window w = getWindow();
         w.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON | WindowManager.LayoutParams.FLAG_FULLSCREEN);
-        if (Build.VERSION.SDK_INT >= 28) {
+        // plein écran jusque dans l'encoche : ALWAYS (SHORT_EDGES est obsolète depuis Android 15) ;
+        // Android 9-10 : réglé par le thème (values-v28)
+        if (Build.VERSION.SDK_INT >= 30) {
             WindowManager.LayoutParams lp = w.getAttributes();
-            lp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+            lp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
             w.setAttributes(lp);
         }
 
@@ -317,6 +321,24 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public String appVersion() {
             return version();
+        }
+
+        /** Fenêtre officielle « Noter l'appli » de Google Play (Google décide s'il l'affiche). */
+        @JavascriptInterface
+        public void requestReview() {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        final ReviewManager rm = ReviewManagerFactory.create(MainActivity.this);
+                        rm.requestReviewFlow().addOnCompleteListener(task -> {
+                            if (task.isSuccessful() && !isFinishing()) rm.launchReviewFlow(MainActivity.this, task.getResult());
+                        });
+                    } catch (Exception e) {
+                        // Play Store absent (appli installée hors Play) : rien à faire
+                    }
+                }
+            });
         }
 
         @JavascriptInterface

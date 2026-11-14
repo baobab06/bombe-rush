@@ -24,8 +24,8 @@ android {
         applicationId = "com.bomberush.game"
         minSdk = 24
         targetSdk = 36
-        versionCode = 59
-        versionName = "1.15.0"
+        versionCode = 60
+        versionName = "1.16.0"
         manifestPlaceholders["admobAppId"] = admobAppId
     }
 
@@ -37,9 +37,14 @@ android {
         debug {
             applicationIdSuffix = ".test"
             versionNameSuffix = "-test"
+            // même optimisation R8 que la version Play : l'APK de test vérifie qu'elle ne casse rien
+            isMinifyEnabled = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
         release {
-            isMinifyEnabled = false
+            // R8 : appli plus légère et plus rapide (recommandation Google Play)
+            isMinifyEnabled = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             // pas de signature ici : le .aab est signé avec la clé d'importation du propriétaire,
             // l'APK de test avec la clé de test (hors dépôt)
             signingConfig = null
@@ -79,6 +84,8 @@ dependencies {
     implementation("com.google.android.ump:user-messaging-platform:3.2.0")
     // achats intégrés (bombers, pièces) — Google Play exige la version 8 depuis août 2026
     implementation("com.android.billingclient:billing:8.0.0")
+    // demande de note officielle (« In-App Review »)
+    implementation("com.google.android.play:review:2.0.2")
     // connexion Google officielle (Credential Manager + « Se connecter avec Google »)
     implementation("androidx.credentials:credentials:1.5.0")
     implementation("androidx.credentials:credentials-play-services-auth:1.5.0")

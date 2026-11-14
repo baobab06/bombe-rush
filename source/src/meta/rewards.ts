@@ -104,10 +104,15 @@ export const GAIN_MODIFIERS: GainModifier[] = [
     }
     return extra > 0 ? { label: name, amount: extra, icon: "🎉" } : null;
   },
+  // parties en ligne : pièces ×1,5 (sur les gains seulement)
+  ({ ctx, base }) => (ctx.online ? { label: "Bonus en ligne", amount: Math.round(base * (ONLINE_COIN_MULTIPLIER - 1)), icon: "🌍" } : null),
   // exemples prêts à activer :
   // ({ profile, placement, base }) => placement.place === 1 && profile.winStreak >= 2 ? { label: "Série de victoires", amount: Math.round(base * 0.2), icon: "🔥" } : null,
   // ({ profile, placement, now }) => placement.place === 1 && firstWinToday(profile, now) ? { label: "1re victoire du jour", amount: 50, icon: "☀️" } : null,
 ];
+
+/** Multiplicateur des gains en ligne (Partie rapide et parties entre amis). */
+export const ONLINE_COIN_MULTIPLIER = 1.5;
 
 const MAX_REMEMBERED = 200;
 

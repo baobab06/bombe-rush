@@ -10,6 +10,8 @@ export interface AndroidBridge {
   serverUrl(): string;
   appVersion(): string;
   exitApp(): void;
+  /** fenêtre officielle « Noter l'appli » de Google Play (appli 1.16.0 et plus) */
+  requestReview?(): void;
 }
 
 export function androidApp(): AndroidBridge | null {

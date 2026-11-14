@@ -51,6 +51,8 @@ import { setServerTime } from "../meta/clock";
 import { getTitle } from "../core/cosmetics";
 import { CHESTS, levelXp, masteryXp, MASTERY_MAX, RANK_RULES } from "../meta/progress-config";
 import { GameScreen, type GameResult, type GameSetup, type StandingRow } from "./game";
+import { QuickSearch, Referral } from "./online-hub";
+import { maybeAskReview } from "../platform/review";
 import { UpdateChecker } from "../meta/update-check";
 import { UpdateUI } from "./update-ui";
 import { appVersion } from "../platform/app-version";
@@ -58,10 +60,10 @@ import { appVersion } from "../platform/app-version";
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
 /** écrans interdits tant qu'une mise à jour obligatoire n'est pas faite */
-const BLOCKED_BY_UPDATE: ScreenId[] = ["setup", "game", "pause", "private", "lobby", "invite"];
+const BLOCKED_BY_UPDATE: ScreenId[] = ["setup", "game", "pause", "online", "private", "lobby", "invite"];
 const MODE_ICONS: Record<string, string> = { classic: "🎮", chaos: "💀", koth: "👑" };
-const SCREENS: ScreenId[] = ["home", "setup", "settings", "pause", "results", "private", "lobby", "boot", "welcome", "invite", "shop", "collection", "missions", "profile", "rank", "chests", "tutorial", "world"];
-const MENU_SCREENS: ScreenId[] = ["setup", "settings", "private", "lobby", "welcome", "invite", "shop", "collection", "missions", "profile", "rank", "chests", "tutorial", "world"];
+const SCREENS: ScreenId[] = ["home", "setup", "settings", "pause", "results", "online", "private", "lobby", "boot", "welcome", "invite", "shop", "collection", "missions", "profile", "rank", "chests", "tutorial", "world"];
+const MENU_SCREENS: ScreenId[] = ["setup", "settings", "online", "private", "lobby", "welcome", "invite", "shop", "collection", "missions", "profile", "rank", "chests", "tutorial", "world"];
 
 class App implements AppCtx {
   private save = new SaveSystem();
@@ -325,6 +327,7 @@ class App implements AppCtx {
     this.shopTarget = null;
     if (id === "settings") this.renderSettings();
     if (id === "private") this.renderPrivate();
+    if (id === "online") this.renderOnlineHub();
     if (id === "lobby") this.renderLobby();
     if (id === "welcome" || id === "invite") this.renderIdent(id);
     if (this.deferredUpdate && id !== "game" && id !== "pause") this.applyUpdate(this.deferredUpdate);
@@ -334,7 +337,7 @@ class App implements AppCtx {
     $("btnRestart").hidden = this.game.online;
     // entraînement : ni minuteur ni compteur de joueurs
     $("hud").classList.toggle("training", this.game.training);
-    $("btnAgain").querySelector("span")!.textContent = this.game.online ? "SALON" : "REJOUER";
+    $("btnAgain").querySelector("span")!.textContent = this.game.online && !this.quickGame ? "SALON" : "REJOUER";
     audio.playMusic(inGame ? "game" : "menu");
     if (!inGame && prev !== id && prev !== "boot") audio.play("whoosh", 0.35);
     this.wallet.sync();
@@ -480,7 +483,7 @@ class App implements AppCtx {
         this.online.leaveRoom();
         this.game.setPaused(false);
         this.game.startDemo();
-        this.go("private", false);
+        this.go(this.quickGame ? "online" : "private", false);
       } else this.toMenu();
     });
     $("btnAgain").addEventListener("click", async () => {
@@ -488,6 +491,14 @@ class App implements AppCtx {
       // pub éventuelle ENTRE deux parties (fréquence limitée, jamais en combat)
       if (!this.game.online) await maybeInterstitial(this, this.sessionGames);
       if (this.screen !== "results") return;
+      if (this.game.online && this.quickGame) {
+        // partie rapide : nouvelle recherche
+        this.online.leaveRoom();
+        this.game.startDemo();
+        this.go("online", false);
+        this.startQuick();
+        return;
+      }
       if (this.game.online) {
         // retour au salon : l'hôte relance quand tout le monde est prêt
         this.game.startDemo();
@@ -628,6 +639,11 @@ class App implements AppCtx {
     }
     const p = this._profile;
     $("homeName").textContent = p.name;
+    try {
+      $("onlineNew").hidden = localStorage.getItem("bomberush.onlineSeen") === "1";
+    } catch {
+      /* stockage indisponible */
+    }
     $("homeLevel").textContent = String(p.level);
     $("homeXpBar").style.width = `${(p.xp / xpToNext(p.level)) * 100}%`;
     $("homeTitle").textContent = getTitle(p.equipped.title)?.name ?? "";
@@ -808,6 +824,18 @@ class App implements AppCtx {
   /** Arrivée sur l'accueil : cadeau de bienvenue, puis récompense du jour. */
   private afterHome() {
     const p = this._profile;
+    // fenêtre « Noter l'appli » de Google (après une victoire, avec parcimonie)
+    if (this.reviewDue && !this.modal.isOpen) {
+      this.reviewDue = false;
+      if (maybeAskReview(p.played)) return;
+    }
+    // parrainage : coffres gagnés grâce aux amis
+    if (!this.refChecked && this.online.base && !this.inviteCode) {
+      this.refChecked = true;
+      window.setTimeout(() => {
+        if (this.screen === "home" && !this.modal.isOpen) void this.referral.claim();
+      }, 1800);
+    }
     // notifications : proposées après quelques parties (2 fois au plus), jamais au lancement
     if (notifications.supported && notifications.state() === "default" && !this.inviteCode && ((p.notifyAsks === 0 && p.played >= 2) || (p.notifyAsks === 1 && p.played >= 10)) && !shouldOfferTutorial(p)) {
       window.setTimeout(() => {
@@ -1037,9 +1065,16 @@ class App implements AppCtx {
     if (summary) {
       noteGamePlayed(this._profile);
       this.sessionGames++;
+      void this.referral.gamePlayed();
+      if (r.won) this.reviewDue = true;
     }
     this.persist();
   }
+
+  /** victoire récente : la demande de note est proposée au retour à l'accueil */
+  private reviewDue = false;
+  /** coffres du parrainage vérifiés une fois par session */
+  private refChecked = false;
 
   private launching = false;
   private async launch() {
@@ -1572,9 +1607,29 @@ class App implements AppCtx {
     $("btnPrivate").addEventListener("click", () => {
       this.click();
       this.ensurePseudo();
+      try {
+        localStorage.setItem("bomberush.onlineSeen", "1");
+      } catch {
+        /* stockage indisponible */
+      }
+      $("onlineNew").hidden = true;
+      this.go("online");
+      if (o.available) o.connect();
+    });
+    $("olQuick").addEventListener("click", () => {
+      this.click();
+      this.startQuick();
+    });
+    $("olFriends").addEventListener("click", () => {
+      this.click();
       this.go("private");
       if (o.available) o.connect();
     });
+    $("olInvite").addEventListener("click", () => {
+      this.click();
+      this.referral.open();
+    });
+    o.onQueue = (q) => this.quickSearch.update(q);
     $("pseudo").addEventListener("click", () => {
       this.click();
       this.askRename();
@@ -1663,14 +1718,16 @@ class App implements AppCtx {
       if (this.screen === "private") this.renderPrivate();
       if (this.screen === "lobby") this.renderLobby();
       const [cls, label] = this.netLabel();
-      for (const id of ["netStatus", "lobbyNet"]) {
+      for (const id of ["netStatus", "lobbyNet", "olNet"]) {
         $(id).className = "net " + cls;
         $(id).textContent = label;
       }
       if (o.status === "reconnecting" && (this.screen === "game" || this.screen === "lobby")) this.toast("Connexion perdue… reconnexion en cours", "bad");
     };
     o.onRoom = (r) => {
-      if (r && ["private", "home", "invite", "welcome"].includes(this.screen)) {
+      // partie rapide : pas de salon, la partie démarre directement
+      if (r?.quick) return;
+      if (r && ["online", "private", "home", "invite", "welcome"].includes(this.screen)) {
         this.inviteCode = null;
         this.go("lobby");
       } else if (this.screen === "lobby") {
@@ -1706,6 +1763,8 @@ class App implements AppCtx {
       this.go("private", false);
     };
     o.onMatchStart = (session) => {
+      this.quickGame = !!o.room?.quick;
+      this.quickSearch.matched();
       void notify.show("Bombe Rush", "💣 La partie commence !");
       this.game.setPaused(false);
       this.game.startOnline(session);
@@ -1716,6 +1775,26 @@ class App implements AppCtx {
     o.onMatchEnd = () => {
       /* l'écran de résultats s'affiche via la fin de partie locale */
     };
+  }
+
+  /** partie en ligne en cours lancée par la « Partie rapide » */
+  private quickGame = false;
+  private quickSearch = new QuickSearch(this, this.online, () => ({ name: this._profile.name, characterId: this._profile.characterId }));
+  private referral = new Referral(this, this.online);
+
+  /** « Partie rapide » : recherche de vrais joueurs, complétée par des bots. */
+  private startQuick() {
+    const o = this.online;
+    if (!o.available) return this.toast("Le jeu en ligne a besoin d'internet.", "bad");
+    this.ensurePseudo();
+    this.askNotifications();
+    this.quickSearch.start();
+  }
+
+  private renderOnlineHub() {
+    const [cls, label] = this.netLabel();
+    $("olNet").className = "net " + cls;
+    $("olNet").textContent = label;
   }
 
   private privateInfo(text: string, err = false) {

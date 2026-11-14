@@ -3,7 +3,7 @@
  *
  * Trois systèmes séparés côté serveur :
  *  - lobby       : salles privées, joueurs, prêt, exclusion, reconnexion
- *  - matchmaking : file d'attente publique (préparée, pas encore exposée)
+ *  - matchmaking : file d'attente publique (« Partie rapide »)
  *  - jeu         : simulation autoritaire (même code `core/` que le client)
  */
 import type { InputCmd, PlayerSlot } from "../core/types";
@@ -37,7 +37,19 @@ export interface RoomView {
   state: "lobby" | "playing";
   maxPlayers: number;
   players: LobbyPlayer[];
+  /** salle créée par la « Partie rapide » : pas de salon, dissoute après la partie */
+  quick?: boolean;
 }
+
+/** Joueur visible dans la file d'attente de la « Partie rapide ». */
+export interface QueuePlayer {
+  name: string;
+  characterId: string;
+  you?: boolean;
+}
+
+/** Attente maximale avant de lancer la partie rapide avec des bots (s). */
+export const QUICK_MAX_WAIT_S = 15;
 
 export type ClientMsg =
   | { t: "hello"; v: number; token: string; name: string; characterId: string; skinId?: string; accessoryId?: string; trailId?: string; boomId?: string; app?: string }
@@ -53,6 +65,8 @@ export type ClientMsg =
   | { t: "setSettings"; modeId?: string; mapId?: string; fillBots?: boolean }
   | { t: "kick"; playerId: string }
   | { t: "start" }
+  | { t: "quickJoin" }
+  | { t: "quickLeave" }
   | { t: "input"; seq: number; cmd: InputCmd }
   | { t: "pushToken"; platform: "android" | "web"; token: string };
 
@@ -69,7 +83,9 @@ export type ServerMsg =
   | { t: "matchStart"; matchId: number; seed: number; mapId: string; modeId: string; slots: PlayerSlot[]; you: number; spectate?: boolean }
   | { t: "snap"; s: Snapshot }
   | { t: "emote"; player: number; id: string }
-  | { t: "matchEnd"; winner: number };
+  | { t: "matchEnd"; winner: number }
+  /** état de la file « Partie rapide » (null = plus dans la file) */
+  | { t: "queue"; players: QueuePlayer[]; waited: number; maxWait: number } | { t: "queue"; players: null };
 
 /** Codes de salle : 5 caractères sans lettres ambiguës (0/O, 1/I…). */
 const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";

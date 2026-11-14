@@ -10,6 +10,7 @@
  *   GET  /j/CODE           lien d'invitation (ouvre le jeu et rejoint la salle)
  *   GET  /health           état du serveur
  *   /api/lb/…              classement mondial (server/leaderboard.ts)
+ *   /api/ref/…             parrainage « Invite un ami » (server/referral.ts)
  *   /api/…                 comptes Google et sauvegarde en ligne (server/accounts.ts)
  *   GET  /.well-known/assetlinks.json   Android App Links (si ANDROID_* défini)
  *   WS   /ws               temps réel
@@ -29,6 +30,7 @@ import { acceptUpgrade, type WsConn } from "./ws";
 import { Accounts, GoogleVerifier, MemoryStore, accountRoutes, allowedOrigin, storeFromEnv } from "./accounts";
 import { UpdateService, updateRoutes } from "./updates";
 import { LeaderboardService, leaderboardRoutes } from "./leaderboard";
+import { ReferralService, referralRoutes } from "./referral";
 import ANNOUNCE from "./announce.json";
 import { migrate } from "../src/meta/save";
 
@@ -56,7 +58,7 @@ const lobby = new Lobby({
   client: (token) => clients.get(token),
   notifyOffline: (tokens, title, body) => void push.notify(tokens, title, body),
 });
-const matchmaker = new Matchmaker(lobby);
+const matchmaker = new Matchmaker(lobby, send);
 setInterval(() => matchmaker.tick(), 1000);
 
 const cleanName = (n: unknown) =>
@@ -126,6 +128,7 @@ function onMessage(conn: WsConn, raw: string, state: { token: string | null; win
       send(c.token, { t: "pong" });
       break;
     case "createRoom":
+      matchmaker.dequeue(c, false);
       if (lobby.rooms.size >= MAX_ROOMS) {
         send(c.token, { t: "error", code: "busy", message: "Le serveur est plein pour le moment, réessaie dans un instant." });
         break;
@@ -136,6 +139,7 @@ function onMessage(conn: WsConn, raw: string, state: { token: string | null; win
       send(c.token, { t: "peek", ...lobby.peek(String(msg.code ?? "")) });
       break;
     case "joinRoom":
+      matchmaker.dequeue(c, false);
       lobby.join(c, String(msg.code ?? ""));
       break;
     case "leaveRoom":
@@ -165,6 +169,16 @@ function onMessage(conn: WsConn, raw: string, state: { token: string | null; win
       break;
     case "start":
       lobby.start(c);
+      break;
+    case "quickJoin":
+      if (lobby.rooms.size >= MAX_ROOMS) {
+        send(c.token, { t: "error", code: "busy", message: "Le serveur est plein pour le moment, réessaie dans un instant." });
+        break;
+      }
+      matchmaker.enqueue(c);
+      break;
+    case "quickLeave":
+      matchmaker.dequeue(c);
       break;
     case "input":
       if (msg.cmd) lobby.input(c, Number(msg.seq) || 0, msg.cmd);
@@ -202,6 +216,8 @@ const updateApi = updateRoutes(updates, process.env.ADMIN_TOKEN, (req) => allowe
 const leaderboard = new LeaderboardService(accountStore ?? new MemoryStore());
 const lbApi = leaderboardRoutes(leaderboard, process.env.ADMIN_TOKEN, (req) => allowedOrigin(req.headers.origin, req.headers.host));
 void leaderboard.ready();
+const referral = new ReferralService(accountStore ?? new MemoryStore());
+const refApi = referralRoutes(referral, (req) => allowedOrigin(req.headers.origin, req.headers.host));
 const api = accountRoutes(accounts, process.env.GOOGLE_WEB_CLIENT_ID, (req) => updates.statusOf(String(req.headers["x-bomberush-version"] ?? "") || null) === "mandatory");
 console.log(process.env.ADMIN_TOKEN && process.env.ADMIN_TOKEN.length >= 24 ? "Mises à jour : administration activée" : "Mises à jour : administration désactivée (ADMIN_TOKEN à configurer)");
 console.log(accounts ? `Comptes : activés (stockage ${accountStore!.kind})` : "Comptes : désactivés (GOOGLE_WEB_CLIENT_ID + stockage à configurer)");
@@ -210,6 +226,7 @@ const server = createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", "http://x");
   if (await updateApi(req, res, url.pathname, url.searchParams)) return;
   if (await lbApi(req, res, url.pathname, url.searchParams)) return;
+  if (await refApi(req, res, url.pathname)) return;
   if (await api(req, res, url.pathname)) return;
   if (url.pathname === "/health") {
     res.writeHead(200, { "content-type": "application/json", "access-control-allow-origin": "*" });

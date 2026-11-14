@@ -232,6 +232,7 @@ var SKINS = buildSkins();
 var PROTOCOL_VERSION = 1;
 var MAX_ROOM_PLAYERS = 4;
 var RECONNECT_GRACE_S = 45;
+var QUICK_MAX_WAIT_S = 15;
 var ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 function generateRoomCode(rand = Math.random) {
   let s = "";
@@ -4677,6 +4678,8 @@ class GameRunner {
 var clamp = (v) => Number.isFinite(v) ? Math.max(-1, Math.min(1, v)) : 0;
 
 // server/lobby.ts
+var QUICK_MODES = ["classic", "chaos", "koth"];
+
 class Lobby {
   hooks;
   rooms = new Map;
@@ -4708,7 +4711,8 @@ class Lobby {
       fillBots: r.fillBots,
       state: r.game ? "playing" : "lobby",
       maxPlayers: MAX_ROOM_PLAYERS,
-      players
+      players,
+      quick: r.quick || undefined
     };
   }
   broadcast(r) {
@@ -4742,7 +4746,7 @@ class Lobby {
       playing: !!r.game
     };
   }
-  create(c, isPublic = false) {
+  create(c, isPublic = false, quick = false) {
     if (c.room)
       this.leave(c);
     let code = generateRoomCode();
@@ -4757,7 +4761,8 @@ class Lobby {
       fillBots: false,
       members: [{ token: c.token, ready: true, connected: true, graceTimer: null }],
       game: null,
-      isPublic
+      isPublic,
+      quick: quick || undefined
     };
     this.rooms.set(code, r);
     c.room = code;
@@ -4877,6 +4882,27 @@ class Lobby {
     const why = this.blocker(r);
     if (why)
       return this.error(c.token, "not_ready", why);
+    this.launch(r);
+  }
+  startQuick(group, rnd = Math.random) {
+    if (!group.length)
+      return null;
+    const r = this.create(group[0], true, true);
+    for (const c of group.slice(1)) {
+      if (c.room)
+        this.leave(c);
+      r.members.push({ token: c.token, ready: true, connected: true, graceTimer: null });
+      c.room = r.code;
+    }
+    const modes = QUICK_MODES.filter((id) => MODES.some((m) => m.id === id && m.available && !m.hidden));
+    r.modeId = modes[Math.floor(rnd() * modes.length)] ?? "classic";
+    r.mapId = RANDOM_MAP;
+    r.fillBots = true;
+    r.name = "Partie rapide";
+    this.launch(r);
+    return r;
+  }
+  launch(r) {
     const seats = r.members.map((mb) => {
       const cl = this.hooks.client(mb.token);
       return { token: cl.token, name: cl.name, characterId: cl.characterId, skinId: cl.skinId, accessoryId: cl.accessoryId, trailId: cl.trailId, boomId: cl.boomId };
@@ -4903,6 +4929,22 @@ class Lobby {
       this.hooks.notifyOffline(offline, "Bombe Rush", "\uD83D\uDCA3 La partie commence ! Reviens vite.");
   }
   endGame(r) {
+    if (r.quick) {
+      setTimeout(() => {
+        r.game = null;
+        for (const mb of r.members) {
+          if (mb.graceTimer)
+            clearTimeout(mb.graceTimer);
+          const c = this.hooks.client(mb.token);
+          if (c && c.room === r.code)
+            c.room = null;
+          this.hooks.send(mb.token, { t: "room", room: null });
+        }
+        r.members = [];
+        this.rooms.delete(r.code);
+      }, 1500);
+      return;
+    }
     setTimeout(() => {
       r.game = null;
       if (this.rooms.has(r.code))
@@ -4952,35 +4994,72 @@ class Lobby {
 // server/matchmaking.ts
 class Matchmaker {
   lobby;
+  send;
   opts;
+  now;
   queue = [];
   waitingSince = new Map;
-  constructor(lobby, opts = { minPlayers: 2, maxPlayers: 4, maxWaitS: 20 }) {
+  constructor(lobby, send, opts = { minPlayers: 1, maxPlayers: 4, maxWaitS: QUICK_MAX_WAIT_S }, now = Date.now) {
     this.lobby = lobby;
+    this.send = send;
     this.opts = opts;
+    this.now = now;
   }
   enqueue(c) {
-    if (this.queue.some((q) => q.token === c.token))
-      return;
-    this.queue.push(c);
-    this.waitingSince.set(c.token, Date.now());
+    if (c.room)
+      this.lobby.leave(c);
+    if (!this.queue.some((q) => q.token === c.token)) {
+      this.queue.push(c);
+      this.waitingSince.set(c.token, this.now());
+    }
+    this.broadcast();
   }
-  dequeue(c) {
+  dequeue(c, notify = true) {
+    const was = this.queue.some((q) => q.token === c.token);
     this.queue = this.queue.filter((q) => q.token !== c.token);
     this.waitingSince.delete(c.token);
+    if (notify)
+      this.send(c.token, { t: "queue", players: null });
+    if (was)
+      this.broadcast();
+  }
+  has(c) {
+    return this.queue.some((q) => q.token === c.token);
+  }
+  broadcast() {
+    const t = this.now();
+    const oldest = this.queue[0] ? this.waitingSince.get(this.queue[0].token) ?? t : t;
+    const waited = Math.min(this.opts.maxWaitS, Math.max(0, Math.floor((t - oldest) / 1000)));
+    const group = this.queue.slice(0, this.opts.maxPlayers);
+    for (const c of group) {
+      this.send(c.token, {
+        t: "queue",
+        players: group.map((q) => ({ name: q.name, characterId: q.characterId, you: q.token === c.token || undefined })),
+        waited,
+        maxWait: this.opts.maxWaitS
+      });
+    }
   }
   tick() {
+    const before = this.queue.length;
     this.queue = this.queue.filter((c) => c.connected && !c.room);
-    const oldest = this.queue[0] ? (Date.now() - (this.waitingSince.get(this.queue[0].token) ?? Date.now())) / 1000 : 0;
-    const enough = this.queue.length >= this.opts.maxPlayers || this.queue.length >= this.opts.minPlayers && oldest > this.opts.maxWaitS;
-    if (!enough)
+    if (!this.queue.length)
       return;
+    const oldest = (this.now() - (this.waitingSince.get(this.queue[0].token) ?? this.now())) / 1000;
+    const enough = this.queue.length >= this.opts.maxPlayers || this.queue.length >= this.opts.minPlayers && oldest >= this.opts.maxWaitS;
+    if (!enough) {
+      if (before !== this.queue.length || this.queue.length)
+        this.broadcast();
+      return;
+    }
     const group = this.queue.splice(0, this.opts.maxPlayers);
-    const room = this.lobby.create(group[0], true);
-    for (const c of group.slice(1))
-      this.lobby.join(c, room.code);
-    for (const c of group)
+    for (const c of group) {
       this.waitingSince.delete(c.token);
+      this.send(c.token, { t: "queue", players: null });
+    }
+    this.lobby.startQuick(group);
+    if (this.queue.length)
+      this.broadcast();
   }
   get size() {
     return this.queue.length;
@@ -6742,6 +6821,233 @@ function leaderboardRoutes(svc, adminToken, corsOrigin) {
     }
   };
 }
+
+// server/referral.ts
+import { createHash as createHash5 } from "node:crypto";
+var REF_MAX_FRIENDS = 10;
+var REF_GAMES = 3;
+var REF_WELCOME_COINS = 300;
+var hash = (token) => createHash5("sha256").update("ref:" + token).digest("hex").slice(0, 32);
+var cleanName = (n) => String(n ?? "").replace(/[<>&"]/g, "").trim().slice(0, 16) || "Joueur";
+
+class ReferralService {
+  kv;
+  newCode;
+  constructor(kv, newCode = generateRoomCode) {
+    this.kv = kv;
+    this.newCode = newCode;
+  }
+  async getMe(h) {
+    const raw = await this.kv.get(`ref:me:${h}`);
+    return raw ? JSON.parse(raw) : null;
+  }
+  async saveMe(h, me) {
+    await this.kv.set(`ref:me:${h}`, JSON.stringify(me));
+  }
+  async friends(code) {
+    const raw = await this.kv.get(`ref:fr:${code}`);
+    return raw ? JSON.parse(raw) : [];
+  }
+  async saveFriends(code, list) {
+    await this.kv.set(`ref:fr:${code}`, JSON.stringify(list));
+  }
+  async ensure(token, name) {
+    const h = hash(token);
+    let me = await this.getMe(h);
+    if (!me) {
+      let code = "";
+      for (let i = 0;i < 20 && !code; i++) {
+        const c = this.newCode();
+        if (await this.kv.setNX(`ref:code:${c}`, h))
+          code = c;
+      }
+      if (!code)
+        throw new Error("code indisponible");
+      me = { code, name: cleanName(name), games: 0, done: false, pending: 0 };
+      await this.saveMe(h, me);
+    } else if (name && cleanName(name) !== me.name) {
+      me.name = cleanName(name);
+      await this.saveMe(h, me);
+    }
+    return { h, me };
+  }
+  async view(me) {
+    const list = await this.friends(me.code);
+    return {
+      code: me.code,
+      used: me.usedCode ?? null,
+      games: me.games,
+      done: me.done,
+      pending: me.pending,
+      friends: list.map((f) => ({ name: f.name, games: Math.min(REF_GAMES, f.games), done: f.done })),
+      max: REF_MAX_FRIENDS,
+      need: REF_GAMES,
+      welcome: REF_WELCOME_COINS
+    };
+  }
+  async me(body) {
+    const token = tok(body.token);
+    if (!token)
+      return { error: "Jeton manquant", status: 400 };
+    const { me } = await this.ensure(token, body.name);
+    return this.view(me);
+  }
+  async use(body) {
+    const token = tok(body.token);
+    if (!token)
+      return { error: "Jeton manquant", status: 400 };
+    const code = normalizeCode(String(body.code ?? ""));
+    if (code.length !== 5)
+      return { error: "Le code ami fait 5 caractères." };
+    const { h, me } = await this.ensure(token, body.name);
+    if (me.usedCode)
+      return { error: "Tu as déjà utilisé un code ami." };
+    if (code === me.code)
+      return { error: "C'est ton propre code \uD83D\uDE09 Envoie-le à un ami !" };
+    const owner = await this.kv.get(`ref:code:${code}`);
+    if (!owner)
+      return { error: "Ce code ami n'existe pas. Vérifie-le." };
+    const list = await this.friends(code);
+    if (list.length >= REF_MAX_FRIENDS)
+      return { error: "Ce code a déjà été utilisé par 10 amis." };
+    me.usedCode = code;
+    me.games = 0;
+    me.done = false;
+    await this.saveMe(h, me);
+    list.push({ h, name: me.name, games: 0, done: false });
+    await this.saveFriends(code, list);
+    const ownerMe = await this.getMe(owner);
+    return { ok: true, welcome: REF_WELCOME_COINS, friend: ownerMe?.name ?? "ton ami", ...await this.view(me) };
+  }
+  async progress(body) {
+    const token = tok(body.token);
+    if (!token)
+      return { error: "Jeton manquant", status: 400 };
+    const h = hash(token);
+    const me = await this.getMe(h);
+    if (!me || !me.usedCode || me.done)
+      return { ok: true, games: me?.games ?? 0, done: !!me?.done };
+    me.games = Math.min(REF_GAMES, me.games + 1);
+    if (me.games >= REF_GAMES) {
+      me.done = true;
+      me.pending++;
+    }
+    await this.saveMe(h, me);
+    const list = await this.friends(me.usedCode);
+    const f = list.find((x) => x.h === h);
+    if (f) {
+      f.games = me.games;
+      f.done = me.done;
+      f.name = me.name;
+      await this.saveFriends(me.usedCode, list);
+    }
+    if (me.done) {
+      const owner = await this.kv.get(`ref:code:${me.usedCode}`);
+      const om = owner ? await this.getMe(owner) : null;
+      if (owner && om) {
+        om.pending++;
+        await this.saveMe(owner, om);
+      }
+    }
+    return { ok: true, games: me.games, done: me.done };
+  }
+  async claim(body) {
+    const token = tok(body.token);
+    if (!token)
+      return { error: "Jeton manquant", status: 400 };
+    const h = hash(token);
+    const me = await this.getMe(h);
+    if (!me || !me.pending)
+      return { chests: 0 };
+    const n = me.pending;
+    me.pending = 0;
+    await this.saveMe(h, me);
+    return { chests: n };
+  }
+}
+var tok = (t) => typeof t === "string" && /^[0-9a-f]{16,64}$/.test(t) ? t : null;
+async function readJson3(req, max) {
+  let size = 0;
+  const chunks = [];
+  for await (const ch of req) {
+    size += ch.length;
+    if (size > max)
+      throw new Error("trop gros");
+    chunks.push(ch);
+  }
+  return chunks.length ? JSON.parse(Buffer.concat(chunks).toString("utf8")) : {};
+}
+
+class Limit2 {
+  max;
+  windowMs;
+  hits = new Map;
+  constructor(max, windowMs) {
+    this.max = max;
+    this.windowMs = windowMs;
+  }
+  allow(key) {
+    const now = Date.now();
+    const e = this.hits.get(key);
+    if (!e || now - e.t > this.windowMs) {
+      this.hits.set(key, { n: 1, t: now });
+      if (this.hits.size > 5000)
+        this.hits.clear();
+      return true;
+    }
+    return ++e.n <= this.max;
+  }
+}
+function referralRoutes(svc, corsOrigin) {
+  const limit = new Limit2(60, 60000);
+  const useLimit = new Limit2(10, 3600000);
+  return async (req, res, path) => {
+    if (!path.startsWith("/api/ref/"))
+      return false;
+    const headers = { "content-type": "application/json", "cache-control": "no-store" };
+    const origin = corsOrigin(req);
+    if (origin) {
+      headers["access-control-allow-origin"] = origin;
+      headers["access-control-allow-headers"] = "content-type";
+      headers["access-control-allow-methods"] = "POST, OPTIONS";
+      headers["vary"] = "origin";
+    }
+    const reply = (status, obj) => {
+      res.writeHead(status, headers);
+      res.end(JSON.stringify(obj));
+      return true;
+    };
+    if (req.method === "OPTIONS") {
+      res.writeHead(origin ? 204 : 403, headers);
+      res.end();
+      return true;
+    }
+    if (req.method !== "POST")
+      return reply(405, { error: "POST attendu" });
+    const ip = (req.headers["x-forwarded-for"] ?? req.socket.remoteAddress ?? "?").split(",")[0].trim();
+    if (!limit.allow(ip))
+      return reply(429, { error: "Trop de requêtes, réessaie dans un instant." });
+    try {
+      const body = await readJson3(req, 2048);
+      let r;
+      if (path === "/api/ref/me")
+        r = await svc.me(body);
+      else if (path === "/api/ref/use") {
+        if (!useLimit.allow(ip))
+          return reply(429, { error: "Trop d'essais, réessaie plus tard." });
+        r = await svc.use(body);
+      } else if (path === "/api/ref/progress")
+        r = await svc.progress(body);
+      else if (path === "/api/ref/claim")
+        r = await svc.claim(body);
+      else
+        return reply(404, { error: "Introuvable" });
+      return reply("error" in r ? Number(r.status ?? 400) : 200, r);
+    } catch (e) {
+      return reply(400, { error: "Requête invalide (" + e.message + ")." });
+    }
+  };
+}
 // server/announce.json
 var announce_default = {
   rev: "2026-11-12-v1.14.0",
@@ -6967,9 +7273,9 @@ var lobby = new Lobby({
   client: (token) => clients.get(token),
   notifyOffline: (tokens, title, body) => void push.notify(tokens, title, body)
 });
-var matchmaker = new Matchmaker(lobby);
+var matchmaker = new Matchmaker(lobby, send);
 setInterval(() => matchmaker.tick(), 1000);
-var cleanName = (n) => String(n ?? "").replace(/[<>&"]/g, "").trim().slice(0, 16) || "Joueur";
+var cleanName2 = (n) => String(n ?? "").replace(/[<>&"]/g, "").trim().slice(0, 16) || "Joueur";
 var cosm = (v) => typeof v === "string" && /^[a-z0-9-]{1,40}$/.test(v) ? v : undefined;
 var charId = (v, fallback = "renard") => typeof v === "string" && CHARACTERS.some((c) => c.id === v) ? v : fallback;
 var MAX_MSG_PER_SEC = 150;
@@ -7008,7 +7314,7 @@ function onMessage(conn, raw, state) {
     conns.set(token, conn);
     state.token = token;
     c.connected = true;
-    c.name = cleanName(msg.name);
+    c.name = cleanName2(msg.name);
     c.characterId = charId(msg.characterId);
     c.skinId = cosm(msg.skinId);
     c.accessoryId = cosm(msg.accessoryId);
@@ -7029,6 +7335,7 @@ function onMessage(conn, raw, state) {
       send(c.token, { t: "pong" });
       break;
     case "createRoom":
+      matchmaker.dequeue(c, false);
       if (lobby.rooms.size >= MAX_ROOMS) {
         send(c.token, { t: "error", code: "busy", message: "Le serveur est plein pour le moment, réessaie dans un instant." });
         break;
@@ -7039,6 +7346,7 @@ function onMessage(conn, raw, state) {
       send(c.token, { t: "peek", ...lobby.peek(String(msg.code ?? "")) });
       break;
     case "joinRoom":
+      matchmaker.dequeue(c, false);
       lobby.join(c, String(msg.code ?? ""));
       break;
     case "leaveRoom":
@@ -7049,7 +7357,7 @@ function onMessage(conn, raw, state) {
       lobby.setReady(c, !!msg.ready);
       break;
     case "setName":
-      c.name = cleanName(msg.name);
+      c.name = cleanName2(msg.name);
       lobby.updateProfile(c);
       break;
     case "setLook":
@@ -7068,6 +7376,16 @@ function onMessage(conn, raw, state) {
       break;
     case "start":
       lobby.start(c);
+      break;
+    case "quickJoin":
+      if (lobby.rooms.size >= MAX_ROOMS) {
+        send(c.token, { t: "error", code: "busy", message: "Le serveur est plein pour le moment, réessaie dans un instant." });
+        break;
+      }
+      matchmaker.enqueue(c);
+      break;
+    case "quickLeave":
+      matchmaker.dequeue(c);
       break;
     case "input":
       if (msg.cmd)
@@ -7102,6 +7420,8 @@ var updateApi = updateRoutes(updates, process.env.ADMIN_TOKEN, (req) => allowedO
 var leaderboard = new LeaderboardService(accountStore ?? new MemoryStore);
 var lbApi = leaderboardRoutes(leaderboard, process.env.ADMIN_TOKEN, (req) => allowedOrigin(req.headers.origin, req.headers.host));
 leaderboard.ready();
+var referral = new ReferralService(accountStore ?? new MemoryStore);
+var refApi = referralRoutes(referral, (req) => allowedOrigin(req.headers.origin, req.headers.host));
 var api = accountRoutes(accounts, process.env.GOOGLE_WEB_CLIENT_ID, (req) => updates.statusOf(String(req.headers["x-bomberush-version"] ?? "") || null) === "mandatory");
 console.log(process.env.ADMIN_TOKEN && process.env.ADMIN_TOKEN.length >= 24 ? "Mises à jour : administration activée" : "Mises à jour : administration désactivée (ADMIN_TOKEN à configurer)");
 console.log(accounts ? `Comptes : activés (stockage ${accountStore.kind})` : "Comptes : désactivés (GOOGLE_WEB_CLIENT_ID + stockage à configurer)");
@@ -7110,6 +7430,8 @@ var server = createServer(async (req, res) => {
   if (await updateApi(req, res, url.pathname, url.searchParams))
     return;
   if (await lbApi(req, res, url.pathname, url.searchParams))
+    return;
+  if (await refApi(req, res, url.pathname))
     return;
   if (await api(req, res, url.pathname))
     return;

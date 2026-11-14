@@ -115,7 +115,7 @@
           <em class="ev-tag" id="homeEvent" hidden></em>
         </button>
         <button class="btn btn-play" id="btnPlay"><i data-icon="play"></i><span class="lbl">JOUER</span></button>
-        <button class="btn btn-blue btn-private" id="btnPrivate"><i data-icon="users"></i><span>JOUER ENTRE AMIS</span></button>
+        <button class="btn btn-blue btn-private" id="btnPrivate"><span class="ol-globe">🌍</span><span>JOUER EN LIGNE</span><em class="ol-tag" id="onlineNew">NOUVEAU</em></button>
       </div>
     </div>
     <nav class="home-dock">
@@ -154,8 +154,25 @@
   </section>
 
   <!-- Partie privée : entrée -->
+  <!-- Jouer en ligne : partie rapide, entre amis, parrainage -->
+  <section class="screen" id="online" hidden>
+    <header class="bar"><button class="back" data-back aria-label="Retour"><i data-icon="back"></i></button><h2>Jouer en ligne</h2><span class="net" id="olNet"></span></header>
+    <div class="ol-grid">
+      <button class="ol-quick" id="olQuick">
+        <span class="big">🌍</span><b>PARTIE RAPIDE</b>
+        <small>Affronte de vrais joueurs<br>Mode et carte au hasard 🎲</small>
+        <span class="ol-pill">🪙 Pièces ×1,5 en ligne</span>
+        <span class="btn btn-yellow ol-go"><span>▶ CHERCHER</span></span>
+      </button>
+      <div class="ol-side">
+        <button class="mp-mode" data-mode="friends" id="olFriends"><span class="mp-ico">👥</span><span class="mp-txt"><b>JOUER ENTRE AMIS</b><small>Crée une salle ou rejoins avec un code</small></span><span class="ol-arrow">›</span></button>
+        <button class="mp-mode" data-mode="invite" id="olInvite"><span class="mp-ico">🎁</span><span class="mp-txt"><b>INVITE UN AMI</b><small>Un coffre rare pour toi et ton ami</small></span><span class="ol-arrow">›</span></button>
+      </div>
+    </div>
+  </section>
+
   <section class="screen" id="private" hidden>
-    <header class="bar"><button class="back" data-back aria-label="Retour"><i data-icon="back"></i></button><h2>Partie privée</h2><span class="net" id="netStatus"></span></header>
+    <header class="bar"><button class="back" data-back aria-label="Retour"><i data-icon="back"></i></button><h2>Jouer entre amis</h2><span class="net" id="netStatus"></span></header>
     <div class="private-grid">
       <div class="private-card panel">
         <h3 class="label first">Créer une salle</h3>
