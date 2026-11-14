@@ -52,6 +52,7 @@ import { getTitle } from "../core/cosmetics";
 import { CHESTS, levelXp, masteryXp, MASTERY_MAX, RANK_RULES } from "../meta/progress-config";
 import { GameScreen, type GameResult, type GameSetup, type StandingRow } from "./game";
 import { QuickSearch, Referral } from "./online-hub";
+import { QUICK_MODES } from "../net/protocol";
 import { maybeAskReview } from "../platform/review";
 import { UpdateChecker } from "../meta/update-check";
 import { UpdateUI } from "./update-ui";
@@ -60,10 +61,10 @@ import { appVersion } from "../platform/app-version";
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
 /** écrans interdits tant qu'une mise à jour obligatoire n'est pas faite */
-const BLOCKED_BY_UPDATE: ScreenId[] = ["setup", "game", "pause", "online", "private", "lobby", "invite"];
+const BLOCKED_BY_UPDATE: ScreenId[] = ["setup", "game", "pause", "private", "lobby", "invite"];
 const MODE_ICONS: Record<string, string> = { classic: "🎮", chaos: "💀", koth: "👑" };
-const SCREENS: ScreenId[] = ["home", "setup", "settings", "pause", "results", "online", "private", "lobby", "boot", "welcome", "invite", "shop", "collection", "missions", "profile", "rank", "chests", "tutorial", "world"];
-const MENU_SCREENS: ScreenId[] = ["setup", "settings", "online", "private", "lobby", "welcome", "invite", "shop", "collection", "missions", "profile", "rank", "chests", "tutorial", "world"];
+const SCREENS: ScreenId[] = ["home", "setup", "settings", "pause", "results", "private", "lobby", "boot", "welcome", "invite", "shop", "collection", "missions", "profile", "rank", "chests", "tutorial", "world"];
+const MENU_SCREENS: ScreenId[] = ["setup", "settings", "private", "lobby", "welcome", "invite", "shop", "collection", "missions", "profile", "rank", "chests", "tutorial", "world"];
 
 class App implements AppCtx {
   private save = new SaveSystem();
@@ -327,7 +328,6 @@ class App implements AppCtx {
     this.shopTarget = null;
     if (id === "settings") this.renderSettings();
     if (id === "private") this.renderPrivate();
-    if (id === "online") this.renderOnlineHub();
     if (id === "lobby") this.renderLobby();
     if (id === "welcome" || id === "invite") this.renderIdent(id);
     if (this.deferredUpdate && id !== "game" && id !== "pause") this.applyUpdate(this.deferredUpdate);
@@ -430,11 +430,10 @@ class App implements AppCtx {
     nav("btnRanking", "rank");
     this.setupSectionTabs();
     // JOUER : partie immédiate avec le mode choisi et les derniers réglages
+    // JOUER : cherche de vrais joueurs quelques secondes, sinon partie contre l'ordinateur
     $("btnPlay").addEventListener("click", () => {
       this.click();
-      if (this._profile.lastSetup.comp) return void this.launchComp();
-      this.setupState = { ...this._profile.lastSetup };
-      this.launch();
+      this.play();
     });
     $("btnShop").addEventListener("click", () => {
       this.click();
@@ -483,20 +482,19 @@ class App implements AppCtx {
         this.online.leaveRoom();
         this.game.setPaused(false);
         this.game.startDemo();
-        this.go(this.quickGame ? "online" : "private", false);
+        if (this.quickGame) this.toMenu();
+        else this.go("private", false);
       } else this.toMenu();
     });
     $("btnAgain").addEventListener("click", async () => {
       this.click();
       // pub éventuelle ENTRE deux parties (fréquence limitée, jamais en combat)
-      if (!this.game.online) await maybeInterstitial(this, this.sessionGames);
+      if (!this.game.online || this.quickGame) await maybeInterstitial(this, this.sessionGames);
       if (this.screen !== "results") return;
       if (this.game.online && this.quickGame) {
-        // partie rapide : nouvelle recherche
+        // partie avec de vrais joueurs : nouvelle recherche
         this.online.leaveRoom();
-        this.game.startDemo();
-        this.go("online", false);
-        this.startQuick();
+        this.play();
         return;
       }
       if (this.game.online) {
@@ -505,6 +503,8 @@ class App implements AppCtx {
         this.go("lobby", false);
         return;
       }
+      // Compétition : nouvelle recherche de joueurs (nouveau tirage)
+      if (this.game.setup?.comp) return this.play();
       void this.relaunch();
     });
     $("btnMenu").addEventListener("click", async () => {
@@ -639,11 +639,8 @@ class App implements AppCtx {
     }
     const p = this._profile;
     $("homeName").textContent = p.name;
-    try {
-      $("onlineNew").hidden = localStorage.getItem("bomberush.onlineSeen") === "1";
-    } catch {
-      /* stockage indisponible */
-    }
+    // connexion en avance : JOUER trouve plus vite les autres joueurs
+    if (this.online.available && this.online.status === "idle") this.online.connect();
     $("homeLevel").textContent = String(p.level);
     $("homeXpBar").style.width = `${(p.xp / xpToNext(p.level)) * 100}%`;
     $("homeTitle").textContent = getTitle(p.equipped.title)?.name ?? "";
@@ -1021,8 +1018,8 @@ class App implements AppCtx {
     if (pend && pend.matchId === this.game.matchKey) return pend;
     return {
       matchId: this.game.matchKey,
-      stake: this.game.online ? ONLINE_STAKE : ((this.game.setup?.difficulty ?? "normal") as StakeId),
-      comp: !this.game.online && !!this.game.setup?.comp,
+      stake: this.game.online ? (this.quickComp && this.quickGame ? compStake(this._profile.rank.points) : ONLINE_STAKE) : ((this.game.setup?.difficulty ?? "normal") as StakeId),
+      comp: this.game.online ? this.quickComp && this.quickGame : !!this.game.setup?.comp,
       modeId: this.game.session?.match.config.modeId ?? "classic",
       online: this.game.online,
       players: this.game.session?.match.players.length ?? 4,
@@ -1607,29 +1604,14 @@ class App implements AppCtx {
     $("btnPrivate").addEventListener("click", () => {
       this.click();
       this.ensurePseudo();
-      try {
-        localStorage.setItem("bomberush.onlineSeen", "1");
-      } catch {
-        /* stockage indisponible */
-      }
-      $("onlineNew").hidden = true;
-      this.go("online");
-      if (o.available) o.connect();
-    });
-    $("olQuick").addEventListener("click", () => {
-      this.click();
-      this.startQuick();
-    });
-    $("olFriends").addEventListener("click", () => {
-      this.click();
       this.go("private");
       if (o.available) o.connect();
     });
-    $("olInvite").addEventListener("click", () => {
+    $("btnInviteFriend").addEventListener("click", () => {
       this.click();
       this.referral.open();
     });
-    o.onQueue = (q) => this.quickSearch.update(q);
+    o.onQueue = (q, solo) => this.quickSearch.update(q, solo);
     $("pseudo").addEventListener("click", () => {
       this.click();
       this.askRename();
@@ -1718,7 +1700,7 @@ class App implements AppCtx {
       if (this.screen === "private") this.renderPrivate();
       if (this.screen === "lobby") this.renderLobby();
       const [cls, label] = this.netLabel();
-      for (const id of ["netStatus", "lobbyNet", "olNet"]) {
+      for (const id of ["netStatus", "lobbyNet"]) {
         $(id).className = "net " + cls;
         $(id).textContent = label;
       }
@@ -1727,7 +1709,7 @@ class App implements AppCtx {
     o.onRoom = (r) => {
       // partie rapide : pas de salon, la partie démarre directement
       if (r?.quick) return;
-      if (r && ["online", "private", "home", "invite", "welcome"].includes(this.screen)) {
+      if (r && ["private", "home", "invite", "welcome"].includes(this.screen)) {
         this.inviteCode = null;
         this.go("lobby");
       } else if (this.screen === "lobby") {
@@ -1764,6 +1746,7 @@ class App implements AppCtx {
     };
     o.onMatchStart = (session) => {
       this.quickGame = !!o.room?.quick;
+      this.quickComp = !!o.room?.comp;
       this.quickSearch.matched();
       void notify.show("Bombe Rush", "💣 La partie commence !");
       this.game.setPaused(false);
@@ -1782,19 +1765,29 @@ class App implements AppCtx {
   private quickSearch = new QuickSearch(this, this.online, () => ({ name: this._profile.name, characterId: this._profile.characterId }));
   private referral = new Referral(this, this.online);
 
-  /** « Partie rapide » : recherche de vrais joueurs, complétée par des bots. */
-  private startQuick() {
-    const o = this.online;
-    if (!o.available) return this.toast("Le jeu en ligne a besoin d'internet.", "bad");
-    this.ensurePseudo();
-    this.askNotifications();
-    this.quickSearch.start();
-  }
+  /** partie en ligne de Compétition (trophées en jeu) */
+  private quickComp = false;
 
-  private renderOnlineHub() {
-    const [cls, label] = this.netLabel();
-    $("olNet").className = "net " + cls;
-    $("olNet").textContent = label;
+  /**
+   * JOUER : cherche de vrais joueurs qui ont choisi la même chose (quelques
+   * secondes). Trouvés : partie en ligne, bots en renfort jusqu'à 4. Personne,
+   * pas d'internet ou serveur en veille : partie contre l'ordinateur, comme avant.
+   */
+  private play() {
+    if (this.launching || this.quickSearch.open) return;
+    const p = this._profile;
+    const comp = !!p.lastSetup.comp;
+    const local = () => {
+      if (comp) return void this.launchComp();
+      this.setupState = { ...p.lastSetup };
+      void this.launch();
+    };
+    const modeId = MODES.some((m) => m.id === p.lastSetup.modeId && !m.hidden) ? p.lastSetup.modeId : "classic";
+    if (!this.online.available || (!comp && !QUICK_MODES.includes(modeId))) return local();
+    this.ensurePseudo();
+    const m = MODES.find((x) => x.id === modeId);
+    const label = comp ? "🏆 Compétition" : `${m?.emoji ?? "🎮"} ${m?.name ?? modeId}`;
+    this.quickSearch.start(comp ? "comp" : modeId, label, comp ? compBots(p.rank.points) : undefined, local);
   }
 
   private privateInfo(text: string, err = false) {

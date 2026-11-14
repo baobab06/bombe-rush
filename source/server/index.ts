@@ -175,7 +175,7 @@ function onMessage(conn: WsConn, raw: string, state: { token: string | null; win
         send(c.token, { t: "error", code: "busy", message: "Le serveur est plein pour le moment, réessaie dans un instant." });
         break;
       }
-      matchmaker.enqueue(c);
+      matchmaker.enqueue(c, typeof msg.kind === "string" ? msg.kind : "comp", msg.bots);
       break;
     case "quickLeave":
       matchmaker.dequeue(c);

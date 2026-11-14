@@ -37,8 +37,10 @@ export interface RoomView {
   state: "lobby" | "playing";
   maxPlayers: number;
   players: LobbyPlayer[];
-  /** salle créée par la « Partie rapide » : pas de salon, dissoute après la partie */
+  /** salle créée par JOUER (matchmaking) : pas de salon, dissoute après la partie */
   quick?: boolean;
+  /** partie de Compétition (trophées en jeu) */
+  comp?: boolean;
 }
 
 /** Joueur visible dans la file d'attente de la « Partie rapide ». */
@@ -49,7 +51,16 @@ export interface QueuePlayer {
 }
 
 /** Attente maximale avant de lancer la partie rapide avec des bots (s). */
-export const QUICK_MAX_WAIT_S = 15;
+export const QUICK_MAX_WAIT_S = 8;
+
+/**
+ * File d'attente de JOUER : « comp » (Compétition, mode tiré au hasard) ou
+ * l'identifiant d'un mode (classic, chaos, koth). On ne croise que les
+ * joueurs qui ont choisi la même chose.
+ */
+export type QueueKind = string;
+/** modes jouables avec de vrais joueurs via JOUER (Compétition = l'un d'eux au hasard) */
+export const QUICK_MODES = ["classic", "chaos", "koth"];
 
 export type ClientMsg =
   | { t: "hello"; v: number; token: string; name: string; characterId: string; skinId?: string; accessoryId?: string; trailId?: string; boomId?: string; app?: string }
@@ -65,7 +76,7 @@ export type ClientMsg =
   | { t: "setSettings"; modeId?: string; mapId?: string; fillBots?: boolean }
   | { t: "kick"; playerId: string }
   | { t: "start" }
-  | { t: "quickJoin" }
+  | { t: "quickJoin"; kind?: QueueKind; bots?: string[] }
   | { t: "quickLeave" }
   | { t: "input"; seq: number; cmd: InputCmd }
   | { t: "pushToken"; platform: "android" | "web"; token: string };
@@ -85,7 +96,7 @@ export type ServerMsg =
   | { t: "emote"; player: number; id: string }
   | { t: "matchEnd"; winner: number }
   /** état de la file « Partie rapide » (null = plus dans la file) */
-  | { t: "queue"; players: QueuePlayer[]; waited: number; maxWait: number } | { t: "queue"; players: null };
+  | { t: "queue"; players: QueuePlayer[]; waited: number; maxWait: number } | { t: "queue"; players: null; solo?: boolean };
 
 /** Codes de salle : 5 caractères sans lettres ambiguës (0/O, 1/I…). */
 const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";

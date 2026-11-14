@@ -6,7 +6,7 @@ import { BotBrain } from "../src/ai/bot";
 import { CHARACTERS } from "../src/core/characters";
 import { Match } from "../src/core/match";
 import { DT } from "../src/core/rules";
-import { NO_INPUT, type InputCmd, type PlayerSlot, type SimEvent } from "../src/core/types";
+import { NO_INPUT, type Difficulty, type InputCmd, type PlayerSlot, type SimEvent } from "../src/core/types";
 import { pickMap, RANDOM_MAP } from "../src/maps";
 import { encodeSnapshot } from "../src/net/snapshot";
 import type { ServerMsg } from "../src/net/protocol";
@@ -44,7 +44,7 @@ export class GameRunner {
 
   constructor(
     seats: Seat[],
-    private opts: { mapId: string; modeId: string; fillBots: boolean; maxPlayers: number; spectators?: boolean },
+    private opts: { mapId: string; modeId: string; fillBots: boolean; maxPlayers: number; spectators?: boolean; botDifficulties?: Difficulty[]; plainBotNames?: boolean },
     private send: (token: string, msg: ServerMsg) => void,
     private onEnd: (winner: number) => void,
   ) {
@@ -57,7 +57,9 @@ export class GameRunner {
       const free = CHARACTERS.filter((c) => !used.has(c.id));
       while (this.slots.length < opts.maxPlayers && free.length) {
         const c = free.shift()!;
-        this.slots.push({ name: `${c.name} (bot)`, characterId: c.id, isBot: true, difficulty: "normal" });
+        const lv = opts.botDifficulties?.[(this.slots.length - seats.length) % opts.botDifficulties.length] ?? "normal";
+        // parties lancées par JOUER : bots nommés comme dans une partie contre l'ordinateur
+        this.slots.push({ name: opts.plainBotNames ? c.name : `${c.name} (bot)`, characterId: c.id, isBot: true, difficulty: lv });
       }
     }
     const seed = (Math.random() * 2 ** 31) | 0;
@@ -67,7 +69,7 @@ export class GameRunner {
       this.queues.push([]);
       this.lastCmd.push(NO_INPUT);
       this.acks.push(0);
-      if (slot.isBot) this.bots.push(new BotBrain(i, "normal", seed + i));
+      if (slot.isBot) this.bots.push(new BotBrain(i, slot.difficulty ?? "normal", seed + i));
     });
   }
 

@@ -232,7 +232,8 @@ var SKINS = buildSkins();
 var PROTOCOL_VERSION = 1;
 var MAX_ROOM_PLAYERS = 4;
 var RECONNECT_GRACE_S = 45;
-var QUICK_MAX_WAIT_S = 15;
+var QUICK_MAX_WAIT_S = 8;
+var QUICK_MODES = ["classic", "chaos", "koth"];
 var ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 function generateRoomCode(rand = Math.random) {
   let s = "";
@@ -4554,7 +4555,8 @@ class GameRunner {
       const free = CHARACTERS.filter((c) => !used.has(c.id));
       while (this.slots.length < opts.maxPlayers && free.length) {
         const c = free.shift();
-        this.slots.push({ name: `${c.name} (bot)`, characterId: c.id, isBot: true, difficulty: "normal" });
+        const lv = opts.botDifficulties?.[(this.slots.length - seats.length) % opts.botDifficulties.length] ?? "normal";
+        this.slots.push({ name: opts.plainBotNames ? c.name : `${c.name} (bot)`, characterId: c.id, isBot: true, difficulty: lv });
       }
     }
     const seed = Math.random() * 2 ** 31 | 0;
@@ -4564,7 +4566,7 @@ class GameRunner {
       this.lastCmd.push(NO_INPUT);
       this.acks.push(0);
       if (slot.isBot)
-        this.bots.push(new BotBrain(i, "normal", seed + i));
+        this.bots.push(new BotBrain(i, slot.difficulty ?? "normal", seed + i));
     });
   }
   start() {
@@ -4678,8 +4680,6 @@ class GameRunner {
 var clamp = (v) => Number.isFinite(v) ? Math.max(-1, Math.min(1, v)) : 0;
 
 // server/lobby.ts
-var QUICK_MODES = ["classic", "chaos", "koth"];
-
 class Lobby {
   hooks;
   rooms = new Map;
@@ -4712,7 +4712,8 @@ class Lobby {
       state: r.game ? "playing" : "lobby",
       maxPlayers: MAX_ROOM_PLAYERS,
       players,
-      quick: r.quick || undefined
+      quick: r.quick || undefined,
+      comp: r.comp || undefined
     };
   }
   broadcast(r) {
@@ -4884,7 +4885,7 @@ class Lobby {
       return this.error(c.token, "not_ready", why);
     this.launch(r);
   }
-  startQuick(group, rnd = Math.random) {
+  startQuick(group, kind = "comp", bots, rnd = Math.random) {
     if (!group.length)
       return null;
     const r = this.create(group[0], true, true);
@@ -4894,11 +4895,14 @@ class Lobby {
       r.members.push({ token: c.token, ready: true, connected: true, graceTimer: null });
       c.room = r.code;
     }
-    const modes = QUICK_MODES.filter((id) => MODES.some((m) => m.id === id && m.available && !m.hidden));
-    r.modeId = modes[Math.floor(rnd() * modes.length)] ?? "classic";
+    const ok = (id) => MODES.some((m) => m.id === id && m.available && !m.hidden);
+    const modes = QUICK_MODES.filter(ok);
+    r.comp = kind === "comp" || undefined;
+    r.modeId = !r.comp && ok(kind) ? kind : modes[Math.floor(rnd() * modes.length)] ?? "classic";
     r.mapId = RANDOM_MAP;
     r.fillBots = true;
-    r.name = "Partie rapide";
+    r.bots = bots;
+    r.name = r.comp ? "Compétition" : "Partie en ligne";
     this.launch(r);
     return r;
   }
@@ -4918,7 +4922,7 @@ class Lobby {
       }
       taken.add(s.characterId);
     }
-    r.game = new GameRunner(seats, { mapId: r.mapId, modeId: r.modeId, fillBots: r.fillBots || r.modeId === "koth", maxPlayers: MAX_ROOM_PLAYERS, spectators: !r.isPublic }, this.hooks.send, () => this.endGame(r));
+    r.game = new GameRunner(seats, { mapId: r.mapId, modeId: r.modeId, fillBots: r.fillBots || r.modeId === "koth", maxPlayers: MAX_ROOM_PLAYERS, spectators: !r.isPublic, botDifficulties: r.bots, plainBotNames: r.quick }, this.hooks.send, () => this.endGame(r));
     for (const mb of r.members)
       if (mb.token !== r.hostToken)
         mb.ready = false;
@@ -4992,77 +4996,96 @@ class Lobby {
 }
 
 // server/matchmaking.ts
+var DIFFS = ["easy", "normal", "hard", "expert"];
+var KINDS = ["comp", "classic", "chaos", "koth"];
+
 class Matchmaker {
   lobby;
   send;
   opts;
   now;
-  queue = [];
-  waitingSince = new Map;
-  constructor(lobby, send, opts = { minPlayers: 1, maxPlayers: 4, maxWaitS: QUICK_MAX_WAIT_S }, now = Date.now) {
+  queues = new Map;
+  constructor(lobby, send, opts = { maxPlayers: 4, maxWaitS: QUICK_MAX_WAIT_S }, now = Date.now) {
     this.lobby = lobby;
     this.send = send;
     this.opts = opts;
     this.now = now;
   }
-  enqueue(c) {
+  enqueue(c, kind = "comp", bots) {
     if (c.room)
       this.lobby.leave(c);
-    if (!this.queue.some((q) => q.token === c.token)) {
-      this.queue.push(c);
-      this.waitingSince.set(c.token, this.now());
-    }
-    this.broadcast();
+    if (!KINDS.includes(kind))
+      kind = "comp";
+    this.remove(c);
+    const lv = Array.isArray(bots) ? bots.filter((b) => DIFFS.includes(b)).slice(0, 3) : undefined;
+    const q = this.queues.get(kind) ?? [];
+    q.push({ c, since: this.now(), bots: lv?.length ? lv : undefined });
+    this.queues.set(kind, q);
+    this.broadcast(kind);
   }
   dequeue(c, notify = true) {
-    const was = this.queue.some((q) => q.token === c.token);
-    this.queue = this.queue.filter((q) => q.token !== c.token);
-    this.waitingSince.delete(c.token);
+    const kind = this.remove(c);
     if (notify)
       this.send(c.token, { t: "queue", players: null });
-    if (was)
-      this.broadcast();
+    if (kind)
+      this.broadcast(kind);
+  }
+  remove(c) {
+    for (const [kind, q] of this.queues) {
+      const i = q.findIndex((e) => e.c.token === c.token);
+      if (i >= 0) {
+        q.splice(i, 1);
+        return kind;
+      }
+    }
+    return null;
   }
   has(c) {
-    return this.queue.some((q) => q.token === c.token);
+    return [...this.queues.values()].some((q) => q.some((e) => e.c.token === c.token));
   }
-  broadcast() {
+  broadcast(kind) {
+    const q = this.queues.get(kind) ?? [];
     const t = this.now();
-    const oldest = this.queue[0] ? this.waitingSince.get(this.queue[0].token) ?? t : t;
-    const waited = Math.min(this.opts.maxWaitS, Math.max(0, Math.floor((t - oldest) / 1000)));
-    const group = this.queue.slice(0, this.opts.maxPlayers);
-    for (const c of group) {
-      this.send(c.token, {
+    const group = q.slice(0, this.opts.maxPlayers);
+    const waited = group[0] ? Math.min(this.opts.maxWaitS, Math.max(0, Math.floor((t - group[0].since) / 1000))) : 0;
+    for (const e of group) {
+      this.send(e.c.token, {
         t: "queue",
-        players: group.map((q) => ({ name: q.name, characterId: q.characterId, you: q.token === c.token || undefined })),
+        players: group.map((g) => ({ name: g.c.name, characterId: g.c.characterId, you: g.c.token === e.c.token || undefined })),
         waited,
         maxWait: this.opts.maxWaitS
       });
     }
   }
   tick() {
-    const before = this.queue.length;
-    this.queue = this.queue.filter((c) => c.connected && !c.room);
-    if (!this.queue.length)
-      return;
-    const oldest = (this.now() - (this.waitingSince.get(this.queue[0].token) ?? this.now())) / 1000;
-    const enough = this.queue.length >= this.opts.maxPlayers || this.queue.length >= this.opts.minPlayers && oldest >= this.opts.maxWaitS;
-    if (!enough) {
-      if (before !== this.queue.length || this.queue.length)
-        this.broadcast();
-      return;
+    for (const [kind, all] of this.queues) {
+      const q = all.filter((e) => e.c.connected && !e.c.room);
+      this.queues.set(kind, q);
+      while (q.length) {
+        const waited = (this.now() - q[0].since) / 1000;
+        if (q.length >= this.opts.maxPlayers || q.length >= 2 && waited >= this.opts.maxWaitS) {
+          const group = q.splice(0, this.opts.maxPlayers);
+          for (const e of group)
+            this.send(e.c.token, { t: "queue", players: null });
+          this.lobby.startQuick(group.map((e) => e.c), kind, group[0].bots);
+          continue;
+        }
+        if (q.length === 1 && waited >= this.opts.maxWaitS) {
+          const e = q.shift();
+          this.send(e.c.token, { t: "queue", players: null, solo: true });
+          continue;
+        }
+        break;
+      }
+      if (q.length)
+        this.broadcast(kind);
     }
-    const group = this.queue.splice(0, this.opts.maxPlayers);
-    for (const c of group) {
-      this.waitingSince.delete(c.token);
-      this.send(c.token, { t: "queue", players: null });
-    }
-    this.lobby.startQuick(group);
-    if (this.queue.length)
-      this.broadcast();
   }
   get size() {
-    return this.queue.length;
+    let n = 0;
+    for (const q of this.queues.values())
+      n += q.length;
+    return n;
   }
 }
 
@@ -7382,7 +7405,7 @@ function onMessage(conn, raw, state) {
         send(c.token, { t: "error", code: "busy", message: "Le serveur est plein pour le moment, réessaie dans un instant." });
         break;
       }
-      matchmaker.enqueue(c);
+      matchmaker.enqueue(c, typeof msg.kind === "string" ? msg.kind : "comp", msg.bots);
       break;
     case "quickLeave":
       matchmaker.dequeue(c);

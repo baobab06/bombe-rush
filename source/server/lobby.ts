@@ -17,9 +17,8 @@ import {
   type ServerMsg,
 } from "../src/net/protocol";
 import { GameRunner } from "./game";
-
-/** modes tirés au hasard pour la « Partie rapide » */
-export const QUICK_MODES = ["classic", "chaos", "koth"];
+import { QUICK_MODES } from "../src/net/protocol";
+import type { Difficulty } from "../src/core/types";
 
 export interface Client {
   token: string; // secret, sert à la reconnexion
@@ -51,8 +50,12 @@ interface Room {
   members: Member[];
   game: GameRunner | null;
   isPublic: boolean;
-  /** salle de « Partie rapide » : lancée tout de suite, dissoute après la partie */
+  /** salle créée par JOUER (matchmaking) : lancée tout de suite, dissoute après la partie */
   quick?: boolean;
+  /** Compétition (trophées en jeu) */
+  comp?: boolean;
+  /** niveaux des bots (Compétition) */
+  bots?: Difficulty[];
 }
 
 export interface LobbyHooks {
@@ -95,6 +98,7 @@ export class Lobby {
       maxPlayers: MAX_ROOM_PLAYERS,
       players,
       quick: r.quick || undefined,
+      comp: r.comp || undefined,
     };
   }
 
@@ -259,11 +263,12 @@ export class Lobby {
   }
 
   /**
-   * « Partie rapide » : une salle publique est créée pour le groupe trouvé par
-   * le matchmaking, avec un mode et une carte au hasard ; les places vides
-   * sont complétées par des bots. Pas de salon : la partie démarre aussitôt.
+   * JOUER avec de vrais joueurs : une salle publique est créée pour le groupe
+   * trouvé par le matchmaking. Compétition : mode tiré au hasard, niveau des
+   * bots celui du premier joueur ; sinon le mode choisi. Carte au hasard,
+   * places vides complétées par des bots. Pas de salon : la partie démarre.
    */
-  startQuick(group: Client[], rnd: () => number = Math.random): Room | null {
+  startQuick(group: Client[], kind: string = "comp", bots?: Difficulty[], rnd: () => number = Math.random): Room | null {
     if (!group.length) return null;
     const r = this.create(group[0], true, true);
     for (const c of group.slice(1)) {
@@ -271,11 +276,14 @@ export class Lobby {
       r.members.push({ token: c.token, ready: true, connected: true, graceTimer: null });
       c.room = r.code;
     }
-    const modes = QUICK_MODES.filter((id) => MODES.some((m) => m.id === id && m.available && !m.hidden));
-    r.modeId = modes[Math.floor(rnd() * modes.length)] ?? "classic";
+    const ok = (id: string) => MODES.some((m) => m.id === id && m.available && !m.hidden);
+    const modes = QUICK_MODES.filter(ok);
+    r.comp = kind === "comp" || undefined;
+    r.modeId = !r.comp && ok(kind) ? kind : (modes[Math.floor(rnd() * modes.length)] ?? "classic");
     r.mapId = RANDOM_MAP;
     r.fillBots = true;
-    r.name = "Partie rapide";
+    r.bots = bots;
+    r.name = r.comp ? "Compétition" : "Partie en ligne";
     this.launch(r);
     return r;
   }
@@ -299,7 +307,7 @@ export class Lobby {
     }
     r.game = new GameRunner(
       seats,
-      { mapId: r.mapId, modeId: r.modeId, fillBots: r.fillBots || r.modeId === "koth", maxPlayers: MAX_ROOM_PLAYERS, spectators: !r.isPublic },
+      { mapId: r.mapId, modeId: r.modeId, fillBots: r.fillBots || r.modeId === "koth", maxPlayers: MAX_ROOM_PLAYERS, spectators: !r.isPublic, botDifficulties: r.bots, plainBotNames: r.quick },
       this.hooks.send,
       () => this.endGame(r),
     );

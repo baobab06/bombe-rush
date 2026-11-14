@@ -4,7 +4,7 @@
  */
 import type { QueuePlayer } from "../net/protocol";
 import { STORE_URL } from "../net/update-policy";
-import { normalizeCode } from "../net/protocol";
+import { normalizeCode, QUICK_MAX_WAIT_S } from "../net/protocol";
 import { drawPortrait } from "../ui/thumbs";
 import { shareInvite, copyText } from "../platform/share";
 import { grant, type Granted } from "../meta/grants";
@@ -16,12 +16,24 @@ import type { OnlineController } from "./online";
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 
 // ------------------------------------------------------------ recherche
-/** Fenêtre « Recherche de joueurs… » de la Partie rapide. */
+/** Temps maximum pour joindre le serveur avant de jouer contre l'ordinateur (ms). */
+const CONNECT_TIMEOUT_MS = 3000;
+
+/**
+ * Fenêtre « Recherche de joueurs… » ouverte par JOUER. Trois issues :
+ *  - de vrais joueurs sont trouvés : la partie en ligne démarre (matchStart) ;
+ *  - personne au bout de l'attente, ou serveur injoignable : `onSolo`
+ *    lance une partie normale contre l'ordinateur ;
+ *  - ANNULER : retour à l'accueil.
+ */
 export class QuickSearch {
   private sheet: HTMLElement | null = null;
   private started = 0;
   private timer = 0;
   private last: { players: QueuePlayer[]; waited: number; maxWait: number } | null = null;
+  private onSolo: (() => void) | null = null;
+  /** fermeture voulue (partie trouvée ou solo) : ne pas quitter la file */
+  private settling = false;
 
   constructor(
     private ctx: AppCtx,
@@ -33,19 +45,21 @@ export class QuickSearch {
     return !!this.sheet;
   }
 
-  start() {
+  start(kind: string, label: string, bots: string[] | undefined, onSolo: () => void) {
     this.started = Date.now();
     this.last = null;
+    this.onSolo = onSolo;
+    this.settling = false;
     this.ctx.modal.open(
       (sheet, close) => {
         this.sheet = sheet;
         sheet.insertAdjacentHTML(
           "beforeend",
           `<h2>RECHERCHE DE JOUEURS…</h2>
-          <div class="srch-sub">🌍 Partie rapide · <b class="srch-time">0:00</b></div>
+          <div class="srch-sub">${esc(label)} · <b class="srch-time">0:00</b></div>
           <div class="slots"></div>
           <div class="srch-bar"><i></i></div>
-          <p class="srch-hint">Si personne d'autre n'arrive d'ici 15 s, la partie démarre quand même.</p>
+          <p class="srch-hint">Personne ? Tu joues contre l'ordinateur. Avec de vrais joueurs : 🪙 pièces ×1,5 !</p>
           <button class="btn btn-red small srch-cancel"><span>ANNULER</span></button>`,
         );
         sheet.querySelector(".srch-cancel")!.addEventListener("click", () => {
@@ -59,25 +73,40 @@ export class QuickSearch {
         onClose: () => {
           this.sheet = null;
           clearInterval(this.timer);
-          this.online.quickLeave();
+          if (!this.settling) this.online.quickLeave();
         },
       },
     );
     clearInterval(this.timer);
     this.timer = window.setInterval(() => this.tick(), 250);
-    this.online.quickJoin();
+    this.online.quickJoin(kind, bots);
   }
 
-  /** La partie démarre : on ferme sans quitter la file (le serveur l'a déjà fait). */
+  /** La partie en ligne démarre : on ferme sans quitter la file (le serveur l'a déjà fait). */
   matched() {
     if (!this.sheet) return;
+    this.settling = true;
     this.online.inQueue = false;
     this.ctx.modal.close();
   }
 
-  update(q: { players: QueuePlayer[]; waited: number; maxWait: number } | null) {
+  /** Personne trouvé (ou serveur injoignable) : partie contre l'ordinateur. */
+  private solo() {
     if (!this.sheet) return;
-    if (!q) return; // sortie de file : la partie démarre (matchStart suit) ou annulation
+    this.settling = true;
+    this.online.quickLeave();
+    this.ctx.modal.close();
+    const go = this.onSolo;
+    this.onSolo = null;
+    go?.();
+  }
+
+  update(q: { players: QueuePlayer[]; waited: number; maxWait: number } | null, solo?: boolean) {
+    if (!this.sheet) return;
+    if (!q) {
+      if (solo) this.solo();
+      return; // sinon : la partie démarre (matchStart suit)
+    }
     const before = this.last?.players.length ?? 1;
     this.last = q;
     // recale le minuteur local sur celui du serveur
@@ -88,16 +117,16 @@ export class QuickSearch {
 
   private tick() {
     if (!this.sheet) return;
-    const s = Math.floor((Date.now() - this.started) / 1000);
+    const ms = Date.now() - this.started;
     const t = this.sheet.querySelector(".srch-time");
-    if (t) t.textContent = `0:${String(Math.min(59, s)).padStart(2, "0")}`;
-    const max = this.last?.maxWait ?? 15;
+    if (t) t.textContent = `0:${String(Math.min(59, Math.floor(ms / 1000))).padStart(2, "0")}`;
+    const max = this.last?.maxWait ?? QUICK_MAX_WAIT_S;
     const bar = this.sheet.querySelector<HTMLElement>(".srch-bar i");
-    if (bar) bar.style.width = `${Math.min(100, ((Date.now() - this.started) / 1000 / max) * 100)}%`;
-    if (this.online.status === "unavailable") {
-      this.ctx.toast("Serveur injoignable : vérifie ta connexion internet.", "bad");
-      this.ctx.modal.close();
-    }
+    if (bar) bar.style.width = `${Math.min(100, (ms / 1000 / max) * 100)}%`;
+    // serveur injoignable (pas d'internet, serveur en veille) : on n'attend pas
+    if (this.online.status !== "online" && (this.online.status === "unavailable" || ms > CONNECT_TIMEOUT_MS)) return this.solo();
+    // filet de sécurité si la réponse du serveur se perd
+    if (ms > (max + 6) * 1000) this.solo();
   }
 
   private render() {

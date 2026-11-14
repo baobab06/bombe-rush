@@ -37,7 +37,8 @@ export class OnlineController {
   onMatchEnd: () => void = () => {};
   onEmote: (player: number, id: string) => void = () => {};
   /** état de la file « Partie rapide » (null = sorti de la file) */
-  onQueue: (q: { players: QueuePlayer[]; waited: number; maxWait: number } | null) => void = () => {};
+  onQueue: (q: { players: QueuePlayer[]; waited: number; maxWait: number } | null, solo?: boolean) => void = () => {};
+  private queueMsg: ClientMsg = { t: "quickJoin" };
   /** dans la file « Partie rapide » */
   inQueue = false;
 
@@ -110,7 +111,7 @@ export class OnlineController {
       if (s === "online" && this.pendingAction) {
         conn.send(this.pendingAction);
         this.pendingAction = null;
-      } else if (s === "online" && this.inQueue) conn.send({ t: "quickJoin" }); // reconnexion : on reprend sa place dans la file
+      } else if (s === "online" && this.inQueue) conn.send(this.queueMsg); // reconnexion : on reprend sa place dans la file
     };
     conn.onMessage = (m) => this.handle(m);
     this.conn = conn;
@@ -159,9 +160,10 @@ export class OnlineController {
     this.conn?.send({ t: "start" });
   }
   /** « Partie rapide » : entrer dans la file d'attente publique. */
-  quickJoin() {
+  quickJoin(kind: string, bots?: string[]) {
     this.inQueue = true;
-    this.act({ t: "quickJoin" });
+    this.queueMsg = { t: "quickJoin", kind, bots };
+    this.act(this.queueMsg);
   }
   quickLeave() {
     if (!this.inQueue) return;
@@ -228,7 +230,7 @@ export class OnlineController {
         if (m.players) this.onQueue({ players: m.players, waited: m.waited, maxWait: m.maxWait });
         else {
           this.inQueue = false;
-          this.onQueue(null);
+          this.onQueue(null, m.solo);
         }
         break;
       case "matchEnd":

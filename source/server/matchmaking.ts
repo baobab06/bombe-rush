@@ -1,55 +1,79 @@
 /**
- * SYSTÈME DE MATCHMAKING — file d'attente de la « Partie rapide ».
+ * SYSTÈME DE MATCHMAKING — ce qui se passe quand on appuie sur JOUER.
  *
- * Les joueurs en file sont regroupés par 4. Si personne d'autre n'arrive
- * pendant `maxWaitS` secondes, la partie démarre quand même : les places
- * vides sont prises par des bots (on ne reste jamais bloqué).
+ * Une file par choix (Compétition, Classique, Chaos, Domination). Pendant
+ * `maxWaitS` secondes, on attend d'autres vrais joueurs :
+ *  - 4 joueurs : la partie démarre tout de suite ;
+ *  - 2 ou 3 joueurs au bout de l'attente : la partie démarre, des bots
+ *    complètent jusqu'à 4 ;
+ *  - seul au bout de l'attente : le serveur répond « solo » et le jeu lance
+ *    une partie normale contre l'ordinateur, sur le téléphone.
  */
-import { QUICK_MAX_WAIT_S, type ServerMsg } from "../src/net/protocol";
+import { QUICK_MAX_WAIT_S, type QueueKind, type ServerMsg } from "../src/net/protocol";
+import type { Difficulty } from "../src/core/types";
 import type { Client, Lobby } from "./lobby";
 
+const DIFFS: Difficulty[] = ["easy", "normal", "hard", "expert"];
+const KINDS = ["comp", "classic", "chaos", "koth"];
+
+interface Entry {
+  c: Client;
+  since: number;
+  bots?: Difficulty[];
+}
+
 export class Matchmaker {
-  private queue: Client[] = [];
-  private waitingSince = new Map<string, number>();
+  private queues = new Map<QueueKind, Entry[]>();
 
   constructor(
     private lobby: Lobby,
     private send: (token: string, msg: ServerMsg) => void,
-    private opts = { minPlayers: 1, maxPlayers: 4, maxWaitS: QUICK_MAX_WAIT_S },
+    private opts = { maxPlayers: 4, maxWaitS: QUICK_MAX_WAIT_S },
     private now: () => number = Date.now,
   ) {}
 
-  enqueue(c: Client) {
+  enqueue(c: Client, kind: QueueKind = "comp", bots?: unknown) {
     if (c.room) this.lobby.leave(c);
-    if (!this.queue.some((q) => q.token === c.token)) {
-      this.queue.push(c);
-      this.waitingSince.set(c.token, this.now());
-    }
-    this.broadcast();
+    if (!KINDS.includes(kind)) kind = "comp";
+    this.remove(c);
+    const lv = Array.isArray(bots) ? (bots.filter((b) => DIFFS.includes(b as Difficulty)).slice(0, 3) as Difficulty[]) : undefined;
+    const q = this.queues.get(kind) ?? [];
+    q.push({ c, since: this.now(), bots: lv?.length ? lv : undefined });
+    this.queues.set(kind, q);
+    this.broadcast(kind);
   }
 
   dequeue(c: Client, notify = true) {
-    const was = this.queue.some((q) => q.token === c.token);
-    this.queue = this.queue.filter((q) => q.token !== c.token);
-    this.waitingSince.delete(c.token);
+    const kind = this.remove(c);
     if (notify) this.send(c.token, { t: "queue", players: null });
-    if (was) this.broadcast();
+    if (kind) this.broadcast(kind);
+  }
+
+  private remove(c: Client): QueueKind | null {
+    for (const [kind, q] of this.queues) {
+      const i = q.findIndex((e) => e.c.token === c.token);
+      if (i >= 0) {
+        q.splice(i, 1);
+        return kind;
+      }
+    }
+    return null;
   }
 
   has(c: Client) {
-    return this.queue.some((q) => q.token === c.token);
+    return [...this.queues.values()].some((q) => q.some((e) => e.c.token === c.token));
   }
 
   /** État de la file envoyé à chaque joueur qui attend. */
-  private broadcast() {
+  private broadcast(kind: QueueKind) {
+    const q = this.queues.get(kind) ?? [];
     const t = this.now();
-    const oldest = this.queue[0] ? this.waitingSince.get(this.queue[0].token) ?? t : t;
-    const waited = Math.min(this.opts.maxWaitS, Math.max(0, Math.floor((t - oldest) / 1000)));
-    const group = this.queue.slice(0, this.opts.maxPlayers);
-    for (const c of group) {
-      this.send(c.token, {
+    const group = q.slice(0, this.opts.maxPlayers);
+    const waited = group[0] ? Math.min(this.opts.maxWaitS, Math.max(0, Math.floor((t - group[0].since) / 1000))) : 0;
+    for (const e of group) {
+      this.send(e.c.token, {
         t: "queue",
-        players: group.map((q) => ({ name: q.name, characterId: q.characterId, you: q.token === c.token || undefined })),
+        players: group.map((g) => ({ name: g.c.name, characterId: g.c.characterId, you: g.c.token === e.c.token || undefined })),
         waited,
         maxWait: this.opts.maxWaitS,
       });
@@ -58,26 +82,37 @@ export class Matchmaker {
 
   /** À appeler chaque seconde : forme les parties. */
   tick() {
-    // joueurs déconnectés ou entrés dans une salle entre-temps : retirés
-    const before = this.queue.length;
-    this.queue = this.queue.filter((c) => c.connected && !c.room);
-    if (!this.queue.length) return;
-    const oldest = (this.now() - (this.waitingSince.get(this.queue[0].token) ?? this.now())) / 1000;
-    const enough = this.queue.length >= this.opts.maxPlayers || (this.queue.length >= this.opts.minPlayers && oldest >= this.opts.maxWaitS);
-    if (!enough) {
-      if (before !== this.queue.length || this.queue.length) this.broadcast();
-      return;
+    for (const [kind, all] of this.queues) {
+      // joueurs déconnectés ou entrés dans une salle entre-temps : retirés
+      const q = all.filter((e) => e.c.connected && !e.c.room);
+      this.queues.set(kind, q);
+      while (q.length) {
+        const waited = (this.now() - q[0].since) / 1000;
+        if (q.length >= this.opts.maxPlayers || (q.length >= 2 && waited >= this.opts.maxWaitS)) {
+          const group = q.splice(0, this.opts.maxPlayers);
+          for (const e of group) this.send(e.c.token, { t: "queue", players: null });
+          this.lobby.startQuick(
+            group.map((e) => e.c),
+            kind,
+            group[0].bots,
+          );
+          continue;
+        }
+        if (q.length === 1 && waited >= this.opts.maxWaitS) {
+          // personne d'autre : partie contre l'ordinateur sur le téléphone
+          const e = q.shift()!;
+          this.send(e.c.token, { t: "queue", players: null, solo: true });
+          continue;
+        }
+        break;
+      }
+      if (q.length) this.broadcast(kind);
     }
-    const group = this.queue.splice(0, this.opts.maxPlayers);
-    for (const c of group) {
-      this.waitingSince.delete(c.token);
-      this.send(c.token, { t: "queue", players: null });
-    }
-    this.lobby.startQuick(group);
-    if (this.queue.length) this.broadcast();
   }
 
   get size() {
-    return this.queue.length;
+    let n = 0;
+    for (const q of this.queues.values()) n += q.length;
+    return n;
   }
 }
