@@ -158,6 +158,18 @@ var THEMES = [
     aura: "cosmos",
     eyes: "glow",
     special: "rainbow"
+  },
+  {
+    id: "lutin",
+    name: "Lutin",
+    rarity: "legend",
+    desc: "Exclusif Pass Hiver : bonnet, écharpe et flocons de neige.",
+    palette: P("#2fbf71", "#1b7a46", "#fff4e0", "#e63946"),
+    perKind: { ghost: { main: "#eafff2", dark: "#9fd8b6" } },
+    wear: ["beanie", "scarf"],
+    pattern: "none",
+    aura: "snow",
+    exclusive: "pass"
   }
 ];
 function buildSkins() {
@@ -205,7 +217,8 @@ function buildSkins() {
         aura: t.aura,
         eyes: t.eyes,
         special: t.special,
-        desc: t.desc
+        desc: t.desc,
+        exclusive: t.exclusive
       });
     }
     out.push({
@@ -6002,7 +6015,8 @@ var TRAILS = [
   { id: "fx-bolts", kind: "bolts", name: "Éclairs", rarity: "epic", desc: "Électrique !", colors: ["#7df9ff", "#ffffff", "#4361ee"] },
   { id: "fx-notes", kind: "notes", name: "Musique", rarity: "epic", desc: "Tu danses en esquivant.", colors: ["#c77dff", "#ffd60a", "#4cc9f0"] },
   { id: "fx-rainbow", kind: "rainbow", name: "Arc-en-ciel", rarity: "legend", desc: "Une traînée arc-en-ciel éclatante.", colors: ["#ff595e", "#ffca3a", "#8ac926", "#1982c4", "#6a4c93"] },
-  { id: "fx-stardust", kind: "stardust", name: "Poussière d'étoiles", rarity: "legend", desc: "Des étoiles filantes te suivent.", colors: ["#fff3b0", "#ffd60a", "#ffffff"] }
+  { id: "fx-stardust", kind: "stardust", name: "Poussière d'étoiles", rarity: "legend", desc: "Des étoiles filantes te suivent.", colors: ["#fff3b0", "#ffd60a", "#ffffff"] },
+  { id: "fx-frost", kind: "snow", name: "Givre", rarity: "rare", desc: "Exclusif Pass Hiver : un sillage de givre étincelant.", colors: ["#e8f6ff", "#9fd8ff", "#5aa9ff"], exclusive: "pass" }
 ];
 var EMOTES = [
   { id: "emo-hello", emoji: "\uD83D\uDC4B", name: "Salut !", rarity: "common", anim: "shake", free: true },
@@ -6024,7 +6038,8 @@ var EMOTES = [
   { id: "emo-yawn", emoji: "\uD83E\uDD71", name: "Je m'ennuie…", rarity: "rare", anim: "pop", taunt: true },
   { id: "emo-chicken", emoji: "\uD83D\uDC14", name: "Poule mouillée !", rarity: "epic", anim: "shake", taunt: true },
   { id: "emo-baby", emoji: "\uD83C\uDF7C", name: "Petit joueur", rarity: "epic", anim: "spin", taunt: true },
-  { id: "emo-dance", emoji: "\uD83D\uDD7A", name: "Danse de la victoire", rarity: "legend", anim: "dance", taunt: true }
+  { id: "emo-dance", emoji: "\uD83D\uDD7A", name: "Danse de la victoire", rarity: "legend", anim: "dance", taunt: true },
+  { id: "emo-snowman", emoji: "☃️", name: "Bonhomme de neige", rarity: "rare", anim: "bounce", exclusive: "pass" }
 ];
 var BOOMS = [
   { id: "boom-classic", name: "Classique", rarity: "common", desc: "La bonne vieille explosion orange.", spark: ["#ffe066", "#ff8a2a"], smoke: ["#e9e2d6", "#bdb4a6"], ring: "#ffb347", glow: "#fffbe0", free: true, bomb: { body: ["#5b5f8a", "#1b1c33"], cap: "#8b8fb3" } },
@@ -6036,7 +6051,8 @@ var BOOMS = [
   { id: "boom-neon", name: "Néon", rarity: "epic", desc: "Rose et bleu électrique, comme en boîte.", spark: ["#ff3fb4", "#3ff0ff"], smoke: ["#3a2a5c", "#25204a"], ring: "#ff3fb4", glow: "#d6fbff", bomb: { body: ["#5a3a8f", "#1b1035"], cap: "#3ff0ff", deco: "stripes", aura: "#ff3fb4" } },
   { id: "boom-cosmic", name: "Galaxie", rarity: "legend", desc: "Une bombe-planète et une supernova en miniature.", spark: ["#c77dff", "#ffd60a", "#ffffff"], smoke: ["#2a1b5c", "#4b2a8f"], ring: "#c77dff", glow: "#fff3b0", extra: "stars", bomb: { body: ["#b07dff", "#2a1065"], cap: "#ffd60a", deco: "ring", aura: "#c77dff" } },
   { id: "boom-gold", name: "Pluie d'or", rarity: "legend", desc: "Réservé aux meilleurs : une explosion en or massif.", spark: ["#ffd23f", "#fff4c2", "#c98a10"], smoke: ["#fff1c4", "#e8c56a"], ring: "#ffd23f", glow: "#fffbe0", extra: "stars", exclusive: "rank", bomb: { body: ["#fff1a8", "#c98a10"], cap: "#fff8dc", deco: "stars", aura: "#ffd23f" } },
-  { id: "boom-veteran", name: "Vétéran", rarity: "epic", desc: "Pour ceux qui ont joué des centaines de parties.", spark: ["#ff6a1f", "#ffcf4a", "#ffffff"], smoke: ["#5a5a5a", "#3a3a3a"], ring: "#ff6a1f", glow: "#fff0d0", exclusive: "achievement", bomb: { body: ["#7a7a7a", "#2a2a2a"], cap: "#ff6a1f", deco: "stripes" } }
+  { id: "boom-veteran", name: "Vétéran", rarity: "epic", desc: "Pour ceux qui ont joué des centaines de parties.", spark: ["#ff6a1f", "#ffcf4a", "#ffffff"], smoke: ["#5a5a5a", "#3a3a3a"], ring: "#ff6a1f", glow: "#fff0d0", exclusive: "achievement", bomb: { body: ["#7a7a7a", "#2a2a2a"], cap: "#ff6a1f", deco: "stripes" } },
+  { id: "boom-snowball", name: "Boule de neige", rarity: "epic", desc: "Exclusif Pass Hiver : ta bombe devient une boule de neige… qui explose en poudreuse.", spark: ["#ffffff", "#d6efff", "#8fd0ff"], smoke: ["#f4fbff", "#cfe6f7"], ring: "#bfe6ff", glow: "#ffffff", extra: "snow", exclusive: "pass", bomb: { body: ["#ffffff", "#bcd7ec"], cap: "#e63946", deco: "dots", aura: "#d6efff" } }
 ];
 var DEFAULT_BOOM = "boom-classic";
 var getBoom = (id) => BOOMS.find((b) => b.id === id) ?? BOOMS[0];
@@ -6061,6 +6077,8 @@ var TITLES = [
   { id: "title-boom", name: "Boum Boum", rarity: "common", desc: "Trouvé uniquement dans les coffres.", exclusive: "chest" },
   { id: "title-chaos", name: "Agent du chaos", rarity: "epic", desc: "Trouvé uniquement dans les coffres.", exclusive: "chest" },
   { id: "title-king", name: "Roi de la mèche", rarity: "legend", desc: "Trouvé uniquement dans les coffres.", exclusive: "chest" },
+  { id: "title-winter", name: "Roi de l'hiver", rarity: "legend", desc: "Pass de saison Hiver (palier 80, Premium).", exclusive: "pass" },
+  { id: "title-frosty", name: "Givré", rarity: "rare", desc: "Pass de saison Hiver (palier 50, gratuit).", exclusive: "pass" },
   ...CHARACTERS.flatMap((c) => [
     { id: `title-m10-${c.id}`, name: `${c.name} confirmé`, rarity: "rare", desc: `Maîtrise ${c.name} niveau 10.`, exclusive: "mastery" },
     { id: `title-m20-${c.id}`, name: `As de ${c.name}`, rarity: "epic", desc: `Maîtrise ${c.name} niveau 20.`, exclusive: "mastery" },
@@ -6134,9 +6152,9 @@ function build() {
   for (const a of ACCESSORIES)
     out.push({ id: a.id, kind: "accessory", name: a.name, rarity: a.rarity, price: PRICES[a.rarity], desc: a.desc, free: false });
   for (const t of TRAILS)
-    out.push({ id: t.id, kind: "trail", name: t.name, rarity: t.rarity, price: t.free ? 0 : PRICES[t.rarity], desc: t.desc, free: !!t.free });
+    out.push({ id: t.id, kind: "trail", name: t.name, rarity: t.rarity, price: t.free || t.exclusive ? 0 : PRICES[t.rarity], desc: t.desc, free: !!t.free, exclusive: t.exclusive });
   for (const e of EMOTES)
-    out.push({ id: e.id, kind: "emote", name: e.name, rarity: e.rarity, price: e.free ? 0 : EMOTE_PRICES[e.rarity], desc: e.taunt ? `Moquerie ${e.emoji} « ${e.name} »` : `Emote ${e.emoji}`, free: !!e.free });
+    out.push({ id: e.id, kind: "emote", name: e.name, rarity: e.rarity, price: e.free || e.exclusive ? 0 : EMOTE_PRICES[e.rarity], desc: e.taunt ? `Moquerie ${e.emoji} « ${e.name} »` : `Emote ${e.emoji}`, free: !!e.free, exclusive: e.exclusive });
   for (const b of BOOMS)
     out.push({ id: b.id, kind: "boom", name: b.name, rarity: b.rarity, price: b.free || b.exclusive ? 0 : PRICES[b.rarity], desc: b.desc, free: !!b.free, exclusive: b.exclusive });
   for (const t of TITLES)
@@ -7097,6 +7115,7 @@ var announce_default = {
 };
 
 // src/meta/profile.ts
+var defaultPass = () => ({ season: "", stars: 0, premium: false, free: [], prem: [] });
 var DEFAULT_CHARACTERS = ["renard", "boulon", "rainette", "kage", "champi", "bruno"];
 function defaultProfile() {
   return {
@@ -7126,6 +7145,7 @@ function defaultProfile() {
     daily: { last: null, streak: 0 },
     missions: { day: "", list: [] },
     weekly: { week: "", list: [] },
+    pass: defaultPass(),
     mastery: {},
     achievements: {},
     chests: { common: 0, rare: 0, epic: 0, legend: 0 },
@@ -7166,6 +7186,7 @@ function migrate(data) {
     mastery: { ...data.mastery ?? {} },
     achievements: { ...data.achievements ?? {} },
     chests: { ...base.chests, ...data.chests ?? {} },
+    pass: { ...base.pass, ...data.pass ?? {} },
     rank: { ...base.rank, ...data.rank ?? {} },
     stats: { ...base.stats, ...data.stats ?? {} },
     clock: { ...base.clock, ...data.clock ?? {} },
@@ -7231,6 +7252,12 @@ function migrate(data) {
   if (!Array.isArray(p.rank.rewarded))
     p.rank.rewarded = ["bronze"];
   p.rank.points = Math.max(0, Math.floor(Number(p.rank.points) || 0));
+  p.pass.stars = Math.max(0, Math.min(5000, Math.floor(Number(p.pass.stars) || 0)));
+  p.pass.premium = p.pass.premium === true;
+  p.pass.season = typeof p.pass.season === "string" ? p.pass.season.slice(0, 32) : "";
+  const tiers = (v) => Array.isArray(v) ? [...new Set(v.filter((t) => Number.isInteger(t) && t >= 1 && t <= 100))] : [];
+  p.pass.free = tiers(p.pass.free);
+  p.pass.prem = tiers(p.pass.prem);
   if (data.rank?.season !== RANK_RULES.season) {
     p.rank.season = RANK_RULES.season;
     p.rank.points = 0;

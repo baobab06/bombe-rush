@@ -6,6 +6,7 @@ import { grantAll, type Granted } from "./grants";
 import { WEEKLY_MISSIONS, WEEKLY_PER_WEEK, type Reward, type WeeklyDef, type WeeklyStat } from "./progress-config";
 import type { Profile } from "./profile";
 import { dayKey, seeded } from "./store";
+import { ensurePass, PASS_RULES } from "./pass";
 
 /** Lundi de la semaine (AAAA-MM-JJ). */
 export function weekKey(d: Date): string {
@@ -82,7 +83,8 @@ export function claimWeekly(p: Profile, id: string): Granted[] | null {
   if (!m || !d || m.claimed || m.progress < d.goal) return null;
   m.claimed = true;
   p.stats.missionsClaimed++;
-  return grantAll(p, weeklyRewards(d), [], "Mission de la semaine");
+  ensurePass(p);
+  return grantAll(p, [...weeklyRewards(d), { kind: "stars", amount: PASS_RULES.weeklyStars }], [], "Mission de la semaine");
 }
 
 export function weeklyToClaim(p: Profile): number {

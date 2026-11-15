@@ -42,6 +42,8 @@ export interface TrailDef {
   colors: string[];
   /** offert d'office */
   free?: boolean;
+  /** objet exclusif (non vendu) : comment il se débloque */
+  exclusive?: "pass";
 }
 
 export const TRAILS: TrailDef[] = [
@@ -56,6 +58,8 @@ export const TRAILS: TrailDef[] = [
   { id: "fx-notes", kind: "notes", name: "Musique", rarity: "epic", desc: "Tu danses en esquivant.", colors: ["#c77dff", "#ffd60a", "#4cc9f0"] },
   { id: "fx-rainbow", kind: "rainbow", name: "Arc-en-ciel", rarity: "legend", desc: "Une traînée arc-en-ciel éclatante.", colors: ["#ff595e", "#ffca3a", "#8ac926", "#1982c4", "#6a4c93"] },
   { id: "fx-stardust", kind: "stardust", name: "Poussière d'étoiles", rarity: "legend", desc: "Des étoiles filantes te suivent.", colors: ["#fff3b0", "#ffd60a", "#ffffff"] },
+  // ❄️ Pass de saison Hiver
+  { id: "fx-frost", kind: "snow", name: "Givre", rarity: "rare", desc: "Exclusif Pass Hiver : un sillage de givre étincelant.", colors: ["#e8f6ff", "#9fd8ff", "#5aa9ff"], exclusive: "pass" },
 ];
 
 export interface EmoteDef {
@@ -67,6 +71,8 @@ export interface EmoteDef {
   free?: boolean;
   /** emote de moquerie : affiche aussi son texte au-dessus de la bulle */
   taunt?: boolean;
+  /** objet exclusif (non vendu) : comment il se débloque */
+  exclusive?: "pass";
 }
 
 export const EMOTES: EmoteDef[] = [
@@ -91,6 +97,8 @@ export const EMOTES: EmoteDef[] = [
   { id: "emo-chicken", emoji: "🐔", name: "Poule mouillée !", rarity: "epic", anim: "shake", taunt: true },
   { id: "emo-baby", emoji: "🍼", name: "Petit joueur", rarity: "epic", anim: "spin", taunt: true },
   { id: "emo-dance", emoji: "🕺", name: "Danse de la victoire", rarity: "legend", anim: "dance", taunt: true },
+  // ❄️ Pass de saison Hiver
+  { id: "emo-snowman", emoji: "☃️", name: "Bonhomme de neige", rarity: "rare", anim: "bounce", exclusive: "pass" },
 ];
 
 // --------------------------------------------------- effets d'explosion
@@ -111,7 +119,7 @@ export interface BoomDef {
   bomb: BombLook;
   free?: boolean;
   /** objet exclusif (non vendu) : comment il se débloque */
-  exclusive?: "mastery" | "achievement" | "level" | "chest" | "rank";
+  exclusive?: "mastery" | "achievement" | "level" | "chest" | "rank" | "pass";
 }
 export interface BombLook {
   body: [string, string];
@@ -133,6 +141,8 @@ export const BOOMS: BoomDef[] = [
   // exclusifs
   { id: "boom-gold", name: "Pluie d'or", rarity: "legend", desc: "Réservé aux meilleurs : une explosion en or massif.", spark: ["#ffd23f", "#fff4c2", "#c98a10"], smoke: ["#fff1c4", "#e8c56a"], ring: "#ffd23f", glow: "#fffbe0", extra: "stars", exclusive: "rank", bomb: { body: ["#fff1a8", "#c98a10"], cap: "#fff8dc", deco: "stars", aura: "#ffd23f" } },
   { id: "boom-veteran", name: "Vétéran", rarity: "epic", desc: "Pour ceux qui ont joué des centaines de parties.", spark: ["#ff6a1f", "#ffcf4a", "#ffffff"], smoke: ["#5a5a5a", "#3a3a3a"], ring: "#ff6a1f", glow: "#fff0d0", exclusive: "achievement", bomb: { body: ["#7a7a7a", "#2a2a2a"], cap: "#ff6a1f", deco: "stripes" } },
+  // ❄️ Pass de saison Hiver
+  { id: "boom-snowball", name: "Boule de neige", rarity: "epic", desc: "Exclusif Pass Hiver : ta bombe devient une boule de neige… qui explose en poudreuse.", spark: ["#ffffff", "#d6efff", "#8fd0ff"], smoke: ["#f4fbff", "#cfe6f7"], ring: "#bfe6ff", glow: "#ffffff", extra: "snow", exclusive: "pass", bomb: { body: ["#ffffff", "#bcd7ec"], cap: "#e63946", deco: "dots", aura: "#d6efff" } },
 ];
 export const DEFAULT_BOOM = "boom-classic";
 export const getBoom = (id: string | null | undefined) => BOOMS.find((b) => b.id === id) ?? BOOMS[0];
@@ -145,7 +155,7 @@ export interface TitleDef {
   rarity: Rarity;
   desc: string;
   free?: boolean;
-  exclusive?: "mastery" | "achievement" | "level" | "chest" | "rank";
+  exclusive?: "mastery" | "achievement" | "level" | "chest" | "rank" | "pass";
 }
 export const TITLES: TitleDef[] = [
   { id: "title-rookie", name: "Petit nouveau", rarity: "common", desc: "Tout le monde commence quelque part.", free: true },
@@ -168,6 +178,9 @@ export const TITLES: TitleDef[] = [
   { id: "title-boom", name: "Boum Boum", rarity: "common", desc: "Trouvé uniquement dans les coffres.", exclusive: "chest" },
   { id: "title-chaos", name: "Agent du chaos", rarity: "epic", desc: "Trouvé uniquement dans les coffres.", exclusive: "chest" },
   { id: "title-king", name: "Roi de la mèche", rarity: "legend", desc: "Trouvé uniquement dans les coffres.", exclusive: "chest" },
+  // ❄️ Pass de saison Hiver
+  { id: "title-winter", name: "Roi de l'hiver", rarity: "legend", desc: "Pass de saison Hiver (palier 80, Premium).", exclusive: "pass" },
+  { id: "title-frosty", name: "Givré", rarity: "rare", desc: "Pass de saison Hiver (palier 50, gratuit).", exclusive: "pass" },
   // maîtrise : 3 titres par personnage
   ...CHARACTERS.flatMap((c): TitleDef[] => [
     { id: `title-m10-${c.id}`, name: `${c.name} confirmé`, rarity: "rare", desc: `Maîtrise ${c.name} niveau 10.`, exclusive: "mastery" },

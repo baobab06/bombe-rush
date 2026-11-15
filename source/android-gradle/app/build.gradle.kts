@@ -24,8 +24,8 @@ android {
         applicationId = "com.bomberush.game"
         minSdk = 24
         targetSdk = 36
-        versionCode = 60
-        versionName = "1.16.0"
+        versionCode = 61
+        versionName = "1.17.0"
         manifestPlaceholders["admobAppId"] = admobAppId
     }
 

@@ -120,7 +120,7 @@
     </div>
     <nav class="home-dock">
       <button class="dock t-pink" id="btnShop"><i data-icon="shop"></i><span>BOUTIQUE</span><em class="ribbon" id="shopRibbon" hidden>PROMO</em><span class="dot" id="chestDot" hidden>1</span></button>
-      <button class="dock t-green" id="btnMissions"><i data-icon="missions"></i><span>MISSIONS</span><span class="dot" id="missionDot" hidden>1</span></button>
+      <button class="dock t-purple" id="btnMissions"><span class="pd-star">⭐</span><span>PASS</span><span class="pd-lv" id="passLv">0</span><span class="dot" id="missionDot" hidden>1</span></button>
       <button class="dock t-blue" id="btnRanking"><span class="emo-ico">🏆</span><span>CLASSEMENT</span></button>
     </nav>
   </section>
@@ -226,6 +226,23 @@
   </section>
 
   <!-- Missions -->
+  <!-- Pass de saison (100 paliers) -->
+  <section class="screen" id="pass" hidden>
+    <header class="bar"><button class="back" data-back aria-label="Retour"><i data-icon="back"></i></button><h2>Pass</h2></header>
+    <div class="ps-wrap">
+      <div class="ps-left">
+        <div class="ps-season" id="psSeason">❄️ SAISON HIVER</div>
+        <div class="ps-time" id="psTime"></div>
+        <div class="ps-tier"><div class="ps-star"><span id="psTierNum">0</span></div><div><b id="psTierTxt">PALIER 0</b><small>sur 100</small></div></div>
+        <div class="ps-bar"><i id="psBarFill"></i><em id="psBarTxt">0 / 50 ⭐</em></div>
+        <p class="ps-how">Victoire <b>+30 ⭐</b> · 2e <b>+20 ⭐</b><br>Partie jouée <b>+10 ⭐</b> · Mission <b>+50 ⭐</b></p>
+        <button class="ps-claimall" id="psClaimAll" hidden>🎁 TOUT RÉCUPÉRER</button>
+        <button class="ps-buy" id="psBuy">👑 PASS PREMIUM<small>450 💣</small></button>
+      </div>
+      <div class="ps-track" id="psTrack"></div>
+    </div>
+  </section>
+
   <section class="screen" id="missions" hidden>
     <header class="bar"><button class="back" data-back aria-label="Retour"><i data-icon="back"></i></button><h2>Missions</h2><div class="wallet" data-wallet><i class="coin"></i><b data-coins>0</b></div></header>
     <div class="mis-wrap">

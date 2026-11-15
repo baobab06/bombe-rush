@@ -14,6 +14,7 @@ import type { Profile } from "./profile";
 import { settleMatch, type CoinTransaction, type MatchContext, type Placement } from "./rewards";
 import { progressMissions } from "./store";
 import { progressWeekly } from "./weekly";
+import { addPassStars, passStarsFor } from "./pass";
 
 /** XP nécessaire pour passer du niveau `level` au suivant (voir progress-config). */
 export const xpToNext = (level: number) => levelXp(Math.min(level, LEVEL_MAX));
@@ -55,6 +56,8 @@ export interface RewardSummary {
   missionsDone: MissionDef[];
   weeklyDone: WeeklyDef[];
   achievements: AchievementDef[];
+  /** Pass de saison : étoiles gagnées et paliers avant / après */
+  pass: { stars: number; before: number; after: number };
 }
 
 /** XP de la partie selon la place (colonne du barème). */
@@ -111,6 +114,7 @@ export function applyMatch(p: Profile, o: MatchOutcome, ctx: MatchContext, now =
     now,
   );
   const achievements = checkAchievements(p, now.getTime());
+  const pass = addPassStars(p, passStarsFor(tx.place, o.draw), now.getTime());
   return {
     xp: xp + (streakXp && streakXp.reward.kind === "xp" ? streakXp.reward.amount : 0),
     lines,
@@ -125,5 +129,6 @@ export function applyMatch(p: Profile, o: MatchOutcome, ctx: MatchContext, now =
     missionsDone,
     weeklyDone,
     achievements,
+    pass,
   };
 }

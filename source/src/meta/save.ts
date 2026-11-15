@@ -68,6 +68,7 @@ export function migrate(data: Partial<Profile> & { ownedSkins?: string[]; versio
     mastery: { ...(data.mastery ?? {}) },
     achievements: { ...(data.achievements ?? {}) },
     chests: { ...base.chests, ...(data.chests ?? {}) },
+    pass: { ...base.pass, ...(data.pass ?? {}) },
     rank: { ...base.rank, ...(data.rank ?? {}) },
     stats: { ...base.stats, ...(data.stats ?? {}) },
     clock: { ...base.clock, ...(data.clock ?? {}) },
@@ -126,6 +127,13 @@ export function migrate(data: Partial<Profile> & { ownedSkins?: string[]; versio
   if (!Array.isArray(p.rank.history)) p.rank.history = [];
   if (!Array.isArray(p.rank.rewarded)) p.rank.rewarded = ["bronze"];
   p.rank.points = Math.max(0, Math.floor(Number(p.rank.points) || 0));
+  // pass de saison : valeurs saines
+  p.pass.stars = Math.max(0, Math.min(5000, Math.floor(Number(p.pass.stars) || 0)));
+  p.pass.premium = p.pass.premium === true;
+  p.pass.season = typeof p.pass.season === "string" ? p.pass.season.slice(0, 32) : "";
+  const tiers = (v: unknown) => (Array.isArray(v) ? [...new Set(v.filter((t) => Number.isInteger(t) && t >= 1 && t <= 100))] : []);
+  p.pass.free = tiers(p.pass.free);
+  p.pass.prem = tiers(p.pass.prem);
   // nouveau mode Compétition (trophées) : tout le monde repart de 0, une seule fois
   if (data.rank?.season !== RANK_RULES.season) {
     p.rank.season = RANK_RULES.season;

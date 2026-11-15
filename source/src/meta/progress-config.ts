@@ -16,7 +16,11 @@ export type Reward =
   | { kind: "bombers"; amount: number }
   | { kind: "xp"; amount: number }
   | { kind: "item"; id: string }
-  | { kind: "chest"; tier: ChestTier; count?: number };
+  | { kind: "chest"; tier: ChestTier; count?: number }
+  /** étoiles du Pass de saison */
+  | { kind: "stars"; amount: number }
+  /** skin d'un thème pour tous les personnages (récompense du Pass) */
+  | { kind: "theme"; id: string };
 
 // ------------------------------------------------------------- niveau
 /** XP de fin de partie selon la place (colonne du barème : 1er, 2e, 3e, 4e). */

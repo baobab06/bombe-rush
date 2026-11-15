@@ -52,6 +52,8 @@ import { getTitle } from "../core/cosmetics";
 import { CHESTS, levelXp, masteryXp, MASTERY_MAX, RANK_RULES } from "../meta/progress-config";
 import { GameScreen, type GameResult, type GameSetup, type StandingRow } from "./game";
 import { QuickSearch, Referral } from "./online-hub";
+import { PassScreen } from "./pass-ui";
+import { passSeason, passTier, passToClaim } from "../meta/pass";
 import { QUICK_MODES } from "../net/protocol";
 import { maybeAskReview } from "../platform/review";
 import { UpdateChecker } from "../meta/update-check";
@@ -63,8 +65,8 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 /** écrans interdits tant qu'une mise à jour obligatoire n'est pas faite */
 const BLOCKED_BY_UPDATE: ScreenId[] = ["setup", "game", "pause", "private", "lobby", "invite"];
 const MODE_ICONS: Record<string, string> = { classic: "🎮", chaos: "💀", koth: "👑" };
-const SCREENS: ScreenId[] = ["home", "setup", "settings", "pause", "results", "private", "lobby", "boot", "welcome", "invite", "shop", "collection", "missions", "profile", "rank", "chests", "tutorial", "world"];
-const MENU_SCREENS: ScreenId[] = ["setup", "settings", "private", "lobby", "welcome", "invite", "shop", "collection", "missions", "profile", "rank", "chests", "tutorial", "world"];
+const SCREENS: ScreenId[] = ["home", "setup", "settings", "pause", "results", "private", "lobby", "boot", "welcome", "invite", "shop", "collection", "missions", "pass", "profile", "rank", "chests", "tutorial", "world"];
+const MENU_SCREENS: ScreenId[] = ["setup", "settings", "private", "lobby", "welcome", "invite", "shop", "collection", "missions", "pass", "profile", "rank", "chests", "tutorial", "world"];
 
 class App implements AppCtx {
   private save = new SaveSystem();
@@ -318,6 +320,7 @@ class App implements AppCtx {
     if (id === "collection" && prev !== "collection") this.coll.open(this.collTab ?? undefined, this.collTab ?? undefined);
     this.collTab = null;
     if (id === "missions") this.missionsScr.render();
+    if (id === "pass") this.passScr.render();
     if (id === "profile") this.profileScr.render();
     if (id === "rank") this.rankScr.render();
     if (id === "world") this.worldScr.render();
@@ -426,7 +429,7 @@ class App implements AppCtx {
     });
     nav("btnSettings", "settings");
     nav("homeProfile", "profile");
-    nav("btnMissions", "missions");
+    nav("btnMissions", "pass");
     nav("btnRanking", "rank");
     this.setupSectionTabs();
     // JOUER : partie immédiate avec le mode choisi et les derniers réglages
@@ -768,6 +771,7 @@ class App implements AppCtx {
     const groups: { title: string; tabs: [ScreenId, string, string][] }[] = [
       { title: "Boutique", tabs: [["shop", "⭐", "Offres"], ["chests", "🎁", "Coffres"], ["collection", "🎒", "Collection"]] },
       { title: "Classement", tabs: [["rank", "🏅", "Ma ligue"], ["world", "🌍", "Mondial"]] },
+      { title: "Pass", tabs: [["pass", "⭐", "Saison"], ["missions", "📋", "Missions"]] },
     ];
     for (const g of groups)
       for (const [id] of g.tabs) {
@@ -781,7 +785,7 @@ class App implements AppCtx {
         navEl.innerHTML = g.tabs
           .map(
             ([to, ico, label]) =>
-              `<button role="tab" data-to="${to}" class="${to === id ? "sel" : ""}" aria-selected="${to === id}"><span class="st-ico">${ico}</span><span class="st-lbl">${label}</span>${to === "chests" ? '<span class="dot" data-chest-dot hidden>1</span>' : ""}</button>`,
+              `<button role="tab" data-to="${to}" class="${to === id ? "sel" : ""}" aria-selected="${to === id}"><span class="st-ico">${ico}</span><span class="st-lbl">${label}</span>${to === "chests" ? '<span class="dot" data-chest-dot hidden>1</span>' : to === "missions" ? '<span class="dot" data-mis-dot hidden>1</span>' : to === "pass" ? '<span class="dot" data-pass-dot hidden>1</span>' : ""}</button>`,
           )
           .join("");
         h2.after(navEl);
@@ -800,10 +804,15 @@ class App implements AppCtx {
     const daily = dailyState(p).available;
     $("btnDaily").classList.toggle("has", daily);
     $("dailyDot").hidden = !daily;
-    const n = missionsToClaim(p) + weeklyToClaim(p) + (daily ? 1 : 0);
+    const nm = missionsToClaim(p) + weeklyToClaim(p) + (daily ? 1 : 0);
+    const np = passToClaim(p);
+    const n = nm + np;
     $("missionDot").hidden = !n;
     $("missionDot").textContent = String(n);
     $("btnMissions").classList.toggle("has", n > 0);
+    $("passLv").textContent = String(passTier(p));
+    document.querySelectorAll<HTMLElement>("[data-mis-dot]").forEach((d) => ((d.hidden = !nm), (d.textContent = String(nm))));
+    document.querySelectorAll<HTMLElement>("[data-pass-dot]").forEach((d) => ((d.hidden = !np), (d.textContent = String(np))));
     const a = achievementsToClaim(p);
     $("profileDot").hidden = !a;
     $("profileDot").textContent = String(a);
@@ -821,6 +830,8 @@ class App implements AppCtx {
   /** Arrivée sur l'accueil : cadeau de bienvenue, puis récompense du jour. */
   private afterHome() {
     const p = this._profile;
+    // pass de saison : changement de saison (récompenses oubliées données d'office)
+    if (!this.modal.isOpen && p.pass.season && p.pass.season !== passSeason().id) return this.passScr.checkSeasonEnd();
     // fenêtre « Noter l'appli » de Google (après une victoire, avec parcimonie)
     if (this.reviewDue && !this.modal.isOpen) {
       this.reviewDue = false;
@@ -1764,6 +1775,7 @@ class App implements AppCtx {
   private quickGame = false;
   private quickSearch = new QuickSearch(this, this.online, () => ({ name: this._profile.name, characterId: this._profile.characterId }));
   private referral = new Referral(this, this.online);
+  private passScr = new PassScreen(this, () => this.renderBadges());
 
   /** partie en ligne de Compétition (trophées en jeu) */
   private quickComp = false;
@@ -2200,7 +2212,7 @@ class App implements AppCtx {
       if (rows.every((x) => x.decided)) window.clearInterval(this.rankTimer);
     }, 200);
     const mmss = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
-    $("resFacts").innerHTML = [`💣 <b>${r.bombsPlaced}</b> bombes`, `💥 <b>${r.kills}</b> élim.`, `🧱 <b>${r.blocksDestroyed}</b> blocs`, `⏱️ <b>${mmss(r.survivalTime)}</b>`].map((t) => `<span>${t}</span>`).join("");
+    $("resFacts").innerHTML = [`💣 <b>${r.bombsPlaced}</b> bombes`, `💥 <b>${r.kills}</b> élim.`, `🧱 <b>${r.blocksDestroyed}</b> blocs`, `⏱️ <b>${mmss(r.survivalTime)}</b>`, ...(summary?.pass.stars ? [`⭐ <b>+${summary.pass.stars}</b> Pass`] : [])].map((t) => `<span>${t}</span>`).join("");
     this.animateStake(tx, tier);
     this.renderDouble(tx);
     // célébration selon la place
@@ -2221,6 +2233,7 @@ class App implements AppCtx {
       }
     }, 350);
     const notes = [
+      ...(summary && summary.pass.after > summary.pass.before ? [`⭐ Pass : palier ${summary.pass.after} atteint ! Va récupérer ta récompense`] : []),
       ...(summary?.missionsDone ?? []).map((d) => `🎯 Mission du jour terminée : ${d.label.replace("{n}", String(d.goal))}`),
       ...(summary?.weeklyDone ?? []).map((d) => `📆 Mission de la semaine terminée : ${d.label.replace("{n}", String(d.goal))}`),
       ...(summary?.achievements ?? []).map((a) => `🏅 Succès débloqué : ${a.name} !`),

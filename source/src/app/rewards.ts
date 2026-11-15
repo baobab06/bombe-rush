@@ -20,8 +20,9 @@ export function rewardChip(r: Reward): string {
   if (r.kind === "bombers") return `<span class="rw-chip bombers"><i class="bomber"></i>${fmt(r.amount)}</span>`;
   if (r.kind === "xp") return `<span class="rw-chip xp">${fmt(r.amount)} XP</span>`;
   if (r.kind === "chest") return `<span class="rw-chip chest c-${r.tier}"><img class="rw-chest" alt="" draggable="false" src="${chestImage(r.tier, 96)}">${r.count && r.count > 1 ? `${r.count} × ` : ""}${CHESTS[r.tier].name.replace("Coffre ", "")}</span>`;
-  const it = getItem(r.id);
-  return `<span class="rw-chip item r-${it?.rarity ?? "common"}">${rewardIcon(r)} ${rewardText(r)}</span>`;
+  if (r.kind === "stars") return `<span class="rw-chip xp">${fmt(r.amount)} ⭐</span>`;
+  const it = r.kind === "item" ? getItem(r.id) : null;
+  return `<span class="rw-chip item r-${it?.rarity ?? (r.kind === "theme" ? "legend" : "common")}">${rewardIcon(r)} ${rewardText(r)}</span>`;
 }
 
 /** Pièces réellement ajoutées (pour l'animation du porte-monnaie). */

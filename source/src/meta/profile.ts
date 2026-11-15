@@ -5,6 +5,18 @@
 import { DEFAULT_BOOM, DEFAULT_EMOTES, DEFAULT_TITLE, DEFAULT_TRAIL } from "../core/cosmetics";
 import type { ChestTier } from "./progress-config";
 
+/** Pass de saison (règles : meta/pass.ts) */
+export interface PassState {
+  /** saison en cours */
+  season: string;
+  stars: number;
+  premium: boolean;
+  /** paliers récupérés */
+  free: number[];
+  prem: number[];
+}
+export const defaultPass = (): PassState => ({ season: "", stars: 0, premium: false, free: [], prem: [] });
+
 export interface Settings {
   music: boolean;
   sfx: boolean;
@@ -93,6 +105,8 @@ export interface Profile {
   achievements: Record<string, { at: number; claimed: boolean }>;
   /** coffres en réserve */
   chests: Record<ChestTier, number>;
+  /** Pass de saison */
+  pass: PassState;
   /** rang compétitif local */
   rank: { points: number; best: number; bestPoints?: number; rewarded: string[]; history: RankEntry[]; season?: number; /** saison en cours (mois UTC) */ month?: string; /** saison précédente */ last?: { month: string; points: number } };
   stats: ExtraStats;
@@ -161,6 +175,7 @@ export function defaultProfile(): Profile {
     daily: { last: null, streak: 0 },
     missions: { day: "", list: [] },
     weekly: { week: "", list: [] },
+    pass: defaultPass(),
     mastery: {},
     achievements: {},
     chests: { common: 0, rare: 0, epic: 0, legend: 0 },

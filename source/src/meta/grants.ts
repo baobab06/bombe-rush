@@ -6,7 +6,7 @@
  * Fonctions pures sur le profil (aucun DOM) : l'interface sauvegarde juste
  * après chaque appel, AVANT de lancer les animations.
  */
-import { RARITY_LABEL, RARITY_ORDER, type Rarity } from "../core/characters";
+import { RARITY_LABEL, RARITY_ORDER, SKINS, type Rarity } from "../core/characters";
 import { CATALOG, getItem, type CatalogItem } from "./catalog";
 import {
   CHESTS, CHEST_ORDER, DUPLICATE_COINS, LEVEL_MAX, LEVEL_REWARDS, LEVEL_UP_COINS, levelXp,
@@ -69,6 +69,23 @@ export function grant(p: Profile, r: Reward, out: Granted[] = [], source?: strin
         addXp(p, r.amount, out);
       }
       break;
+    case "stars": {
+      const n = Math.max(0, Math.floor(r.amount));
+      if (n) {
+        p.pass.stars = Math.min(5000, p.pass.stars + n);
+        out.push({ reward: r, label: `+${fmtN(n)} ⭐ Pass`, icon: "⭐", coins: 0, source });
+      }
+      break;
+    }
+    case "theme": {
+      // skin d'un thème pour TOUS les personnages
+      const ids = SKINS.filter((s) => s.theme === r.id).map((s) => s.id);
+      const add = ids.filter((id) => !p.owned.includes(id));
+      p.owned.push(...add);
+      const name = SKINS.find((s) => s.theme === r.id)?.name ?? r.id;
+      out.push({ reward: r, label: `Skin ${name} pour tous tes persos`, icon: "🎉", coins: 0, rarity: "legend", source });
+      break;
+    }
     case "chest": {
       const n = Math.max(1, r.count ?? 1);
       p.chests[r.tier] = (p.chests[r.tier] ?? 0) + n;
@@ -141,10 +158,14 @@ export function rewardText(r: Reward): string {
       const it = getItem(r.id);
       return it ? itemLabel(it) : "Objet";
     }
+    case "stars":
+      return `${fmtN(r.amount)} ⭐ Pass`;
+    case "theme":
+      return `Skin ${SKINS.find((s) => s.theme === r.id)?.name ?? r.id} (tous les persos)`;
   }
 }
 export function rewardIcon(r: Reward): string {
-  return r.kind === "coins" ? "🪙" : r.kind === "bombers" ? "💣" : r.kind === "xp" ? "✨" : r.kind === "chest" ? "🎁" : "🎉";
+  return r.kind === "coins" ? "🪙" : r.kind === "bombers" ? "💣" : r.kind === "xp" ? "✨" : r.kind === "chest" ? "🎁" : r.kind === "stars" ? "⭐" : "🎉";
 }
 
 // ------------------------------------------------------------- coffres

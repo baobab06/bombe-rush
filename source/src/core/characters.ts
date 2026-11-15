@@ -105,7 +105,7 @@ export interface SkinDef {
   special?: "shimmer" | "rainbow";
   desc?: string;
   /** skin exclusif (non vendu en boutique) : comment il se débloque */
-  exclusive?: "mastery";
+  exclusive?: "mastery" | "pass";
 }
 
 export const CHARACTERS: CharacterDef[] = [
@@ -180,6 +180,8 @@ export interface ThemeDef {
   aura: AuraId;
   eyes?: EyeStyle;
   special?: SkinDef["special"];
+  /** thème exclusif (non vendu) : Pass de saison */
+  exclusive?: "pass";
 }
 
 export const THEMES: ThemeDef[] = [
@@ -225,6 +227,12 @@ export const THEMES: ThemeDef[] = [
     id: "galaxie", name: "Galaxie", rarity: "legend", desc: "Skin spécial : un ciel étoilé vivant et une auréole cosmique.",
     palette: P("#2a1b5c", "#120a2e", "#c8b6ff", "#ff7ad9"), wear: ["halo"], pattern: "galaxy", aura: "cosmos", eyes: "glow", special: "rainbow",
   },
+  // ❄️ Pass de saison Hiver (palier 100, Premium) : pour tous les persos d'un coup
+  {
+    id: "lutin", name: "Lutin", rarity: "legend", desc: "Exclusif Pass Hiver : bonnet, écharpe et flocons de neige.",
+    palette: P("#2fbf71", "#1b7a46", "#fff4e0", "#e63946"), perKind: { ghost: { main: "#eafff2", dark: "#9fd8b6" } },
+    wear: ["beanie", "scarf"], pattern: "none", aura: "snow", exclusive: "pass",
+  },
 ];
 
 function buildSkins(): SkinDef[] {
@@ -247,7 +255,7 @@ function buildSkins(): SkinDef[] {
       out.push({
         id: `${c.id}-${t.id}`, characterId: c.id, name: t.name, theme: t.id, rarity: t.rarity,
         palette: { ...t.palette, ...(t.perKind?.[c.kind] ?? {}) }, wear: [...t.wear], pattern: t.pattern, aura: t.aura,
-        eyes: t.eyes, special: t.special, desc: t.desc,
+        eyes: t.eyes, special: t.special, desc: t.desc, exclusive: t.exclusive,
       });
     }
     // skin de maîtrise (niveau 30 du personnage) : ses couleurs + finitions or

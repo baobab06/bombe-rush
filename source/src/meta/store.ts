@@ -10,6 +10,7 @@ import { FEATURED, MISSIONS, MISSIONS_PER_DAY, NAME_CHANGE_PRICE, NAME_MAX, NAME
 import { grant, grantAll, type Granted } from "./grants";
 import { DAILY_MISSION_XP, LOGIN_REWARDS, type Reward } from "./progress-config";
 import type { Profile } from "./profile";
+import { ensurePass, PASS_RULES } from "./pass";
 
 // ----------------------------------------------------------------- dates
 export function dayKey(d = new Date()): string {
@@ -306,6 +307,8 @@ export function claimMission(p: Profile, id: string): Granted[] | null {
   const out: Granted[] = [];
   grant(p, { kind: "coins", amount: d.reward }, out, "Mission du jour");
   grant(p, { kind: "xp", amount: DAILY_MISSION_XP }, out, "Mission du jour");
+  ensurePass(p);
+  grant(p, { kind: "stars", amount: PASS_RULES.missionStars }, out, "Mission du jour");
   return out;
 }
 export function missionsToClaim(p: Profile): number {
