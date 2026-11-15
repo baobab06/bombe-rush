@@ -266,6 +266,9 @@ export class BotBrain {
     // 2 ter. Domination : l'objectif passe avant tout le reste (voir playDomination)
     if (m.hill && this.playDomination(m, p, danger, sloppy)) return;
 
+    // 2 quater. Ruée vers l'or : une pépite toute proche, on la prend
+    if (m.gold && this.grabGold(m, p, danger, 3, false)) return;
+
     // 3. Bonus proche
     const bonusPath = this.findTarget(m, p, danger, this.prof.bonusRadius, (i) => g.bonusAt[i] >= 0);
     if (bonusPath && bonusPath.length > 0) {
@@ -292,6 +295,9 @@ export class BotBrain {
 
     if (this.path.length) return;
 
+    // 4 bis. Ruée vers l'or : aller chercher l'or (les grosses pépites valent un détour)
+    if (m.gold && this.grabGold(m, p, danger, 8 + Math.round(this.prof.bonusRadius), true)) return;
+
     // 5. Les bots faciles flânent parfois
     if (this.prof.wander > 0 && this.rng.chance(this.prof.wander)) {
       const wander = this.findTarget(m, p, danger, 3, () => this.rng.chance(0.3));
@@ -316,6 +322,34 @@ export class BotBrain {
     // 7. Rien à faire : se rapprocher de l'ennemi le plus proche
     const chase = this.pathToNearestEnemy(m, p, danger);
     if (chase) this.path = chase;
+  }
+
+  // ------------------------------------------------------------ Ruée vers l'or
+  /** case de la pépite visée (-1 = aucune) */
+  private goldGoal = -1;
+
+  /**
+   * Ruée vers l'or : chemin sûr vers une pépite à moins de `radius` pas
+   * (`bigFirst` : une grosse pépite un peu plus loin passe avant une petite).
+   * Abandonne le chemin si la pépite visée a été ramassée par un autre.
+   */
+  private grabGold(m: Match, p: PlayerState, danger: DangerMap, radius: number, bigFirst: boolean): boolean {
+    const gold = m.gold!;
+    if (this.goldGoal >= 0 && !gold.nuggets.has(this.goldGoal)) {
+      if (this.path.length && this.path[this.path.length - 1] === this.goldGoal) this.path = [];
+      this.goldGoal = -1;
+    }
+    if (!gold.nuggets.size) return false;
+    // déjà en route vers une pépite : on continue
+    if (this.goldGoal >= 0 && this.path.length && this.path[this.path.length - 1] === this.goldGoal) return false;
+    let path: number[] | null = null;
+    if (bigFirst) path = this.findTarget(m, p, danger, radius + 4, (i) => (gold.nuggets.get(i) ?? 0) >= 5);
+    if (!path || !path.length) path = this.findTarget(m, p, danger, radius, (i) => gold.nuggets.has(i));
+    if (!path || !path.length) return false;
+    this.path = path;
+    this.goldGoal = path[path.length - 1];
+    this.lastDecision = "gold";
+    return true;
   }
 
   // ------------------------------------------------------------ Domination

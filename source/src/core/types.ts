@@ -212,6 +212,11 @@ export type SimEvent =
   | { t: "hillWarn"; x: number; y: number }
   | { t: "hillMoved"; x: number; y: number; fromX?: number; fromY?: number }
   | { t: "respawn"; player: number; x: number; y: number }
+  /** Ruée vers l'or : pépite apparue, ramassée, or perdu (touché), ruée finale */
+  | { t: "goldSpawn"; x: number; y: number; value: number }
+  | { t: "goldPick"; player: number; value: number; x: number; y: number }
+  | { t: "goldDrop"; player: number; amount: number; x: number; y: number }
+  | { t: "goldRush" }
   | { t: "eruption"; x: number; y: number }
   | { t: "matchEnd"; winner: number };
 

@@ -60,7 +60,7 @@ export const QUICK_MAX_WAIT_S = 8;
  */
 export type QueueKind = string;
 /** modes jouables avec de vrais joueurs via JOUER (Compétition = l'un d'eux au hasard) */
-export const QUICK_MODES = ["classic", "chaos", "koth"];
+export const QUICK_MODES = ["classic", "chaos", "koth", "gold"];
 
 export type ClientMsg =
   | { t: "hello"; v: number; token: string; name: string; characterId: string; skinId?: string; accessoryId?: string; trailId?: string; boomId?: string; app?: string }

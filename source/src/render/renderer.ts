@@ -383,6 +383,26 @@ export class Renderer {
         case "hillTaken":
           P.spawn("ring", m.players[e.player].x, m.players[e.player].y, { life: 0.45, size: 0.35, color: "#ffd64a" });
           break;
+        // Ruée vers l'or
+        case "goldPick": {
+          const p = m.players[e.player];
+          P.text(p.x, p.y - 0.9, `+${e.value} 🪙`, "#ffd23f");
+          for (let k = 0; k < (e.value >= 5 ? 14 : 6); k++) P.spawn("twinkle", e.x + 0.5 + (Math.random() - 0.5) * 0.7, e.y + 0.5 + (Math.random() - 0.5) * 0.5, { z: 0.2 + Math.random() * 0.8, vz: 0.9, life: 0.5, size: 0.08, color: Math.random() < 0.6 ? "#ffd23f" : "#ffffff" });
+          this.fx(p.id).happyAt = this.time;
+          break;
+        }
+        case "goldDrop": {
+          P.text(e.x, e.y - 1.1, `−${e.amount} 🪙`, "#ff8a5c");
+          for (let k = 0; k < 16; k++)
+            P.spawn("spark", e.x, e.y, { vx: (Math.random() - 0.5) * 4, vy: (Math.random() - 0.5) * 4, vz: 3 + Math.random() * 3, life: 0.7, size: 0.1, color: Math.random() < 0.7 ? "#ffd23f" : "#fff3a0" });
+          break;
+        }
+        case "goldSpawn":
+          P.spawn("ring", e.x + 0.5, e.y + 0.5, { life: 0.4, size: e.value >= 5 ? 0.45 : 0.25, color: "#ffe27a" });
+          break;
+        case "goldRush":
+          this.flash = Math.min(0.5, this.flash + 0.25);
+          break;
         case "chaosStart":
           if (CHAOS_EVENTS.find((d) => d.id === e.id)?.countdown) {
             this.boomAt = this.time;
@@ -784,6 +804,8 @@ export class Renderer {
 
     // Roi de la colline : cases de la colline (dorées, rouges si disputée)
     if (m.hill) this.drawHill(m, t);
+    // Ruée vers l'or : pépites par terre
+    if (m.gold) this.drawGold(m, t);
 
     // index des joueurs par rangée (position interpolée)
     const px = (i: number) => (prev ? prev[i * 2] + (m.players[i].x - prev[i * 2]) * alpha : m.players[i].x);
@@ -1090,6 +1112,108 @@ export class Renderer {
     ctx.fillStyle = color;
     ctx.fillText(text, 0, 0);
     ctx.restore();
+  }
+
+  /** Ruée vers l'or : pièces (petites valeurs) et grosses pépites qui brillent. */
+  private drawGold(m: Match, t: number) {
+    const ctx = this.ctx;
+    const s = this.s;
+    const w = m.grid.w;
+    for (const [i, v] of m.gold!.nuggets) {
+      const cx = (i % w) * s + s / 2;
+      const cy = Math.floor(i / w) * s + s / 2;
+      const bob = Math.sin(t * 3 + i * 0.7) * s * 0.035;
+      const big = v >= 5;
+      // ombre
+      ctx.fillStyle = "rgba(0,0,0,0.28)";
+      ctx.beginPath();
+      ctx.ellipse(cx, cy + s * 0.27, s * (big ? 0.32 : 0.22), s * (big ? 0.1 : 0.07), 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.lineWidth = Math.max(1.2, s * 0.045);
+      ctx.strokeStyle = "#5a3500";
+      if (big) {
+        // grosse pépite : un tas de cailloux dorés
+        const y0 = cy + s * 0.1 + bob;
+        const rocks: [number, number, number][] = [[-0.16, 0.04, 0.16], [0.15, 0.06, 0.14], [0, -0.1, 0.18]];
+        for (const [dx, dy, r] of rocks) {
+          const X = cx + dx * s;
+          const Y = y0 + dy * s;
+          const g = ctx.createRadialGradient(X - r * s * 0.35, Y - r * s * 0.4, r * s * 0.1, X, Y, r * s * 1.1);
+          g.addColorStop(0, "#fff6b0");
+          g.addColorStop(0.45, "#ffcf2e");
+          g.addColorStop(1, "#c77d00");
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          for (let k = 0; k < 7; k++) {
+            const a = (k / 7) * Math.PI * 2;
+            const rr = r * s * (0.85 + 0.2 * Math.sin(k * 2.3 + i));
+            ctx.lineTo(X + Math.cos(a) * rr, Y + Math.sin(a) * rr * 0.85);
+          }
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+        }
+      } else {
+        // pièces empilées (1 à 3 visibles)
+        const n = Math.min(3, v);
+        for (let k = 0; k < n; k++) {
+          const X = cx + (k - (n - 1) / 2) * s * 0.12;
+          const Y = cy + s * 0.12 - k * s * 0.07 + bob;
+          const r = s * 0.17;
+          ctx.fillStyle = "#c77d00";
+          ctx.beginPath();
+          ctx.ellipse(X, Y + s * 0.03, r, r * 0.92, 0, 0, Math.PI * 2);
+          ctx.fill();
+          const g = ctx.createLinearGradient(X - r, Y - r, X + r, Y + r);
+          g.addColorStop(0, "#fff3a0");
+          g.addColorStop(0.5, "#ffd23f");
+          g.addColorStop(1, "#e09a00");
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          ctx.ellipse(X, Y, r, r * 0.92, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          ctx.strokeStyle = "rgba(160,95,0,0.8)";
+          ctx.beginPath();
+          ctx.ellipse(X, Y, r * 0.6, r * 0.55, 0, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.strokeStyle = "#5a3500";
+        }
+      }
+      // éclat qui scintille
+      const ph = (t * 0.9 + i * 0.137) % 1;
+      if (ph < 0.18) {
+        const k = Math.sin((ph / 0.18) * Math.PI);
+        const X = cx + s * (big ? 0.12 : 0.08);
+        const Y = cy - s * (big ? 0.12 : 0.04) + bob;
+        const r = s * 0.13 * k;
+        ctx.fillStyle = "#ffffff";
+        ctx.beginPath();
+        ctx.moveTo(X, Y - r);
+        ctx.lineTo(X + r * 0.25, Y - r * 0.25);
+        ctx.lineTo(X + r, Y);
+        ctx.lineTo(X + r * 0.25, Y + r * 0.25);
+        ctx.lineTo(X, Y + r);
+        ctx.lineTo(X - r * 0.25, Y + r * 0.25);
+        ctx.lineTo(X - r, Y);
+        ctx.lineTo(X - r * 0.25, Y - r * 0.25);
+        ctx.closePath();
+        ctx.fill();
+      }
+      // valeur (tas de plusieurs pièces)
+      if (v > 1) {
+        const X = cx + s * 0.26;
+        const Y = cy - s * 0.24 + bob;
+        ctx.font = `900 ${Math.round(s * 0.26)}px "Baloo 2", system-ui, sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.lineWidth = Math.max(2, s * 0.08);
+        ctx.strokeStyle = "#3a2200";
+        ctx.strokeText(String(v), X, Y);
+        ctx.fillStyle = "#fff3a0";
+        ctx.fillText(String(v), X, Y);
+      }
+    }
   }
 
   /** Colline : dalles dorées qui pulsent, liseré ; rouge si disputée ; couronne au centre. */

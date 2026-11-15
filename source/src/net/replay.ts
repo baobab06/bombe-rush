@@ -57,7 +57,7 @@ export interface RankedSpec {
   players: { characterId: string; isBot: boolean; difficulty?: Difficulty }[];
 }
 
-export const RANKED_MODES = ["classic", "chaos", "koth"];
+export const RANKED_MODES = ["classic", "chaos", "koth", "gold"];
 export const DIFFICULTIES: Difficulty[] = ["easy", "normal", "hard", "expert"];
 /** au-delà, la partie est refusée (aucune partie normale ne dure si longtemps) */
 export const MAX_TICKS = 60 * 60 * 8;
@@ -175,7 +175,7 @@ export class Replay {
     const m = this.match;
     const me = m.players[0];
     // même condition que le jeu pour afficher le résultat
-    const complete = (!me.alive && !m.hill) || m.phase === "over";
+    const complete = (!me.alive && !m.respawns) || m.phase === "over";
     return { complete, ticks: this.ticks, ...outcomeOf(m, 0) };
   }
 }

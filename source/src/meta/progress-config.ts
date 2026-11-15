@@ -208,7 +208,7 @@ export const RANK_RULES = {
   /** fin de saison (chaque mois, tout le monde repart de 0) : pièces par échelon atteint */
   seasonEndCoins: 60,
   /** modes tirés au hasard */
-  modes: ["classic", "chaos", "koth"],
+  modes: ["classic", "chaos", "koth", "gold"],
   teamModes: ["koth"],
   /** toujours 4 joueurs */
   bots: 3,

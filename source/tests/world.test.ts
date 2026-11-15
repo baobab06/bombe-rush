@@ -127,7 +127,7 @@ console.log("Serveur : Compétition, trophées, triche");
     modes.add(t.modeId);
     await svc.cancel({ id: tB.id, secret: tB.secret, ticket: t.ticket });
   }
-  check(modes.size === 3, "les 3 modes sortent bien au tirage");
+  check(modes.size === 4 && modes.has("gold"), "les 4 modes (dont la Ruée vers l'or) sortent bien au tirage");
 
   const top = await svc.top("all", tA.id, 10);
   check(top.entries.every((e) => !/[<>]/.test(e.n)) && top.entries.some((e) => e.me), "pseudos nettoyés, ma ligne repérée");

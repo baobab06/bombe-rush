@@ -82,6 +82,8 @@ export class Match {
   chaos: import("./chaos").ChaosDirector | null = null;
   /** état du mode Roi de la colline (null sinon) */
   hill: import("./hill").HillState | null = null;
+  /** état du mode Ruée vers l'or (null sinon) */
+  gold: import("./gold").GoldState | null = null;
   /** mode Entraînement (tutoriel) */
   training: import("./training").TrainingState | null = null;
   /**
@@ -218,6 +220,10 @@ export class Match {
 
   get timeLeft(): number {
     return Math.max(0, RULES.matchDuration - this.time);
+  }
+  /** modes où l'on réapparaît (Domination, Ruée vers l'or) : la partie se joue aux points */
+  get respawns(): boolean {
+    return !!(this.hill || this.gold);
   }
   get aliveCount(): number {
     return this.players.reduce((n, p) => n + (p.alive ? 1 : 0), 0);
@@ -910,6 +916,8 @@ export class Match {
       g.bonusAt[i] = bonus.id;
       this.events.push({ t: "bonusSpawn", x, y, type: hidden });
     }
+    // Ruée vers l'or : une caisse sans bonus peut lâcher une pépite
+    this.gold?.onBlockBroken(x, y, !!hidden);
   }
 
   private updateFire(): void {
@@ -1007,6 +1015,7 @@ export class Match {
     if (killer >= 0 && killer !== p.id) this.players[killer].stats.kills++;
     this.events.push({ t: "playerDied", player: p.id, killer, x: p.x, y: p.y });
     this.hill?.onDeath(p);
+    this.gold?.onDeath(p);
   }
 
   // ------------------------------------------------------- mort subite
@@ -1212,7 +1221,7 @@ export class Match {
     if (this.mode.endless) return;
     if (this.phase === "playing") {
       // Roi de la colline : on réapparaît, la partie se joue aux points
-      const done = this.hill ? this.hill.reached || this.timeLeft <= 0 : this.aliveCount <= 1 || this.timeLeft <= 0;
+      const done = this.hill ? this.hill.reached || this.timeLeft <= 0 : this.gold ? this.timeLeft <= 0 : this.aliveCount <= 1 || this.timeLeft <= 0;
       if (done) {
         this.endOfRoundCleanup();
         this.phase = "ending";
@@ -1232,9 +1241,9 @@ export class Match {
    */
   standings(): { id: number; place: number; alive: boolean; decided: boolean }[] {
     const over = this.phase === "over";
-    const hill = this.hill;
+    const hill = this.hill ?? this.gold;
     if (hill) {
-      // Roi de la colline : classement aux points (égalité = même place), connu à la fin
+      // Domination / Ruée vers l'or : classement aux points (égalité = même place), connu à la fin
       const ranked = [...this.players].sort((a, b) => hill.points(b.id) - hill.points(a.id) || a.id - b.id);
       let place = 1;
       return ranked.map((p, i) => {
@@ -1260,7 +1269,7 @@ export class Match {
     this.endOfRoundCleanup();
     const alive = this.players.filter((p) => p.alive);
     for (const p of alive) p.stats.survivalTime = this.time;
-    this.winnerId = this.hill ? this.hill.leader() : alive.length === 1 ? alive[0].id : -1;
+    this.winnerId = this.hill ? this.hill.leader() : this.gold ? this.gold.leader() : alive.length === 1 ? alive[0].id : -1;
     for (const st of this.standings()) this.players[st.id].place = st.place;
     this.events.push({ t: "matchEnd", winner: this.winnerId });
   }

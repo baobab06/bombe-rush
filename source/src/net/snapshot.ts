@@ -31,6 +31,8 @@ export interface Snapshot {
   chaos: { pending: [string, number, number[]] | null; active: [string, number, number[]][]; nextAt: number; fog: boolean; rangeBonus: number; fuseMul: number } | null;
   /** Roi de la colline : points, réapparitions en attente, joueur qui marque */
   hill?: { scores: number[]; respawn: number[]; holder: number; contested: boolean; site?: number; next?: number; moveIn?: number; siteCell?: number; nextCell?: number } | null;
+  /** Ruée vers l'or : or de chacun, réapparitions, pépites [case, valeur], ruée finale */
+  gold?: { scores: number[]; respawn: number[]; nuggets: [number, number][]; rush: boolean; spawnIn: number } | null;
   events: SimEvent[];
 }
 
@@ -60,6 +62,7 @@ export function encodeSnapshot(m: Match, acks: number[], events: SimEvent[]): Sn
     hill: m.hill
       ? { scores: m.hill.scores.map(r2), respawn: m.hill.respawnIn.map(r2), holder: m.hill.holder, contested: m.hill.contested, site: m.hill.site, next: m.hill.next, moveIn: r2(m.hill.moveIn), siteCell: m.hill.cells[0], nextCell: m.hill.next >= 0 ? m.hill.sites[m.hill.next].cells[0] : -1 }
       : null,
+    gold: m.gold ? { scores: [...m.gold.scores], respawn: m.gold.respawnIn.map(r2), nuggets: [...m.gold.nuggets.entries()], rush: m.gold.rush, spawnIn: r2(m.gold.spawnIn) } : null,
     chaos: m.chaos
       ? {
           pending: m.chaos.pending ? [m.chaos.pending.def.id, r2(m.chaos.pendingLeft), m.chaos.pending.zone] : null,
@@ -143,6 +146,14 @@ export function applySnapshot(m: Match, s: Snapshot, keep = -1): void {
     const next = s.hill.nextCell === -1 ? -1 : byCell(s.hill.nextCell, s.hill.next);
     if (s.hill.next !== undefined) m.hill.next = next;
     if (s.hill.moveIn !== undefined) m.hill.moveIn = s.hill.moveIn;
+  }
+  if (m.gold && s.gold) {
+    s.gold.scores.forEach((v, i) => (m.gold!.scores[i] = v));
+    s.gold.respawn.forEach((v, i) => (m.gold!.respawnIn[i] = v));
+    m.gold.nuggets.clear();
+    for (const [i, v] of s.gold.nuggets) m.gold.nuggets.set(i, v);
+    m.gold.rush = s.gold.rush;
+    m.gold.spawnIn = s.gold.spawnIn;
   }
   if (m.chaos && s.chaos) {
     const def = (id: string) => CHAOS_EVENTS.find((e) => e.id === id)!;

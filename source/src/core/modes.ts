@@ -2,6 +2,7 @@ import type { Match } from "./match";
 import type { BombRules } from "./bombs";
 import { ChaosDirector } from "./chaos";
 import { HillState } from "./hill";
+import { GoldState } from "./gold";
 import { TrainingState } from "./training";
 import type { SpecialSpawnConfig } from "./specials";
 
@@ -88,6 +89,22 @@ export const MODES: ModeDef[] = [
     },
     onTick(m) {
       m.hill?.update();
+    },
+  },
+  {
+    id: "gold",
+    name: "Ruée vers l'or",
+    emoji: "💰",
+    tagline: "Ramasse le plus d'or ! Touché : tu en perds la moitié.",
+    available: true,
+    suddenDeath: false,
+    // capacités de temps en temps (comme en Classique), deux au plus
+    specials: { firstAt: 10, interval: [10, 15], chance: 0.6, maxOnBoard: 2 },
+    onStart(m) {
+      m.gold = new GoldState(m);
+    },
+    onTick(m) {
+      m.gold?.update();
     },
   },
   {

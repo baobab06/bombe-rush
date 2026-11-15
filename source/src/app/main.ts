@@ -64,7 +64,7 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 
 /** écrans interdits tant qu'une mise à jour obligatoire n'est pas faite */
 const BLOCKED_BY_UPDATE: ScreenId[] = ["setup", "game", "pause", "private", "lobby", "invite"];
-const MODE_ICONS: Record<string, string> = { classic: "🎮", chaos: "💀", koth: "👑" };
+const MODE_ICONS: Record<string, string> = { classic: "🎮", chaos: "💀", koth: "👑", gold: "💰" };
 const SCREENS: ScreenId[] = ["home", "setup", "settings", "pause", "results", "private", "lobby", "boot", "welcome", "invite", "shop", "collection", "missions", "pass", "profile", "rank", "chests", "tutorial", "world"];
 const MENU_SCREENS: ScreenId[] = ["setup", "settings", "private", "lobby", "welcome", "invite", "shop", "collection", "missions", "pass", "profile", "rank", "chests", "tutorial", "world"];
 
@@ -713,6 +713,7 @@ class App implements AppCtx {
       { id: "classic", desc: "Le dernier debout gagne" },
       { id: "chaos", desc: "Malus surprises, explosions max" },
       { id: "koth", desc: "2 contre 2 · tiens la zone" },
+      { id: "gold", desc: "Ramasse le plus d'or" },
     ];
     this.modal.open(
       (sheet, close) => {
@@ -2064,9 +2065,22 @@ class App implements AppCtx {
     $("hudAlive").textContent = `${alive} en vie`;
     // Roi de la colline : tableau des points à la place du compteur « en vie »
     const hb = $("hudHill");
-    $("hudAlive").hidden = !!h.hill;
-    hb.hidden = !h.hill;
-    if (h.hill) {
+    $("hudAlive").hidden = !!(h.hill || h.gold);
+    hb.hidden = !(h.hill || h.gold);
+    if (h.gold) {
+      // Ruée vers l'or : or de chacun, du plus riche au moins riche
+      const gd = h.gold;
+      const sig = JSON.stringify(gd);
+      if (hb.dataset.sig !== sig) {
+        hb.dataset.sig = sig;
+        const rows = [...gd.rows].sort((a, b) => b.points - a.points || a.id - b.id);
+        const top = Math.max(10, ...rows.map((r) => r.points));
+        const state = gd.myRespawn > 0 ? `<span class="hb-state dead">💀 retour dans ${gd.myRespawn} s</span>` : gd.rush ? '<span class="hb-state rush">🔥 RUÉE FINALE : or ×2</span>' : "";
+        hb.innerHTML = `<span class="hb-title">💰 LE PLUS RICHE GAGNE</span>${rows
+          .map((r) => `<span class="hb-row gold${r.me ? " me" : ""}${r.id === gd.leader ? " holder" : ""}"><i class="hb-dot" style="background:${r.color}"></i><span class="hb-bar"><i style="width:${Math.min(100, (r.points / top) * 100)}%"></i></span><b>${r.points}</b></span>`)
+          .join("")}${state}`;
+      }
+    } else if (h.hill) {
       const hl = h.hill;
       const sig = JSON.stringify(hl);
       if (hb.dataset.sig !== sig) {
@@ -2293,7 +2307,7 @@ class App implements AppCtx {
         "beforeend",
         `<span class="rk-name"><b>${esc(x.me ? this._profile.name : x.name)}</b>${x.me ? '<em class="rk-you">TOI</em>' : ""}</span>
         <span class="rk-place">${x.decided ? `${placeName(x.place)}${tie ? " ex aequo" : ""}` : "en jeu…"}</span>
-        ${x.points !== undefined ? `<span class="rk-pts" title="Points de domination">👑 ${x.points}</span>` : `<span class="rk-kills" title="Éliminations">💥 ${x.kills}</span>`}`,
+        ${x.points !== undefined ? (this.game.session?.match.gold ? `<span class="rk-pts" title="Or ramassé">💰 ${x.points}</span>` : `<span class="rk-pts" title="Points de domination">👑 ${x.points}</span>`) : `<span class="rk-kills" title="Éliminations">💥 ${x.kills}</span>`}`,
       );
       ol.appendChild(li);
     });

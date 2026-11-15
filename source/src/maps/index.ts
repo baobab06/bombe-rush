@@ -11,8 +11,8 @@ import type { MapDef } from "./types";
 /** Maps jouables. Ajouter une map = un fichier ici + un thème dans render/art.ts. */
 export const MAPS: MapDef[] = [FOREST, VOLCANO, ICE, BEACH, LABYRINTH, TEMPLE, CASTLE, FACTORY];
 
-/** Modes d'une carte (par défaut : Classique et Chaos). */
-const DEFAULT_MODES = ["classic", "chaos"];
+/** Modes d'une carte (par défaut : Classique, Chaos et Ruée vers l'or). */
+const DEFAULT_MODES = ["classic", "chaos", "gold"];
 export function mapAllows(map: MapDef, modeId: string): boolean {
   return (map.modes ?? DEFAULT_MODES).includes(modeId);
 }

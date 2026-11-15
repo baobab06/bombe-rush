@@ -246,7 +246,7 @@ var PROTOCOL_VERSION = 1;
 var MAX_ROOM_PLAYERS = 4;
 var RECONNECT_GRACE_S = 45;
 var QUICK_MAX_WAIT_S = 8;
-var QUICK_MODES = ["classic", "chaos", "koth"];
+var QUICK_MODES = ["classic", "chaos", "koth", "gold"];
 var ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 function generateRoomCode(rand = Math.random) {
   let s = "";
@@ -1494,6 +1494,209 @@ class HillState {
   }
 }
 
+// src/core/gold.ts
+var GOLD_RULES = {
+  start: 10,
+  spawnEvery: 2,
+  maxOnBoard: 16,
+  value: 1,
+  bigValue: 5,
+  bigChance: 0.12,
+  crateDrop: 0.4,
+  lossShare: 0.5,
+  maxDrops: 6,
+  rushAt: 30,
+  rushSpawnEvery: 1,
+  rushMul: 2,
+  respawnDelay: 3,
+  respawnShield: 2.5,
+  maxStack: 99,
+  openUp: 0.3
+};
+
+class GoldState {
+  m;
+  scores;
+  respawnIn;
+  nuggets = new Map;
+  spawnIn = GOLD_RULES.spawnEvery;
+  rush = false;
+  constructor(m) {
+    this.m = m;
+    this.scores = m.players.map(() => 0);
+    this.respawnIn = m.players.map(() => 0);
+    const g = m.grid;
+    const blocks = [];
+    for (let i = 0;i < g.tiles.length; i++)
+      if (g.tiles[i] === TILE.BLOCK)
+        blocks.push(i);
+    for (const i of m.rng.shuffle(blocks).slice(0, Math.round(blocks.length * GOLD_RULES.openUp))) {
+      g.tiles[i] = TILE.FLOOR;
+      g.hiddenBonus[i] = null;
+    }
+    for (const [x, y] of m.randomFreeCells(GOLD_RULES.start, true))
+      this.place(x, y, this.roll());
+  }
+  points(id) {
+    return this.scores[id] ?? 0;
+  }
+  roll() {
+    const base = this.m.rng.chance(GOLD_RULES.bigChance) ? GOLD_RULES.bigValue : GOLD_RULES.value;
+    return this.rush ? base * GOLD_RULES.rushMul : base;
+  }
+  place(x, y, value) {
+    const i = this.m.grid.idx(x, y);
+    this.nuggets.set(i, Math.min(GOLD_RULES.maxStack, (this.nuggets.get(i) ?? 0) + value));
+  }
+  onBlockBroken(x, y, hadBonus) {
+    if (this.m.phase !== "playing" || hadBonus)
+      return;
+    if (!this.m.rng.chance(GOLD_RULES.crateDrop))
+      return;
+    const v = this.roll();
+    this.place(x, y, v);
+    this.m.events.push({ t: "goldSpawn", x, y, value: v });
+  }
+  onDeath(p) {
+    const m = this.m;
+    this.respawnIn[p.id] = GOLD_RULES.respawnDelay;
+    const have = this.scores[p.id];
+    const lost = Math.ceil(have * GOLD_RULES.lossShare);
+    if (lost <= 0)
+      return;
+    this.scores[p.id] = have - lost;
+    const g = m.grid;
+    const cx = Math.floor(p.x);
+    const cy = Math.floor(p.y);
+    const cells = [];
+    for (let r = 0;r <= 2 && cells.length < GOLD_RULES.maxDrops; r++)
+      for (let dy = -r;dy <= r; dy++)
+        for (let dx = -r;dx <= r; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r || cells.length >= GOLD_RULES.maxDrops)
+            continue;
+          const x = cx + dx;
+          const y = cy + dy;
+          if (g.inside(x, y) && !g.blocksMove(x, y))
+            cells.push([x, y]);
+        }
+    if (!cells.length)
+      cells.push([cx, cy]);
+    const k = Math.min(cells.length, lost);
+    for (let j = 0;j < k; j++) {
+      const v = Math.floor(lost / k) + (j < lost % k ? 1 : 0);
+      this.place(cells[j][0], cells[j][1], v);
+    }
+    m.events.push({ t: "goldDrop", player: p.id, amount: lost, x: p.x, y: p.y });
+  }
+  update() {
+    const m = this.m;
+    if (m.phase !== "playing")
+      return;
+    if (!this.rush && m.timeLeft <= GOLD_RULES.rushAt) {
+      this.rush = true;
+      this.spawnIn = Math.min(this.spawnIn, GOLD_RULES.rushSpawnEvery);
+      m.events.push({ t: "goldRush" });
+    }
+    const g = m.grid;
+    for (const p of m.players) {
+      if (!p.alive)
+        continue;
+      const i = g.idx(Math.floor(p.x), Math.floor(p.y));
+      const v = this.nuggets.get(i);
+      if (!v)
+        continue;
+      this.nuggets.delete(i);
+      this.scores[p.id] += v;
+      m.events.push({ t: "goldPick", player: p.id, value: v, x: i % g.w, y: Math.floor(i / g.w) });
+    }
+    this.spawnIn -= DT;
+    if (this.spawnIn <= 0) {
+      this.spawnIn = this.rush ? GOLD_RULES.rushSpawnEvery : GOLD_RULES.spawnEvery;
+      if (this.nuggets.size < GOLD_RULES.maxOnBoard) {
+        const free = m.randomFreeCells(8, true).filter(([x, y]) => !this.nuggets.has(g.idx(x, y)) && g.fire[g.idx(x, y)] <= 0);
+        const c = free[0];
+        if (c) {
+          const v = this.roll();
+          this.place(c[0], c[1], v);
+          m.events.push({ t: "goldSpawn", x: c[0], y: c[1], value: v });
+        }
+      }
+    }
+    const n = m.players.length;
+    for (let k = 0;k < n; k++) {
+      const p = m.players[(k + m.tick) % n];
+      if (p.alive || this.respawnIn[p.id] <= 0)
+        continue;
+      this.respawnIn[p.id] -= DT;
+      if (this.respawnIn[p.id] <= 0)
+        this.respawn(p);
+    }
+  }
+  leader() {
+    const best = Math.max(...this.scores);
+    const top = this.scores.map((s, k) => s === best ? k : -1).filter((k) => k >= 0);
+    return top.length === 1 ? top[0] : -1;
+  }
+  respawn(p) {
+    const m = this.m;
+    const g = m.grid;
+    const others = m.players.filter((o) => o.id !== p.id && o.alive);
+    let best = null;
+    let bestScore = -Infinity;
+    for (let y = 1;y < g.h - 1; y++)
+      for (let x = 1;x < g.w - 1; x++) {
+        if (!m.isFreeCell(x, y, true) || g.fire[g.idx(x, y)] > 0 || m.gasAt(g.idx(x, y)))
+          continue;
+        if (this.inBlast(x, y))
+          continue;
+        let exits = 0;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]])
+          if (!g.blocksMove(x + dx, y + dy))
+            exits++;
+        if (!exits)
+          continue;
+        const near = others.length ? Math.min(...others.map((o) => Math.abs(o.x - 0.5 - x) + Math.abs(o.y - 0.5 - y))) : 10;
+        const score = Math.min(near, 8) * 10 + exits + m.rng.next();
+        if (score > bestScore) {
+          bestScore = score;
+          best = [x, y];
+        }
+      }
+    if (!best) {
+      this.respawnIn[p.id] = 0.5;
+      return;
+    }
+    p.x = best[0] + 0.5;
+    p.y = best[1] + 0.5;
+    p.alive = true;
+    p.moving = false;
+    p.slideX = 0;
+    p.slideY = 0;
+    p.faceX = 0;
+    p.faceY = 1;
+    p.speed = RULES.baseSpeed;
+    p.speedLevel = 0;
+    p.maxBombs = m.bombRules.startBombs;
+    clearAbilities(p);
+    p.range = m.bombRules.startRange;
+    p.bombCooldown = 0;
+    p.activeBombs = Math.min(p.activeBombs, p.maxBombs);
+    p.shieldTime = GOLD_RULES.respawnShield;
+    p.killedBy = -1;
+    this.respawnIn[p.id] = 0;
+    m.events.push({ t: "respawn", player: p.id, x: best[0], y: best[1] });
+  }
+  inBlast(x, y) {
+    for (const b of this.m.bombs.values()) {
+      if (b.tx === x && Math.abs(b.ty - y) <= b.range)
+        return true;
+      if (b.ty === y && Math.abs(b.tx - x) <= b.range)
+        return true;
+    }
+    return false;
+  }
+}
+
 // src/core/training.ts
 var TRAINING_CRATES = [
   [4, 1, "flame"],
@@ -1628,6 +1831,21 @@ var MODES = [
     },
     onTick(m) {
       m.hill?.update();
+    }
+  },
+  {
+    id: "gold",
+    name: "Ruée vers l'or",
+    emoji: "\uD83D\uDCB0",
+    tagline: "Ramasse le plus d'or ! Touché : tu en perds la moitié.",
+    available: true,
+    suddenDeath: false,
+    specials: { firstAt: 10, interval: [10, 15], chance: 0.6, maxOnBoard: 2 },
+    onStart(m) {
+      m.gold = new GoldState(m);
+    },
+    onTick(m) {
+      m.gold?.update();
     }
   },
   {
@@ -1863,7 +2081,7 @@ var VOLCANO = {
 
 // src/maps/index.ts
 var MAPS = [FOREST, VOLCANO, ICE, BEACH, LABYRINTH, TEMPLE, CASTLE, FACTORY];
-var DEFAULT_MODES = ["classic", "chaos"];
+var DEFAULT_MODES = ["classic", "chaos", "gold"];
 function mapAllows(map, modeId) {
   return (map.modes ?? DEFAULT_MODES).includes(modeId);
 }
@@ -2245,6 +2463,8 @@ class BotBrain {
       return;
     if (m.hill && this.playDomination(m, p, danger, sloppy))
       return;
+    if (m.gold && this.grabGold(m, p, danger, 3, false))
+      return;
     const bonusPath = this.findTarget(m, p, danger, this.prof.bonusRadius, (i) => g.bonusAt[i] >= 0);
     if (bonusPath && bonusPath.length > 0) {
       this.path = bonusPath;
@@ -2268,6 +2488,8 @@ class BotBrain {
       }
     }
     if (this.path.length)
+      return;
+    if (m.gold && this.grabGold(m, p, danger, 8 + Math.round(this.prof.bonusRadius), true))
       return;
     if (this.prof.wander > 0 && this.rng.chance(this.prof.wander)) {
       const wander = this.findTarget(m, p, danger, 3, () => this.rng.chance(0.3));
@@ -2295,6 +2517,30 @@ class BotBrain {
     const chase = this.pathToNearestEnemy(m, p, danger);
     if (chase)
       this.path = chase;
+  }
+  goldGoal = -1;
+  grabGold(m, p, danger, radius, bigFirst) {
+    const gold = m.gold;
+    if (this.goldGoal >= 0 && !gold.nuggets.has(this.goldGoal)) {
+      if (this.path.length && this.path[this.path.length - 1] === this.goldGoal)
+        this.path = [];
+      this.goldGoal = -1;
+    }
+    if (!gold.nuggets.size)
+      return false;
+    if (this.goldGoal >= 0 && this.path.length && this.path[this.path.length - 1] === this.goldGoal)
+      return false;
+    let path = null;
+    if (bigFirst)
+      path = this.findTarget(m, p, danger, radius + 4, (i) => (gold.nuggets.get(i) ?? 0) >= 5);
+    if (!path || !path.length)
+      path = this.findTarget(m, p, danger, radius, (i) => gold.nuggets.has(i));
+    if (!path || !path.length)
+      return false;
+    this.path = path;
+    this.goldGoal = path[path.length - 1];
+    this.lastDecision = "gold";
+    return true;
   }
   role = "";
   goalKey = "";
@@ -3366,6 +3612,7 @@ class Match {
   fog = false;
   chaos = null;
   hill = null;
+  gold = null;
   training = null;
   teams = null;
   vents = [];
@@ -3483,6 +3730,9 @@ class Match {
   }
   get timeLeft() {
     return Math.max(0, RULES.matchDuration - this.time);
+  }
+  get respawns() {
+    return !!(this.hill || this.gold);
   }
   get aliveCount() {
     return this.players.reduce((n, p) => n + (p.alive ? 1 : 0), 0);
@@ -4140,6 +4390,7 @@ class Match {
       g.bonusAt[i] = bonus.id;
       this.events.push({ t: "bonusSpawn", x, y, type: hidden });
     }
+    this.gold?.onBlockBroken(x, y, !!hidden);
   }
   updateFire() {
     const g = this.grid;
@@ -4233,6 +4484,7 @@ class Match {
       this.players[killer].stats.kills++;
     this.events.push({ t: "playerDied", player: p.id, killer, x: p.x, y: p.y });
     this.hill?.onDeath(p);
+    this.gold?.onDeath(p);
   }
   buildSuddenDeathOrder() {
     const { w, h } = this.grid;
@@ -4443,7 +4695,7 @@ class Match {
     if (this.mode.endless)
       return;
     if (this.phase === "playing") {
-      const done = this.hill ? this.hill.reached || this.timeLeft <= 0 : this.aliveCount <= 1 || this.timeLeft <= 0;
+      const done = this.hill ? this.hill.reached || this.timeLeft <= 0 : this.gold ? this.timeLeft <= 0 : this.aliveCount <= 1 || this.timeLeft <= 0;
       if (done) {
         this.endOfRoundCleanup();
         this.phase = "ending";
@@ -4457,7 +4709,7 @@ class Match {
   }
   standings() {
     const over = this.phase === "over";
-    const hill = this.hill;
+    const hill = this.hill ?? this.gold;
     if (hill) {
       const ranked = [...this.players].sort((a, b) => hill.points(b.id) - hill.points(a.id) || a.id - b.id);
       let place = 1;
@@ -4488,7 +4740,7 @@ class Match {
     const alive = this.players.filter((p) => p.alive);
     for (const p of alive)
       p.stats.survivalTime = this.time;
-    this.winnerId = this.hill ? this.hill.leader() : alive.length === 1 ? alive[0].id : -1;
+    this.winnerId = this.hill ? this.hill.leader() : this.gold ? this.gold.leader() : alive.length === 1 ? alive[0].id : -1;
     for (const st of this.standings())
       this.players[st.id].place = st.place;
     this.events.push({ t: "matchEnd", winner: this.winnerId });
@@ -4521,6 +4773,7 @@ function encodeSnapshot(m, acks, events) {
     bonuses: [...m.bonuses.values()].map((b) => [b.id, b.type, b.tx, b.ty, r2(b.invuln), r2(b.age)]),
     pending: m.pendingDrops.map(([x, y, l]) => [x, y, r2(l)]),
     hill: m.hill ? { scores: m.hill.scores.map(r2), respawn: m.hill.respawnIn.map(r2), holder: m.hill.holder, contested: m.hill.contested, site: m.hill.site, next: m.hill.next, moveIn: r2(m.hill.moveIn), siteCell: m.hill.cells[0], nextCell: m.hill.next >= 0 ? m.hill.sites[m.hill.next].cells[0] : -1 } : null,
+    gold: m.gold ? { scores: [...m.gold.scores], respawn: m.gold.respawnIn.map(r2), nuggets: [...m.gold.nuggets.entries()], rush: m.gold.rush, spawnIn: r2(m.gold.spawnIn) } : null,
     chaos: m.chaos ? {
       pending: m.chaos.pending ? [m.chaos.pending.def.id, r2(m.chaos.pendingLeft), m.chaos.pending.zone] : null,
       active: m.chaos.active.map((a) => [a.def.id, r2(a.timer), a.zone]),
@@ -6239,7 +6492,7 @@ var RANK_RULES = {
     [{ kind: "chest", tier: "legend", count: 2 }, { kind: "coins", amount: 2000 }]
   ],
   seasonEndCoins: 60,
-  modes: ["classic", "chaos", "koth"],
+  modes: ["classic", "chaos", "koth", "gold"],
   teamModes: ["koth"],
   bots: 3,
   botsByStep: [
@@ -6378,7 +6631,7 @@ function columnOf(pl) {
 
 // src/net/replay.ts
 var Q = 32;
-var RANKED_MODES = ["classic", "chaos", "koth"];
+var RANKED_MODES = ["classic", "chaos", "koth", "gold"];
 var DIFFICULTIES = ["easy", "normal", "hard", "expert"];
 var MAX_TICKS = 60 * 60 * 8;
 function checkSpec(s, expect) {
@@ -6488,7 +6741,7 @@ class Replay {
   finish() {
     const m = this.match;
     const me = m.players[0];
-    const complete = !me.alive && !m.hill || m.phase === "over";
+    const complete = !me.alive && !m.respawns || m.phase === "over";
     return { complete, ticks: this.ticks, ...outcomeOf(m, 0) };
   }
 }

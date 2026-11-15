@@ -475,7 +475,7 @@ export class GameScreen {
       this.onEnding?.();
     }
     // Chaos en salle privée : éliminé, on reste pour regarder la fin de la manche
-    if (!this.finished && this.finishTimer < 0 && !me.alive && !m.hill && m.phase !== "over" && this.canSpectate) {
+    if (!this.finished && this.finishTimer < 0 && !me.alive && !m.respawns && m.phase !== "over" && this.canSpectate) {
       if (!this.result) {
         // la place est connue : règlement tout de suite (comme sans spectateur)
         this.result = this.computeResult();
@@ -499,7 +499,7 @@ export class GameScreen {
       this.result = this.computeResult();
     } else if (!this.finished && this.finishTimer < 0) {
       // (Roi de la colline : on réapparaît, la partie continue)
-      if (!me.alive && !m.hill) this.finishTimer = 1.8;
+      if (!me.alive && !m.respawns) this.finishTimer = 1.8;
       else if (m.phase === "over") this.finishTimer = 1.0;
       // l'issue est connue : on la règle tout de suite (avant même l'écran
       // de résultats), pour qu'un rechargement ne puisse rien changer
@@ -558,7 +558,7 @@ export class GameScreen {
         decided: st.decided,
         alive: st.alive,
         kills: p.stats.kills,
-        points: m.hill ? m.hill.points(p.id) : undefined,
+        points: m.hill ? m.hill.points(p.id) : m.gold ? m.gold.points(p.id) : undefined,
         me: p.id === s.localPlayer,
       };
     });
@@ -698,12 +698,28 @@ export class GameScreen {
           haptics.pulse(15);
           this.onHud?.();
           break;
+        // Ruée vers l'or
+        case "goldPick":
+          if (e.player === me.id) {
+            audio.play("coin", e.value >= 5 ? 1 : 0.7);
+            if (e.value >= 5) haptics.pulse(20);
+          } else audio.play("coin", 0.15);
+          this.onHud?.();
+          break;
+        case "goldDrop":
+          if (e.player === me.id) this.onBanner?.("💸 OUCH !", `TU AS PERDU ${e.amount} PIÈCES D'OR`);
+          this.onHud?.();
+          break;
+        case "goldRush":
+          audio.play("alarm");
+          this.onBanner?.("🔥 RUÉE FINALE", "L'OR VAUT DOUBLE !");
+          break;
         case "hillPoints":
           if (e.player === me.id) audio.play("unlock", 0.6);
           break;
         case "respawn":
           audio.play("shield", e.player === me.id ? 1 : 0.35);
-          if (e.player === me.id) this.onBanner?.("👑 DE RETOUR", "FONCE SUR LA ZONE !");
+          if (e.player === me.id) this.onBanner?.(m.gold ? "💰 DE RETOUR" : "👑 DE RETOUR", m.gold ? "RAMASSE DE L'OR !" : "FONCE SUR LA ZONE !");
           this.onHud?.();
           break;
         case "shieldBlocked":
@@ -835,6 +851,15 @@ export class GameScreen {
                   holder: m.hill!.holder >= 0 && m.teamOf(m.hill!.holder) === t,
                 }))
               : m.players.map((p) => ({ color: lookOf(p.characterId, p.skinId).palette.main, points: m.hill!.points(p.id), me: p.id === me.id, holder: m.hill!.holder === p.id })),
+          }
+        : null,
+      /** Ruée vers l'or : or de chacun, ruée finale, réapparition du joueur */
+      gold: m.gold
+        ? {
+            rush: m.gold.rush,
+            myRespawn: me.alive ? 0 : Math.max(1, Math.ceil(m.gold.respawnIn[me.id])),
+            leader: m.gold.leader(),
+            rows: m.players.map((p) => ({ color: lookOf(p.characterId, p.skinId).palette.main, points: m.gold!.points(p.id), me: p.id === me.id, holder: false, id: p.id })),
           }
         : null,
       powers: [

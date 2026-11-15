@@ -1909,3 +1909,14 @@ body.launching #btnPlay, body.launching #btnLaunch, body.launching #btnAgain, bo
   .pp-hero em { font-size: min(2.4cqh, 2cqw); }
 }
 .sect-tabs button:has(.dot:not([hidden])) { padding-right: 4cqh; }
+
+/* Ruée vers l'or (1.18) */
+.mode-card[data-mode="gold"] { --a: #ffc46b; --b: #e2731c; --d: #93420a; --t: #fff; }
+.mode-card[data-mode="gold"] .mc-txt small { text-shadow: 0 .3cqh 0 rgba(0,0,0,.3); }
+.mp-mode[data-mode="gold"] { --a: #ffc46b; --b: #e2731c; --d: #93420a; }
+.mode-pick button[data-mode="gold"].sel { border-color: #ffa63a; background: rgba(255,166,58,.2); box-shadow: 0 0 0 .6cqh rgba(255,166,58,.2); }
+.hill-board .hb-row.gold .hb-bar i { background: linear-gradient(90deg, #ffe45c, #ffb01f); }
+.hill-board .hb-row.gold b::after { content: " 🪙"; font-size: .8em; }
+.hill-board .hb-state.rush { color: #ffb01f; animation: hbRush .8s ease-in-out infinite alternate; }
+@keyframes hbRush { to { color: #ff5a3c; } }
+.tut-mode.m-gold { --t: #ffb347; }
