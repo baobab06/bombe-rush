@@ -897,7 +897,9 @@ export class Match {
     if (this.players[by]) this.players[by].stats.blocksDestroyed++;
     this.events.push({ t: "blockDestroyed", x, y });
     // butin : tiré maintenant (core/loot.ts) ; un bonus déjà placé (tests, éditeur) est respecté
-    if (g.hiddenBonus[i]) this.loot.record(g.hiddenBonus[i]!, x, y);
+    // (filon d'or de la Ruée vers l'or : que de l'or, pas de bonus)
+    if (this.gold && g.veins.has(i)) g.hiddenBonus[i] = null;
+    else if (g.hiddenBonus[i]) this.loot.record(g.hiddenBonus[i]!, x, y);
     else g.hiddenBonus[i] = this.loot.roll(this.rng, x, y, this.bonuses.size, this.bonusBoost);
     const hidden = g.hiddenBonus[i];
     // fin de manche : plus aucun bonus n'apparaît (même d'une caisse qui saute encore)

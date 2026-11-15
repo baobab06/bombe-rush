@@ -9,6 +9,8 @@ export interface Arena {
   terrain: Uint8Array; // TERRAIN
   hiddenBonus: (string | null)[];
   spawns: [number, number][];
+  /** filons d'or (« $ » du plan, Ruée vers l'or) : index des cases */
+  veins: number[];
 }
 
 /**
@@ -30,6 +32,7 @@ const TERRAIN_OF: Record<string, number> = {
   V: TERRAIN.VENT,
 };
 /** Cases où l'on peut marcher (une fois le bloc éventuel détruit). */
+// (« $ », filon d'or, est toujours un bloc au départ : il ne compte pas comme une case libre)
 const WALKABLE = [".", "_", "S", "s", "I", "i", "V", "z"];
 
 /** Réglages du tirage des positions de départ. */
@@ -165,6 +168,8 @@ export function generateArena(map: MapDef, playerCount: number, seed: number): A
       let t: TileType = TILE.FLOOR;
       terrain[i] = TERRAIN_OF[c] ?? TERRAIN.NONE;
       if (c === "#") t = TILE.WALL;
+      // filon d'or : toujours un bloc (cassable), jamais de butin caché
+      else if (c === "$") t = TILE.BLOCK;
       else if (
         (c === "." || c === "I" || (c === "s" && !extraIsFloor) || (c === "S" && !plan.fixed)) &&
         !protectedCells.has(i)
@@ -198,7 +203,9 @@ export function generateArena(map: MapDef, playerCount: number, seed: number): A
     }
   }
 
-  return { width, height, tiles, terrain, hiddenBonus, spawns };
+  const veins: number[] = [];
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) if (at(x, y) === "$") veins.push(y * width + x);
+  return { width, height, tiles, terrain, hiddenBonus, spawns, veins };
 }
 
 /**

@@ -4,19 +4,21 @@ import { FACTORY } from "./factory";
 import { FOREST } from "./forest";
 import { ICE } from "./ice";
 import { LABYRINTH } from "./labyrinth";
+import { MINE } from "./mine";
+import { WESTERN } from "./western";
 import { TEMPLE } from "./temple";
 import { VOLCANO } from "./volcano";
 import type { MapDef } from "./types";
 
 /** Maps jouables. Ajouter une map = un fichier ici + un thème dans render/art.ts. */
-export const MAPS: MapDef[] = [FOREST, VOLCANO, ICE, BEACH, LABYRINTH, TEMPLE, CASTLE, FACTORY];
+export const MAPS: MapDef[] = [FOREST, VOLCANO, ICE, BEACH, LABYRINTH, TEMPLE, CASTLE, FACTORY, MINE, WESTERN];
 
-/** Modes d'une carte (par défaut : Classique, Chaos et Ruée vers l'or). */
-const DEFAULT_MODES = ["classic", "chaos", "gold"];
+/** Modes d'une carte (par défaut : Classique et Chaos). */
+const DEFAULT_MODES = ["classic", "chaos"];
 export function mapAllows(map: MapDef, modeId: string): boolean {
   return (map.modes ?? DEFAULT_MODES).includes(modeId);
 }
-/** Cartes jouables dans un mode (Domination : seulement ses cartes à elle). */
+/** Cartes jouables dans un mode (Domination, Ruée vers l'or : seulement leurs cartes à elles). */
 export function mapsFor(modeId: string): MapDef[] {
   const list = MAPS.filter((m) => mapAllows(m, modeId));
   return list.length ? list : MAPS.filter((m) => !m.modes);

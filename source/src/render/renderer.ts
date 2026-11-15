@@ -403,6 +403,12 @@ export class Renderer {
         case "goldRush":
           this.flash = Math.min(0.5, this.flash + 0.25);
           break;
+        case "veinRegrow":
+          // le filon repousse : petit « pop » doré
+          this.landed.set(m.grid.idx(e.x, e.y), this.time);
+          P.spawn("ring", e.x + 0.5, e.y + 0.5, { life: 0.5, size: 0.5, color: "#ffd23f" });
+          for (let k = 0; k < 10; k++) P.spawn("twinkle", e.x + 0.5 + (Math.random() - 0.5) * 0.9, e.y + 0.5 + (Math.random() - 0.5) * 0.6, { z: 0.3 + Math.random() * 0.8, vz: 0.7, life: 0.6, size: 0.08, color: "#ffe27a" });
+          break;
         case "chaosStart":
           if (CHAOS_EVENTS.find((d) => d.id === e.id)?.countdown) {
             this.boomAt = this.time;
@@ -470,6 +476,14 @@ export class Renderer {
           // braises des torches et poussière dorée
           if (Math.random() < 0.5) P.spawn("ember", x, y, { z: 0.4, vz: 0.4 + Math.random() * 0.4, vx: 0.05, life: 1.4, size: 0.03, color: Math.random() < 0.5 ? "#ffb347" : "#ffd27a" });
           else if (Math.random() < 0.5) P.spawn("glow", x, y, { z: 0.3 + Math.random() * 0.8, vz: 0.05, vx: (Math.random() - 0.5) * 0.3, life: 2.4, size: 0.04, color: "#ffe9a8" });
+          break;
+        case "mine":
+          // poussière de mine et paillettes d'or dans la lumière des lanternes
+          if (Math.random() < 0.6) P.spawn("glow", x, y, { z: 0.3 + Math.random() * 0.9, vz: 0.04, vx: (Math.random() - 0.5) * 0.2, life: 2.6, size: 0.035, color: Math.random() < 0.4 ? "#ffd23f" : "#e8c89a" });
+          break;
+        case "western":
+          // sable soulevé par le vent
+          if (Math.random() < 0.5) P.spawn("smoke", x, y, { z: 0.1, vx: 0.6 + Math.random() * 0.4, life: 1.6, size: 0.08, color: "#f0d29a" });
           break;
         case "factory":
           // poussière lumineuse et étincelles de soudure
@@ -628,6 +642,20 @@ export class Renderer {
       const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.3, W / 2, H / 2, Math.max(W, H) * 0.75);
       g.addColorStop(0, `rgba(255,170,80,${0.035 + 0.01 * Math.sin(t * 3)})`);
       g.addColorStop(1, "rgba(0,0,0,0.22)");
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, W, H);
+    } else if (theme === "mine") {
+      // galerie : lumière chaude au centre, bords sombres
+      const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.28, W / 2, H / 2, Math.max(W, H) * 0.72);
+      g.addColorStop(0, `rgba(255,180,90,${0.04 + 0.012 * Math.sin(t * 2.6)})`);
+      g.addColorStop(1, "rgba(0,0,0,0.3)");
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, W, H);
+    } else if (theme === "western") {
+      // soleil du désert
+      const g = ctx.createLinearGradient(0, 0, 0, H);
+      g.addColorStop(0, "rgba(255,200,120,0.1)");
+      g.addColorStop(1, "rgba(160,70,20,0.08)");
       ctx.fillStyle = g;
       ctx.fillRect(0, 0, W, H);
     } else if (theme === "factory") {

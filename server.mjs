@@ -772,6 +772,7 @@ class Grid {
   tiles;
   hiddenBonus;
   terrain;
+  veins;
   fire;
   fireShape;
   fireOwner;
@@ -783,6 +784,7 @@ class Grid {
     this.tiles = arena.tiles.slice();
     this.hiddenBonus = arena.hiddenBonus.slice();
     this.terrain = arena.terrain.slice();
+    this.veins = new Set(arena.veins ?? []);
     const n = this.w * this.h;
     this.fire = new Float32Array(n);
     this.fireShape = new Uint8Array(n);
@@ -1511,7 +1513,8 @@ var GOLD_RULES = {
   respawnDelay: 3,
   respawnShield: 2.5,
   maxStack: 99,
-  openUp: 0.3
+  openUp: 0.3,
+  veinRegrow: 25
 };
 
 class GoldState {
@@ -1521,6 +1524,7 @@ class GoldState {
   nuggets = new Map;
   spawnIn = GOLD_RULES.spawnEvery;
   rush = false;
+  veinIn = new Map;
   constructor(m) {
     this.m = m;
     this.scores = m.players.map(() => 0);
@@ -1528,9 +1532,10 @@ class GoldState {
     const g = m.grid;
     const blocks = [];
     for (let i = 0;i < g.tiles.length; i++)
-      if (g.tiles[i] === TILE.BLOCK)
+      if (g.tiles[i] === TILE.BLOCK && !g.veins.has(i))
         blocks.push(i);
-    for (const i of m.rng.shuffle(blocks).slice(0, Math.round(blocks.length * GOLD_RULES.openUp))) {
+    const share = m.config.map.modes?.includes("gold") ? 0 : GOLD_RULES.openUp;
+    for (const i of m.rng.shuffle(blocks).slice(0, Math.round(blocks.length * share))) {
       g.tiles[i] = TILE.FLOOR;
       g.hiddenBonus[i] = null;
     }
@@ -1549,7 +1554,17 @@ class GoldState {
     this.nuggets.set(i, Math.min(GOLD_RULES.maxStack, (this.nuggets.get(i) ?? 0) + value));
   }
   onBlockBroken(x, y, hadBonus) {
-    if (this.m.phase !== "playing" || hadBonus)
+    if (this.m.phase !== "playing")
+      return;
+    const i = this.m.grid.idx(x, y);
+    if (this.m.grid.veins.has(i)) {
+      const v = this.rush ? GOLD_RULES.bigValue * GOLD_RULES.rushMul : GOLD_RULES.bigValue;
+      this.place(x, y, v);
+      this.veinIn.set(i, GOLD_RULES.veinRegrow);
+      this.m.events.push({ t: "goldSpawn", x, y, value: v, vein: true });
+      return;
+    }
+    if (hadBonus)
       return;
     if (!this.m.rng.chance(GOLD_RULES.crateDrop))
       return;
@@ -1621,6 +1636,28 @@ class GoldState {
           m.events.push({ t: "goldSpawn", x: c[0], y: c[1], value: v });
         }
       }
+    }
+    for (const [i, left] of this.veinIn) {
+      const t = left - DT;
+      if (t > 0) {
+        this.veinIn.set(i, t);
+        continue;
+      }
+      const x = i % g.w;
+      const y = Math.floor(i / g.w);
+      if (g.tiles[i] !== TILE.FLOOR) {
+        this.veinIn.delete(i);
+        continue;
+      }
+      const busy = this.nuggets.has(i) || g.bombAt[i] >= 0 || g.bonusAt[i] >= 0 || g.fire[i] > 0 || m.players.some((p) => p.alive && Math.floor(p.x) === x && Math.floor(p.y) === y);
+      if (busy) {
+        this.veinIn.set(i, 1);
+        continue;
+      }
+      g.tiles[i] = TILE.BLOCK;
+      g.hiddenBonus[i] = null;
+      this.veinIn.delete(i);
+      m.events.push({ t: "veinRegrow", x, y });
     }
     const n = m.players.length;
     for (let k = 0;k < n; k++) {
@@ -2028,6 +2065,58 @@ var LABYRINTH = {
   available: true
 };
 
+// src/maps/mine.ts
+var MINE = {
+  id: "mine",
+  name: "Mine d'or",
+  subtitle: "Galeries aux lanternes",
+  theme: "mine",
+  layout: [
+    "#############",
+    "#S_...$..._S#",
+    "#_#.#.#.#.#_#",
+    "#.....$.....#",
+    "#.#.#___#.#.#",
+    "#$.s._$_.s.$#",
+    "#.#.#___#.#.#",
+    "#.....$.....#",
+    "#_#.#.#.#.#_#",
+    "#S_...$..._S#",
+    "#############"
+  ],
+  blockDensity: 0.55,
+  spawnClear: 1,
+  startRange: 1,
+  available: true,
+  modes: ["gold"]
+};
+
+// src/maps/western.ts
+var WESTERN = {
+  id: "western",
+  name: "Far West",
+  subtitle: "Ville des chercheurs d'or",
+  theme: "western",
+  layout: [
+    "#############",
+    "#S..#._.#..S#",
+    "#.$.#...#.$.#",
+    "#...........#",
+    "##.##.$.##.##",
+    "#s____$____s#",
+    "##.##.$.##.##",
+    "#...........#",
+    "#.$.#...#.$.#",
+    "#S..#._.#..S#",
+    "#############"
+  ],
+  blockDensity: 0.5,
+  spawnClear: 1,
+  startRange: 1,
+  available: true,
+  modes: ["gold"]
+};
+
 // src/maps/temple.ts
 var TEMPLE = {
   id: "temple",
@@ -2080,8 +2169,8 @@ var VOLCANO = {
 };
 
 // src/maps/index.ts
-var MAPS = [FOREST, VOLCANO, ICE, BEACH, LABYRINTH, TEMPLE, CASTLE, FACTORY];
-var DEFAULT_MODES = ["classic", "chaos", "gold"];
+var MAPS = [FOREST, VOLCANO, ICE, BEACH, LABYRINTH, TEMPLE, CASTLE, FACTORY, MINE, WESTERN];
+var DEFAULT_MODES = ["classic", "chaos"];
 function mapAllows(map, modeId) {
   return (map.modes ?? DEFAULT_MODES).includes(modeId);
 }
@@ -3330,6 +3419,8 @@ function generateArena(map, playerCount, seed) {
       terrain[i] = TERRAIN_OF[c] ?? TERRAIN.NONE;
       if (c === "#")
         t = TILE.WALL;
+      else if (c === "$")
+        t = TILE.BLOCK;
       else if ((c === "." || c === "I" || c === "s" && !extraIsFloor || c === "S" && !plan.fixed) && !protectedCells.has(i)) {
         const d = decision.get(canon(x, y));
         if (d.block) {
@@ -3357,7 +3448,12 @@ function generateArena(map, playerCount, seed) {
       }
     }
   }
-  return { width, height, tiles, terrain, hiddenBonus, spawns };
+  const veins = [];
+  for (let y = 0;y < height; y++)
+    for (let x = 0;x < width; x++)
+      if (at(x, y) === "$")
+        veins.push(y * width + x);
+  return { width, height, tiles, terrain, hiddenBonus, spawns, veins };
 }
 function reachFree(layout, zone) {
   const height = layout.length;
@@ -4369,7 +4465,9 @@ class Match {
     if (this.players[by])
       this.players[by].stats.blocksDestroyed++;
     this.events.push({ t: "blockDestroyed", x, y });
-    if (g.hiddenBonus[i])
+    if (this.gold && g.veins.has(i))
+      g.hiddenBonus[i] = null;
+    else if (g.hiddenBonus[i])
       this.loot.record(g.hiddenBonus[i], x, y);
     else
       g.hiddenBonus[i] = this.loot.roll(this.rng, x, y, this.bonuses.size, this.bonusBoost);

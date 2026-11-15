@@ -9,6 +9,8 @@ export class Grid {
   readonly hiddenBonus: (string | null)[];
   /** sol spécial (lave, eau, glace, cheminée) */
   readonly terrain: Uint8Array;
+  /** filons d'or (Ruée vers l'or) : cases d'origine des « $ » du plan */
+  readonly veins: Set<number>;
   /** temps de flamme restant par case (0 = pas de feu) */
   readonly fire: Float32Array;
   readonly fireShape: Uint8Array;
@@ -24,6 +26,7 @@ export class Grid {
     this.tiles = arena.tiles.slice();
     this.hiddenBonus = arena.hiddenBonus.slice();
     this.terrain = arena.terrain.slice();
+    this.veins = new Set(arena.veins ?? []);
     const n = this.w * this.h;
     this.fire = new Float32Array(n);
     this.fireShape = new Uint8Array(n);

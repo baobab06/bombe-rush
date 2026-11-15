@@ -36,7 +36,8 @@ console.log("1. Départ");
   check(m.respawns, "on réapparaît dans ce mode");
   const g = m.grid;
   check([...m.gold!.nuggets.keys()].every((i) => g.tiles[i] === TILE.FLOOR), "pépites sur des cases libres");
-  check(mapsFor("gold").map((x) => x.id).join() === mapsFor("classic").map((x) => x.id).join(), "jouable sur toutes les cartes du Classique");
+  check(mapsFor("gold").map((x) => x.id).join() === "mine,western", "cartes spéciales : Mine d'or et Far West (et seulement elles)");
+  check(!mapsFor("classic").some((x) => x.id === "mine" || x.id === "western"), "ces cartes ne servent pas aux autres modes");
   check(QUICK_MODES.includes("gold") && RANKED_MODES.includes("gold") && RANK_RULES.modes.includes("gold"), "en ligne et en Compétition");
 }
 
@@ -107,9 +108,40 @@ console.log("4. Caisses");
   check(n > 20 && drops > n * 0.15 && drops < n * 0.6, `les caisses lâchent parfois une pépite (${drops}/${n})`);
 }
 
+console.log("4 bis. Filons d'or (cartes Mine d'or et Far West)");
+{
+  for (const map of mapsFor("gold")) {
+    for (const n of [2, 3, 4]) {
+      const m = mk(3, n, map);
+      check(m.players.length === n, `${map.name} : ${n} joueurs`);
+    }
+    const m = mk(8, 4, map);
+    play(m);
+    const g = m.grid;
+    const veins = [...g.veins];
+    check(veins.length >= 6 && veins.every((i) => g.tiles[i] === TILE.BLOCK), `${map.name} : ${veins.length} filons d'or au départ`);
+    // symétrie : chaque filon a son miroir
+    check(veins.every((i) => g.veins.has(g.idx(g.w - 1 - (i % g.w), Math.floor(i / g.w))) && g.veins.has(g.idx(i % g.w, g.h - 1 - Math.floor(i / g.w)))), `${map.name} : filons placés en miroir (équitable)`);
+    const i = veins[0];
+    const x = i % g.w;
+    const y = Math.floor(i / g.w);
+    m.destroyBlock(x, y, 0);
+    check(m.gold!.nuggets.get(i) === GOLD_RULES.bigValue && g.bonusAt[i] < 0, `${map.name} : filon cassé = grosse pépite garantie, pas de bonus`);
+    run(m, 1);
+    check(g.tiles[i] === TILE.FLOOR, `${map.name} : le filon ne repousse pas tout de suite`);
+    // la pépite est par terre : il attend qu'on la prenne
+    run(m, GOLD_RULES.veinRegrow + 1);
+    check(g.tiles[i] === TILE.FLOOR && m.gold!.nuggets.has(i), `${map.name} : pas de repousse sur une pépite`);
+    m.gold!.nuggets.delete(i);
+    run(m, 1.2);
+    check(g.tiles[i] === TILE.BLOCK && m.events !== undefined, `${map.name} : le filon repousse une fois la case libre`);
+  }
+}
+
 console.log("5. Parties complètes entre bots");
 {
-  for (const [seed, map] of [[1, MAPS[0]], [2, MAPS[1]], [3, MAPS[2]], [4, MAPS[4]]] as const) {
+  const GM = mapsFor("gold");
+  for (const [seed, map] of [[1, GM[0]], [2, GM[1]], [3, GM[0]], [4, GM[1]], [5, MAPS[0]]] as const) {
     const m = mk(seed, 4, map);
     const diffs: Difficulty[] = ["easy", "normal", "hard", "expert"];
     const brains = m.players.map((p) => new BotBrain(p.id, diffs[p.id], seed));
@@ -140,7 +172,7 @@ console.log("5. Parties complètes entre bots");
   let hard = 0;
   let easy = 0;
   for (let seed = 40; seed < 46; seed++) {
-    const m = mk(seed, 4, MAPS[seed % 4]);
+    const m = mk(seed, 4, mapsFor("gold")[seed % 2]);
     const diffs: Difficulty[] = ["easy", "easy", "hard", "hard"];
     const brains = m.players.map((p) => new BotBrain(p.id, diffs[p.id], seed));
     let steps = 0;
@@ -157,7 +189,7 @@ console.log("5. Parties complètes entre bots");
 console.log("6. Même graine = même partie ; multijoueur");
 {
   const once = () => {
-    const m = mk(99, 4, MAPS[3]);
+    const m = mk(99, 4, mapsFor("gold")[0]);
     const brains = m.players.map((p) => new BotBrain(p.id, "normal", 99));
     for (let k = 0; k < 60 * 40; k++) m.step(brains.map((b) => b.update(m, DT)));
     return JSON.stringify([m.gold!.scores, [...m.gold!.nuggets.entries()]]);

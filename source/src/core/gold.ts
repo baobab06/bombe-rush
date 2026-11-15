@@ -47,8 +47,10 @@ export const GOLD_RULES = {
   respawnShield: 2.5,
   /** une pépite ne peut pas valoir plus que … (tas fusionnés) */
   maxStack: 99,
-  /** part des caisses retirées au départ : arène plus ouverte pour courir après l'or */
+  /** part des caisses retirées au départ : arène plus ouverte pour courir après l'or (cartes classiques) */
   openUp: 0.3,
+  /** un filon d'or cassé repousse au bout de … s (si la case est libre) */
+  veinRegrow: 25,
 } as const;
 
 export class GoldState {
@@ -62,15 +64,19 @@ export class GoldState {
   spawnIn: number = GOLD_RULES.spawnEvery;
   /** ruée finale annoncée */
   rush = false;
+  /** filons cassés : case → temps avant de repousser */
+  readonly veinIn = new Map<number, number>();
 
   constructor(private m: Match) {
     this.scores = m.players.map(() => 0);
     this.respawnIn = m.players.map(() => 0);
-    // arène plus ouverte : une partie des caisses est retirée (tirage de la partie)
+    // cartes classiques : arène plus ouverte, une partie des caisses est retirée
+    // (les cartes de la Ruée vers l'or sont déjà dessinées pour ce mode)
     const g = m.grid;
     const blocks: number[] = [];
-    for (let i = 0; i < g.tiles.length; i++) if (g.tiles[i] === TILE.BLOCK) blocks.push(i);
-    for (const i of m.rng.shuffle(blocks).slice(0, Math.round(blocks.length * GOLD_RULES.openUp))) {
+    for (let i = 0; i < g.tiles.length; i++) if (g.tiles[i] === TILE.BLOCK && !g.veins.has(i)) blocks.push(i);
+    const share = m.config.map.modes?.includes("gold") ? 0 : GOLD_RULES.openUp;
+    for (const i of m.rng.shuffle(blocks).slice(0, Math.round(blocks.length * share))) {
       g.tiles[i] = TILE.FLOOR;
       g.hiddenBonus[i] = null;
     }
@@ -95,7 +101,17 @@ export class GoldState {
 
   /** Une caisse a sauté (et n'a pas lâché de bonus) : peut-être une pépite. */
   onBlockBroken(x: number, y: number, hadBonus: boolean): void {
-    if (this.m.phase !== "playing" || hadBonus) return;
+    if (this.m.phase !== "playing") return;
+    // filon d'or : grosse pépite garantie, et il repoussera
+    const i = this.m.grid.idx(x, y);
+    if (this.m.grid.veins.has(i)) {
+      const v = this.rush ? GOLD_RULES.bigValue * GOLD_RULES.rushMul : GOLD_RULES.bigValue;
+      this.place(x, y, v);
+      this.veinIn.set(i, GOLD_RULES.veinRegrow);
+      this.m.events.push({ t: "goldSpawn", x, y, value: v, vein: true });
+      return;
+    }
+    if (hadBonus) return;
     if (!this.m.rng.chance(GOLD_RULES.crateDrop)) return;
     const v = this.roll();
     this.place(x, y, v);
@@ -166,6 +182,29 @@ export class GoldState {
           m.events.push({ t: "goldSpawn", x: c[0], y: c[1], value: v });
         }
       }
+    }
+    // filons qui repoussent (case libre : personne, ni bombe, ni pépite, ni feu)
+    for (const [i, left] of this.veinIn) {
+      const t = left - DT;
+      if (t > 0) {
+        this.veinIn.set(i, t);
+        continue;
+      }
+      const x = i % g.w;
+      const y = Math.floor(i / g.w);
+      if (g.tiles[i] !== TILE.FLOOR) {
+        this.veinIn.delete(i);
+        continue;
+      }
+      const busy = this.nuggets.has(i) || g.bombAt[i] >= 0 || g.bonusAt[i] >= 0 || g.fire[i] > 0 || m.players.some((p) => p.alive && Math.floor(p.x) === x && Math.floor(p.y) === y);
+      if (busy) {
+        this.veinIn.set(i, 1);
+        continue;
+      }
+      g.tiles[i] = TILE.BLOCK;
+      g.hiddenBonus[i] = null;
+      this.veinIn.delete(i);
+      m.events.push({ t: "veinRegrow", x, y });
     }
     // réapparitions (ordre tournant : personne ne choisit toujours en premier)
     const n = m.players.length;

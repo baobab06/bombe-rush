@@ -213,7 +213,9 @@ export type SimEvent =
   | { t: "hillMoved"; x: number; y: number; fromX?: number; fromY?: number }
   | { t: "respawn"; player: number; x: number; y: number }
   /** Ruée vers l'or : pépite apparue, ramassée, or perdu (touché), ruée finale */
-  | { t: "goldSpawn"; x: number; y: number; value: number }
+  | { t: "goldSpawn"; x: number; y: number; value: number; vein?: boolean }
+  /** filon d'or qui repousse */
+  | { t: "veinRegrow"; x: number; y: number }
   | { t: "goldPick"; player: number; value: number; x: number; y: number }
   | { t: "goldDrop"; player: number; amount: number; x: number; y: number }
   | { t: "goldRush" }
