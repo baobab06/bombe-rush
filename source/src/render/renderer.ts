@@ -481,6 +481,17 @@ export class Renderer {
           // poussière de mine et paillettes d'or dans la lumière des lanternes
           if (Math.random() < 0.6) P.spawn("glow", x, y, { z: 0.3 + Math.random() * 0.9, vz: 0.04, vx: (Math.random() - 0.5) * 0.2, life: 2.6, size: 0.035, color: Math.random() < 0.4 ? "#ffd23f" : "#e8c89a" });
           break;
+        case "pyramid":
+          // poussière dorée dans la lumière des torches
+          if (Math.random() < 0.5) P.spawn("glow", x, y, { z: 0.3 + Math.random() * 0.9, vz: 0.04, vx: (Math.random() - 0.5) * 0.2, life: 2.4, size: 0.035, color: Math.random() < 0.5 ? "#ffd27a" : "#fff0c0" });
+          break;
+        case "island":
+          if (Math.random() < 0.5) P.spawn("twinkle", x, y, { z: 0.05, life: 0.9, size: 0.07, color: "#fff8d6" });
+          break;
+        case "vault":
+          // reflets métalliques
+          if (Math.random() < 0.35) P.spawn("glow", x, y, { z: 0.4 + Math.random() * 0.8, vz: 0.03, life: 2, size: 0.03, color: Math.random() < 0.5 ? "#cfe2ff" : "#ffe9a8" });
+          break;
         case "western":
           // sable soulevé par le vent
           if (Math.random() < 0.5) P.spawn("smoke", x, y, { z: 0.1, vx: 0.6 + Math.random() * 0.4, life: 1.6, size: 0.08, color: "#f0d29a" });
@@ -649,6 +660,19 @@ export class Renderer {
       const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.28, W / 2, H / 2, Math.max(W, H) * 0.72);
       g.addColorStop(0, `rgba(255,180,90,${0.04 + 0.012 * Math.sin(t * 2.6)})`);
       g.addColorStop(1, "rgba(0,0,0,0.3)");
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, W, H);
+    } else if (theme === "vault") {
+      // salle forte : éclairage froid, vignette
+      const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.3, W / 2, H / 2, Math.max(W, H) * 0.75);
+      g.addColorStop(0, "rgba(160,190,255,0.04)");
+      g.addColorStop(1, "rgba(0,0,0,0.3)");
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, W, H);
+    } else if (theme === "pyramid") {
+      const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.3, W / 2, H / 2, Math.max(W, H) * 0.75);
+      g.addColorStop(0, `rgba(255,170,80,${0.035 + 0.01 * Math.sin(t * 3)})`);
+      g.addColorStop(1, "rgba(40,20,0,0.22)");
       ctx.fillStyle = g;
       ctx.fillRect(0, 0, W, H);
     } else if (theme === "western") {

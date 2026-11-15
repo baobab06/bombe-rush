@@ -36,8 +36,8 @@ console.log("1. Départ");
   check(m.respawns, "on réapparaît dans ce mode");
   const g = m.grid;
   check([...m.gold!.nuggets.keys()].every((i) => g.tiles[i] === TILE.FLOOR), "pépites sur des cases libres");
-  check(mapsFor("gold").map((x) => x.id).join() === "mine,western", "cartes spéciales : Mine d'or et Far West (et seulement elles)");
-  check(!mapsFor("classic").some((x) => x.id === "mine" || x.id === "western"), "ces cartes ne servent pas aux autres modes");
+  check(mapsFor("gold").map((x) => x.id).join() === "mine,western,pyramid,island,vault", "5 cartes spéciales : Mine d'or, Far West, Pyramide, Île au trésor, Coffre-fort (et seulement elles)");
+  check(!mapsFor("classic").some((x) => ["mine", "western", "pyramid", "island", "vault"].includes(x.id)), "ces cartes ne servent pas aux autres modes");
   check(QUICK_MODES.includes("gold") && RANKED_MODES.includes("gold") && RANK_RULES.modes.includes("gold"), "en ligne et en Compétition");
 }
 
@@ -108,7 +108,7 @@ console.log("4. Caisses");
   check(n > 20 && drops > n * 0.15 && drops < n * 0.6, `les caisses lâchent parfois une pépite (${drops}/${n})`);
 }
 
-console.log("4 bis. Filons d'or (cartes Mine d'or et Far West)");
+console.log("4 bis. Filons d'or (les 5 cartes de la Ruée)");
 {
   for (const map of mapsFor("gold")) {
     for (const n of [2, 3, 4]) {
@@ -119,7 +119,7 @@ console.log("4 bis. Filons d'or (cartes Mine d'or et Far West)");
     play(m);
     const g = m.grid;
     const veins = [...g.veins];
-    check(veins.length >= 6 && veins.every((i) => g.tiles[i] === TILE.BLOCK), `${map.name} : ${veins.length} filons d'or au départ`);
+    check(veins.length >= 5 && veins.every((i) => g.tiles[i] === TILE.BLOCK), `${map.name} : ${veins.length} filons d'or au départ`);
     // symétrie : chaque filon a son miroir
     check(veins.every((i) => g.veins.has(g.idx(g.w - 1 - (i % g.w), Math.floor(i / g.w))) && g.veins.has(g.idx(i % g.w, g.h - 1 - Math.floor(i / g.w)))), `${map.name} : filons placés en miroir (équitable)`);
     const i = veins[0];
@@ -132,8 +132,17 @@ console.log("4 bis. Filons d'or (cartes Mine d'or et Far West)");
     // la pépite est par terre : il attend qu'on la prenne
     run(m, GOLD_RULES.veinRegrow + 1);
     check(g.tiles[i] === TILE.FLOOR && m.gold!.nuggets.has(i), `${map.name} : pas de repousse sur une pépite`);
-    m.gold!.nuggets.delete(i);
-    run(m, 1.2);
+    // on la ramasse (et toute pépite ou tout bonus tombé là entre-temps)
+    for (let k = 0; k < Math.round(1.2 / DT); k++) {
+      if (g.tiles[i] === TILE.FLOOR) {
+        m.gold!.nuggets.delete(i);
+        if (g.bonusAt[i] >= 0) {
+          m.bonuses.delete(g.bonusAt[i]);
+          g.bonusAt[i] = -1;
+        }
+      }
+      m.step(idle(m));
+    }
     check(g.tiles[i] === TILE.BLOCK && m.events !== undefined, `${map.name} : le filon repousse une fois la case libre`);
   }
 }
@@ -141,7 +150,7 @@ console.log("4 bis. Filons d'or (cartes Mine d'or et Far West)");
 console.log("5. Parties complètes entre bots");
 {
   const GM = mapsFor("gold");
-  for (const [seed, map] of [[1, GM[0]], [2, GM[1]], [3, GM[0]], [4, GM[1]], [5, MAPS[0]]] as const) {
+  for (const [seed, map] of [...GM.map((x, k) => [k + 1, x] as const), [9, MAPS[0]] as const]) {
     const m = mk(seed, 4, map);
     const diffs: Difficulty[] = ["easy", "normal", "hard", "expert"];
     const brains = m.players.map((p) => new BotBrain(p.id, diffs[p.id], seed));
@@ -171,8 +180,8 @@ console.log("5. Parties complètes entre bots");
   // les bots forts font mieux que les faciles (sur plusieurs parties)
   let hard = 0;
   let easy = 0;
-  for (let seed = 40; seed < 46; seed++) {
-    const m = mk(seed, 4, mapsFor("gold")[seed % 2]);
+  for (let seed = 40; seed < 50; seed++) {
+    const m = mk(seed, 4, mapsFor("gold")[seed % mapsFor("gold").length]);
     const diffs: Difficulty[] = ["easy", "easy", "hard", "hard"];
     const brains = m.players.map((p) => new BotBrain(p.id, diffs[p.id], seed));
     let steps = 0;

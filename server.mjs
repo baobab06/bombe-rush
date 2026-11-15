@@ -2117,6 +2117,84 @@ var WESTERN = {
   modes: ["gold"]
 };
 
+// src/maps/pyramid.ts
+var PYRAMID = {
+  id: "pyramid",
+  name: "Pyramide",
+  subtitle: "Tombeau du pharaon",
+  theme: "pyramid",
+  layout: [
+    "###############",
+    "#.............#",
+    "#.##.##$##.##.#",
+    "#.#..$...$..#.#",
+    "#...#.###.#...#",
+    "#.$..._$_...$.#",
+    "#...#.###.#...#",
+    "#.#..$...$..#.#",
+    "#.##.##$##.##.#",
+    "#.............#",
+    "###############"
+  ],
+  blockDensity: 0.6,
+  spawnClear: 1,
+  startRange: 1,
+  available: true,
+  modes: ["gold"]
+};
+
+// src/maps/island.ts
+var ISLAND = {
+  id: "island",
+  name: "Île au trésor",
+  subtitle: "Repaire des pirates",
+  theme: "island",
+  layout: [
+    "###############",
+    "#...~$...$~...#",
+    "#.#.~.#.#.~.#.#",
+    "#..._..$.._...#",
+    "#.#.~.#.#.~.#.#",
+    "#.$.~._$_.~.$.#",
+    "#.#.~.#.#.~.#.#",
+    "#..._..$.._...#",
+    "#.#.~.#.#.~.#.#",
+    "#...~$...$~...#",
+    "###############"
+  ],
+  blockDensity: 0.55,
+  spawnClear: 1,
+  startRange: 1,
+  available: true,
+  modes: ["gold"]
+};
+
+// src/maps/vault.ts
+var VAULT = {
+  id: "vault",
+  name: "Coffre-fort",
+  subtitle: "Salle des lingots",
+  theme: "vault",
+  layout: [
+    "#############",
+    "#.....$.....#",
+    "#.#_#.#.#_#.#",
+    "#.._.$.$._..#",
+    "#.#.#####.#.#",
+    "#$..._$_...$#",
+    "#.#.#####.#.#",
+    "#.._.$.$._..#",
+    "#.#_#.#.#_#.#",
+    "#.....$.....#",
+    "#############"
+  ],
+  blockDensity: 0.6,
+  spawnClear: 1,
+  startRange: 1,
+  available: true,
+  modes: ["gold"]
+};
+
 // src/maps/temple.ts
 var TEMPLE = {
   id: "temple",
@@ -2169,7 +2247,7 @@ var VOLCANO = {
 };
 
 // src/maps/index.ts
-var MAPS = [FOREST, VOLCANO, ICE, BEACH, LABYRINTH, TEMPLE, CASTLE, FACTORY, MINE, WESTERN];
+var MAPS = [FOREST, VOLCANO, ICE, BEACH, LABYRINTH, TEMPLE, CASTLE, FACTORY, MINE, WESTERN, PYRAMID, ISLAND, VAULT];
 var DEFAULT_MODES = ["classic", "chaos"];
 function mapAllows(map, modeId) {
   return (map.modes ?? DEFAULT_MODES).includes(modeId);

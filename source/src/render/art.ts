@@ -6,7 +6,7 @@ import { TERRAIN } from "../core/types";
 import { LIFT, drawBorderTree, drawBush, drawCrate, drawGrassTile, drawStone, hash } from "./sprites";
 import { LABYRINTH_HD } from "./maps-hd";
 import { FACTORY_HD } from "./maps-factory";
-import { MINE_ART, WESTERN_ART } from "./maps-gold";
+import { ISLAND_ART, MINE_ART, PYRAMID_ART, VAULT_ART, WESTERN_ART } from "./maps-gold";
 import { THEMES, type Theme } from "./themes";
 
 type Ctx = CanvasRenderingContext2D;
@@ -558,7 +558,7 @@ const BEACH: Art = {
 
 
 // temple / castle : décors provisoires en attendant leurs images (cartes Domination)
-const ARTS: Record<string, Art> = { forest: FOREST, volcano: VOLCANO, ice: ICE, beach: BEACH, labyrinth: LABYRINTH_HD, temple: FOREST, castle: ICE, factory: FACTORY_HD, mine: MINE_ART, western: WESTERN_ART };
+const ARTS: Record<string, Art> = { forest: FOREST, volcano: VOLCANO, ice: ICE, beach: BEACH, labyrinth: LABYRINTH_HD, temple: FOREST, castle: ICE, factory: FACTORY_HD, mine: MINE_ART, western: WESTERN_ART, pyramid: PYRAMID_ART, island: ISLAND_ART, vault: VAULT_ART };
 
 
 export function getArt(id: string): Art {

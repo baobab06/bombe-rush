@@ -43,7 +43,7 @@ console.log("1. JOUER : recherche de vrais joueurs");
   check(mm.size === 0 && !!a.room && a.room === b.room, "8 s : la partie démarre avec les 2 joueurs");
   const room = lobby.rooms.get(a.room!)!;
   check(!!room.game && room.quick === true && room.fillBots && room.comp === true, "Compétition en ligne lancée tout de suite, bots en renfort");
-  check(["classic", "chaos", "koth"].includes(room.modeId), "mode tiré au hasard : " + room.modeId);
+  check(["classic", "chaos", "koth", "gold"].includes(room.modeId), "mode tiré au hasard : " + room.modeId);
   const rv = last("a", "room") as { room: { quick?: boolean; comp?: boolean } };
   check(rv.room.quick === true && rv.room.comp === true, "le client sait que c'est une Compétition sans salon");
   check(!!last("a", "matchStart") && !!last("b", "matchStart"), "les deux reçoivent le début de partie");
