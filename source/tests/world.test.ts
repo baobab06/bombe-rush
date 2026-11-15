@@ -32,7 +32,7 @@ function play(seed: number, modeId: string, diffs: Difficulty | Difficulty[], bo
   const pilot = new BotBrain(0, skill, seed * 7 + 1);
   const m = s.match;
   // le jeu s'arrête d'enregistrer quand l'issue est connue (mort, ou fin de partie)
-  while (!((!m.players[0].alive && !m.hill) || m.phase === "over") && m.tick < 60 * 60 * 6) s.step(pilot.update(m, DT));
+  while (!((!m.players[0].alive && !m.respawns) || m.phase === "over") && m.tick < 60 * 60 * 6) s.step(pilot.update(m, DT));
   const spec: RankedSpec = { seed, mapId: map.id, modeId, players: players.map((p) => ({ characterId: p.characterId, isBot: p.isBot, ...(p.isBot ? { difficulty: p.difficulty } : {}) })) };
   return { spec, log: s.recorder.log, ticks: s.recorder.ticks, local: outcomeOf(m, 0) };
 }
@@ -41,7 +41,7 @@ console.log("Rejeu à l'identique");
 let same = 0;
 let total = 0;
 const games: ReturnType<typeof play>[] = [];
-for (const mode of ["classic", "chaos", "koth"])
+for (const mode of ["classic", "chaos", "koth", "gold"])
   for (let k = 0; k < 4; k++) {
     const g = play(500 + k * 13 + mode.length, mode, (["easy", "normal", "hard", "expert"] as Difficulty[])[k], mode === "koth" ? 3 : 1 + (k % 3));
     games.push(g);
@@ -49,7 +49,7 @@ for (const mode of ["classic", "chaos", "koth"])
     total++;
     if (r.complete && r.ticks === g.ticks && r.place === g.local.place && r.won === g.local.won && r.draw === g.local.draw) same++;
   }
-check(same === total, `le serveur retrouve exactement la même issue (${same}/${total} parties, 3 modes, 4 difficultés)`);
+check(same === total, `le serveur retrouve exactement la même issue (${same}/${total} parties, 4 modes, 4 difficultés)`);
 const g0 = games[0];
 check(g0.log.length < g0.ticks * 4, `journal compressé (${g0.ticks} images → ${g0.log.length} nombres)`);
 
@@ -73,7 +73,7 @@ console.log("Serveur : Compétition, trophées, triche");
   // joueur A
   const tA = (await svc.ticket({ name: "Alice<b>", comp: 2 }, ok)) as T;
   check(!!tA.id && !!tA.secret && Number.isInteger(tA.seed), "premier ticket : identifiant + clé secrète + graine choisie par le serveur");
-  check(["classic", "chaos", "koth"].includes(tA.modeId) && tA.bots.length === 3 && tA.bots.every((d) => d === "easy"), `mode tiré au hasard par le serveur (${tA.modeId}), 3 adversaires faciles à 0 trophée`);
+  check(["classic", "chaos", "koth", "gold"].includes(tA.modeId) && tA.bots.length === 3 && tA.bots.every((d) => d === "easy"), `mode tiré au hasard par le serveur (${tA.modeId}), 3 adversaires faciles à 0 trophée`);
   const gA = play(tA.seed, tA.modeId, tA.bots, 3, "expert");
   now += gA.ticks * DT * 1000 + 2000;
   const rA = (await svc.submit({ id: tA.id, secret: tA.secret, ticket: tA.ticket, name: "Alice<b>", ...gA })) as { ok: boolean; delta: number; place: number; points: number };
