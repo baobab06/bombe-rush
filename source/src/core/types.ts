@@ -219,6 +219,10 @@ export type SimEvent =
   | { t: "goldPick"; player: number; value: number; x: number; y: number }
   | { t: "goldDrop"; player: number; amount: number; x: number; y: number }
   | { t: "goldRush" }
+  /** Aventure : le boss perd un cœur */
+  | { t: "bossHit"; player: number; hp: number; killer: number; x: number; y: number }
+  /** Aventure : objectif réussi ou raté */
+  | { t: "advDone"; won: boolean }
   | { t: "eruption"; x: number; y: number }
   | { t: "matchEnd"; winner: number };
 

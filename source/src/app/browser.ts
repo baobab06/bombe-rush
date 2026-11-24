@@ -194,7 +194,7 @@ export class ItemBrowser {
           deal: pr.deal,
           affordable: p.coins >= pr.price || (!!pr.bombers && p.bombers >= pr.bombers),
           bombers: this.mode === "shop" && !it.exclusive ? pr.bombers : undefined,
-          sub: it.exclusive && !own ? (it.exclusive === "rank" ? "🏆 Compétition" : it.exclusive === "pass" ? "⭐ Pass" : "🔒 Exclusif") : it.kind === "skin" && (this.tab === "featured" || this.mode === "collection") ? getCharacter(it.characterId!).name : undefined,
+          sub: it.exclusive && !own ? (it.exclusive === "rank" ? "🏆 Compétition" : it.exclusive === "pass" ? "⭐ Pass" : it.exclusive === "adventure" ? "🗺️ Aventure" : "🔒 Exclusif") : it.kind === "skin" && (this.tab === "featured" || this.mode === "collection") ? getCharacter(it.characterId!).name : undefined,
           isNew: !!feat && !p.seen.includes(it.id) && !it.free,
           dim: this.mode === "collection" ? undefined : false,
           big: !!feat && i === 0,

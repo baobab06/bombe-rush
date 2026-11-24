@@ -10,7 +10,7 @@ import { NO_INPUT, type Difficulty, type PlayerSlot, type SimEvent } from "../co
 import { Controls } from "../input/controls";
 import { getMap, pickMap, RANDOM_MAP } from "../maps";
 import { TRAINING } from "../maps/training";
-import type { Match } from "../core/match";
+import type { Match, MatchConfig } from "../core/match";
 import { LocalSession, type GameSession } from "../net/session";
 import { InputRecorder, type RankedSpec } from "../net/replay";
 import { haptics } from "../platform/haptics";
@@ -185,7 +185,20 @@ export class GameScreen {
   }
 
   // ------------------------------------------------------------- parties
+  /** niveau d'Aventure en cours (pas de mise, pas de classement) */
+  adventure: MatchConfig | null = null;
+
+  /** Niveau du mode Aventure : le joueur est toujours le joueur 0. */
+  startAdventure(cfg: MatchConfig) {
+    this.demo = false;
+    this.training = false;
+    this.setup = null;
+    this.adventure = cfg;
+    this.attach(new LocalSession(cfg, 0), 0);
+  }
+
   startDemo() {
+    this.adventure = null;
     this.demo = true;
     this.training = false;
     const ids = [...CHARACTERS].sort(() => Math.random() - 0.5).slice(0, 4).map((c) => c.id);
@@ -196,6 +209,7 @@ export class GameScreen {
   }
 
   start(setup: GameSetup) {
+    this.adventure = null;
     this.demo = false;
     this.training = false;
     this.setup = setup;
@@ -227,7 +241,8 @@ export class GameScreen {
   }
 
   restart() {
-    if (this.training && this.trainingSlot) this.startTraining(this.trainingSlot);
+    if (this.adventure) this.startAdventure({ ...this.adventure, seed: (Math.random() * 1e9) | 0 });
+    else if (this.training && this.trainingSlot) this.startTraining(this.trainingSlot);
     else if (this.setup) this.start(this.setup);
   }
 
@@ -237,6 +252,7 @@ export class GameScreen {
    * les vraies règles du jeu (mode « training », core/training.ts).
    */
   startTraining(me: PlayerSlot) {
+    this.adventure = null;
     this.demo = false;
     this.training = true;
     this.setup = null;
@@ -256,6 +272,7 @@ export class GameScreen {
 
   /** Partie en ligne : la simulation fait autorité sur le serveur. */
   startOnline(session: GameSession) {
+    this.adventure = null;
     this.demo = false;
     this.training = false;
     this.setup = null;
@@ -535,7 +552,7 @@ export class GameScreen {
 
   /** Partie réelle en cours dont l'issue n'est pas encore connue. */
   get live(): boolean {
-    return !!this.session && !this.demo && !this.training && !this.result;
+    return !!this.session && !this.demo && !this.training && !this.adventure && !this.result;
   }
 
   /** Identifiant unique de la partie (sert à ne la régler qu'une fois). */
@@ -813,7 +830,7 @@ export class GameScreen {
     if (!s || this.demo) return null;
     const m = s.match;
     const me = m.players[s.localPlayer];
-    const tl = m.phase === "countdown" ? RULES.matchDuration : m.timeLeft;
+    const tl = m.phase === "countdown" ? m.duration : m.timeLeft;
     const mm = Math.floor(tl / 60);
     const ss = Math.floor(tl % 60);
     const watched = this.spectating ? m.players[this.watchId] : undefined;
@@ -832,6 +849,19 @@ export class GameScreen {
           }
         : null,
       players: m.players.map((p) => ({ color: lookOf(p.characterId, p.skinId).palette.main, alive: p.alive, me: p.id === me.id, name: p.name })),
+      /** Aventure : objectif, avancement, cœurs du boss */
+      adv: m.adv
+        ? {
+            goal: m.adv.rules.goal,
+            progress: m.adv.progress(),
+            bossHp: m.adv.bossHp,
+            bossMax: m.adv.rules.boss?.hp ?? 0,
+            bossName: m.adv.bossId >= 0 ? m.players[m.adv.bossId].name : "",
+            time: Math.floor(m.time),
+            stars: m.adv.rules.stars,
+            kills: me.stats.kills,
+          }
+        : null,
       /** Roi de la colline : points de chacun, qui marque, réapparition du joueur */
       hill: m.hill
         ? {

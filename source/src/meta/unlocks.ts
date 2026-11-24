@@ -22,6 +22,7 @@ export function unlockText(id: string): string {
   for (const a of ACHIEVEMENTS) if (hasItem(a.reward, id)) return `Succès « ${a.name} »`;
   for (const st of STEPS) if (hasItem(st.reward, id)) return `Atteins ${st.name} en Compétition`;
   for (const r of RANKS) if (hasItem(r.reward, id)) return `Atteins le rang ${r.name}`;
+  if (it.exclusive === "adventure") return it.desc || "Mode Aventure";
   if (it.exclusive === "pass") {
     const t = passTrack();
     const hit = (r: Reward | null) => !!r && ((r.kind === "item" && r.id === id) || (r.kind === "theme" && it.kind === "skin" && it.theme === r.id));

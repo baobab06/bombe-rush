@@ -2,6 +2,7 @@
  * Profil joueur sauvegardé localement. Le format est versionné pour
  * permettre les migrations (et plus tard une synchro serveur).
  */
+import { defaultAdv, type AdvState } from "./adventure";
 import { DEFAULT_BOOM, DEFAULT_EMOTES, DEFAULT_TITLE, DEFAULT_TRAIL } from "../core/cosmetics";
 import type { ChestTier } from "./progress-config";
 
@@ -107,6 +108,8 @@ export interface Profile {
   chests: Record<ChestTier, number>;
   /** Pass de saison */
   pass: PassState;
+  /** mode Aventure : étoiles, records, paliers */
+  adv: AdvState;
   /** rang compétitif local */
   rank: { points: number; best: number; bestPoints?: number; rewarded: string[]; history: RankEntry[]; season?: number; /** saison en cours (mois UTC) */ month?: string; /** saison précédente */ last?: { month: string; points: number } };
   stats: ExtraStats;
@@ -176,6 +179,7 @@ export function defaultProfile(): Profile {
     missions: { day: "", list: [] },
     weekly: { week: "", list: [] },
     pass: defaultPass(),
+    adv: defaultAdv(),
     mastery: {},
     achievements: {},
     chests: { common: 0, rare: 0, epic: 0, legend: 0 },

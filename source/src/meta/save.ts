@@ -1,3 +1,4 @@
+import { ADV_LEVELS, ADV_MILESTONES } from "./adventure";
 import { CHARACTERS } from "../core/characters";
 import { EMOTE_SLOTS, getBoom, getEmote, getTitle, getTrail } from "../core/cosmetics";
 import { CHEST_ORDER, LEVEL_MAX, levelXp, MASTERY_MAX, masteryXp, RANK_RULES } from "./progress-config";
@@ -69,6 +70,7 @@ export function migrate(data: Partial<Profile> & { ownedSkins?: string[]; versio
     achievements: { ...(data.achievements ?? {}) },
     chests: { ...base.chests, ...(data.chests ?? {}) },
     pass: { ...base.pass, ...(data.pass ?? {}) },
+    adv: { ...base.adv, ...(data.adv ?? {}) },
     rank: { ...base.rank, ...(data.rank ?? {}) },
     stats: { ...base.stats, ...(data.stats ?? {}) },
     clock: { ...base.clock, ...(data.clock ?? {}) },
@@ -133,6 +135,15 @@ export function migrate(data: Partial<Profile> & { ownedSkins?: string[]; versio
   p.pass.season = typeof p.pass.season === "string" ? p.pass.season.slice(0, 32) : "";
   const tiers = (v: unknown) => (Array.isArray(v) ? [...new Set(v.filter((t) => Number.isInteger(t) && t >= 1 && t <= 100))] : []);
   p.pass.free = tiers(p.pass.free);
+  // aventure : étoiles 0-3 par niveau connu, records positifs, paliers connus
+  const advIds = new Set(ADV_LEVELS.map((l) => l.id));
+  const st: Record<string, number> = {};
+  const best: Record<string, number> = {};
+  for (const [k, v] of Object.entries(p.adv.stars ?? {})) if (advIds.has(k)) st[k] = Math.max(0, Math.min(3, Math.floor(Number(v) || 0)));
+  for (const [k, v] of Object.entries(p.adv.best ?? {})) if (advIds.has(k) && Number(v) > 0) best[k] = Math.min(999, Number(v));
+  p.adv.stars = st;
+  p.adv.best = best;
+  p.adv.claimed = Array.isArray(p.adv.claimed) ? [...new Set(p.adv.claimed.filter((n) => ADV_MILESTONES.some((m) => m.stars === n)))] : [];
   p.pass.prem = tiers(p.pass.prem);
   // nouveau mode Compétition (trophées) : tout le monde repart de 0, une seule fois
   if (data.rank?.season !== RANK_RULES.season) {

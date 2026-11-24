@@ -119,7 +119,7 @@ export interface BoomDef {
   bomb: BombLook;
   free?: boolean;
   /** objet exclusif (non vendu) : comment il se débloque */
-  exclusive?: "mastery" | "achievement" | "level" | "chest" | "rank" | "pass";
+  exclusive?: "mastery" | "achievement" | "level" | "chest" | "rank" | "pass" | "adventure";
 }
 export interface BombLook {
   body: [string, string];
@@ -155,7 +155,7 @@ export interface TitleDef {
   rarity: Rarity;
   desc: string;
   free?: boolean;
-  exclusive?: "mastery" | "achievement" | "level" | "chest" | "rank" | "pass";
+  exclusive?: "mastery" | "achievement" | "level" | "chest" | "rank" | "pass" | "adventure";
 }
 export const TITLES: TitleDef[] = [
   { id: "title-rookie", name: "Petit nouveau", rarity: "common", desc: "Tout le monde commence quelque part.", free: true },
@@ -181,6 +181,10 @@ export const TITLES: TitleDef[] = [
   // ❄️ Pass de saison Hiver
   { id: "title-winter", name: "Roi de l'hiver", rarity: "legend", desc: "Pass de saison Hiver (palier 80, Premium).", exclusive: "pass" },
   { id: "title-frosty", name: "Givré", rarity: "rare", desc: "Pass de saison Hiver (palier 50, gratuit).", exclusive: "pass" },
+  // 🗺️ Aventure
+  { id: "title-explorer", name: "Explorateur", rarity: "rare", desc: "Aventure : 30 étoiles.", exclusive: "adventure" },
+  { id: "title-bossbuster", name: "Chasseur de boss", rarity: "epic", desc: "Aventure : bats Drako le Dragon.", exclusive: "adventure" },
+  { id: "title-hero", name: "Héros de l'aventure", rarity: "legend", desc: "Aventure : les 120 étoiles.", exclusive: "adventure" },
   // maîtrise : 3 titres par personnage
   ...CHARACTERS.flatMap((c): TitleDef[] => [
     { id: `title-m10-${c.id}`, name: `${c.name} confirmé`, rarity: "rare", desc: `Maîtrise ${c.name} niveau 10.`, exclusive: "mastery" },

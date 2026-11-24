@@ -18,7 +18,7 @@ const $ = (id: string) => document.getElementById(id)!;
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 
 /** Icône + texte court d'une récompense de palier. */
-function cellOf(r: Reward): { ic: string; lb: string; rare?: boolean } {
+export function cellOf(r: Reward): { ic: string; lb: string; rare?: boolean } {
   switch (r.kind) {
     case "coins":
       return { ic: "🪙", lb: `${fmt(r.amount)} pièces` };

@@ -3220,6 +3220,127 @@ class BotBrain {
   }
 }
 
+// src/core/adventure.ts
+var BOSS_SHIELD = 2.2;
+
+class AdventureState {
+  m;
+  rules;
+  won = false;
+  lost = false;
+  why = "";
+  doneAt = 0;
+  bossHp = 0;
+  bossId = -1;
+  constructor(m, rules) {
+    this.m = m;
+    this.rules = rules;
+    const b = rules.boss;
+    if (b && m.players.length > 1) {
+      this.bossId = 1;
+      this.bossHp = b.hp;
+      const p = m.players[1];
+      p.maxBombs = b.bombs;
+      p.range = b.range;
+      p.speed += b.speed ?? 0;
+    }
+  }
+  get done() {
+    return this.won || this.lost;
+  }
+  get duration() {
+    return this.rules.duration;
+  }
+  progress() {
+    const m = this.m;
+    const r = this.rules;
+    const me = m.players[0];
+    switch (r.goal) {
+      case "crates":
+        return [Math.min(r.target ?? 0, me.stats.blocksDestroyed), r.target ?? 0];
+      case "gold":
+        return [Math.min(r.target ?? 0, m.gold?.points(0) ?? 0), r.target ?? 0];
+      case "survive":
+        return [Math.min(r.target ?? r.duration, Math.floor(m.time)), r.target ?? r.duration];
+      case "boss":
+        return [(r.boss?.hp ?? 0) - this.bossHp, r.boss?.hp ?? 0];
+      default: {
+        const foes = m.players.length - 1;
+        return [m.players.filter((p) => p.id !== 0 && !p.alive).length, foes];
+      }
+    }
+  }
+  stars() {
+    if (!this.won)
+      return 0;
+    const [s2, s3] = this.rules.stars;
+    if (this.rules.goal === "survive") {
+      const k = this.m.players[0].stats.kills;
+      return k >= s3 ? 3 : k >= s2 ? 2 : 1;
+    }
+    return this.doneAt <= s3 ? 3 : this.doneAt <= s2 ? 2 : 1;
+  }
+  absorb(p, killer) {
+    if (p.id !== this.bossId || this.bossHp <= 1) {
+      if (p.id === this.bossId)
+        this.bossHp = 0;
+      return false;
+    }
+    this.bossHp--;
+    p.shieldTime = BOSS_SHIELD;
+    p.stunTime = 0;
+    p.toxDose = 0;
+    this.m.events.push({ t: "bossHit", player: p.id, hp: this.bossHp, killer, x: p.x, y: p.y });
+    return true;
+  }
+  update() {
+    if (this.done || this.m.phase !== "playing")
+      return;
+    const m = this.m;
+    const r = this.rules;
+    const me = m.players[0];
+    const finish = (won, why = "") => {
+      this.won = won;
+      this.lost = !won;
+      this.why = why;
+      this.doneAt = m.time;
+      m.events.push({ t: "advDone", won });
+    };
+    if (!me.alive && !m.gold)
+      return finish(false, "dead");
+    const [cur, goal] = this.progress();
+    switch (r.goal) {
+      case "crates":
+      case "gold":
+        if (cur >= goal)
+          return finish(true);
+        if (r.goal === "crates" && !this.cratesLeft())
+          return finish(cur >= goal);
+        break;
+      case "survive":
+        if (m.time >= goal)
+          return finish(true);
+        break;
+      case "boss":
+        if (!m.players[this.bossId]?.alive)
+          return finish(true);
+        break;
+      default:
+        if (m.players.every((p) => p.id === 0 || !p.alive))
+          return finish(true);
+    }
+    if (m.time >= r.duration)
+      finish(false, "time");
+  }
+  cratesLeft() {
+    const g = this.m.grid;
+    for (let i = 0;i < g.tiles.length; i++)
+      if (g.tiles[i] === TILE.BLOCK && !g.veins.has(i))
+        return true;
+    return false;
+  }
+}
+
 // src/core/bonuses.ts
 var SPECIAL_TEXT = {
   throw: "Ta prochaine bombe peut être lancée à 3 cases (bouton LANCER).",
@@ -3769,6 +3890,7 @@ class Match {
   winnerId = -1;
   events = [];
   suddenDeath = false;
+  adv = null;
   sdOrder = [];
   sdIndex = 0;
   sdTimer = 0;
@@ -3863,6 +3985,8 @@ class Match {
         if (this.grid.terrainAt(x, y) === TERRAIN.VENT)
           this.vents.push([x, y, this.vents.length * RULES.ventStagger]);
     this.mode.onStart?.(this);
+    if (config.adventure)
+      this.adv = new AdventureState(this, config.adventure);
     this.specials = new SpecialSpawner(this, this.mode.specials ?? {});
     if (this.mode.specials === null)
       this.specials.disabled = true;
@@ -3902,8 +4026,11 @@ class Match {
   get isOver() {
     return this.phase === "over";
   }
+  get duration() {
+    return this.adv?.duration ?? RULES.matchDuration;
+  }
   get timeLeft() {
-    return Math.max(0, RULES.matchDuration - this.time);
+    return Math.max(0, this.duration - this.time);
   }
   get respawns() {
     return !!(this.hill || this.gold);
@@ -3940,6 +4067,7 @@ class Match {
     this.updateSuddenDeath();
     this.updateVents();
     this.mode.onTick?.(this, DT);
+    this.adv?.update();
     this.updateEnd();
   }
   playerTile(p) {
@@ -4647,6 +4775,8 @@ class Match {
   kill(p, killer) {
     if (!p.alive)
       return;
+    if (this.adv?.absorb(p, killer))
+      return;
     p.alive = false;
     p.moving = false;
     p.deathTime = this.time;
@@ -4685,7 +4815,7 @@ class Match {
     this.sdOrder = out.filter(([x, y]) => this.grid.tile(x, y) !== TILE.WALL && !this.grid.isHazard(x, y));
   }
   updateSuddenDeath() {
-    if (this.mode.suddenDeath === false)
+    if (this.mode.suddenDeath === false || this.adv)
       return;
     if (!this.suddenDeath && this.timeLeft <= RULES.suddenDeathAt) {
       this.suddenDeath = true;
@@ -4823,7 +4953,7 @@ class Match {
   }
   upcomingDrops(horizon) {
     const out = [];
-    if (this.mode.suddenDeath === false)
+    if (this.mode.suddenDeath === false || this.adv)
       return out;
     if (!this.suddenDeath && this.timeLeft - horizon > RULES.suddenDeathAt)
       return out;
@@ -4871,6 +5001,14 @@ class Match {
     if (this.mode.endless)
       return;
     if (this.phase === "playing") {
+      if (this.adv) {
+        if (this.adv.done) {
+          this.endOfRoundCleanup();
+          this.phase = "ending";
+          this.endTimer = RULES.endDelay;
+        }
+        return;
+      }
       const done = this.hill ? this.hill.reached || this.timeLeft <= 0 : this.gold ? this.timeLeft <= 0 : this.aliveCount <= 1 || this.timeLeft <= 0;
       if (done) {
         this.endOfRoundCleanup();
@@ -4916,7 +5054,7 @@ class Match {
     const alive = this.players.filter((p) => p.alive);
     for (const p of alive)
       p.stats.survivalTime = this.time;
-    this.winnerId = this.hill ? this.hill.leader() : this.gold ? this.gold.leader() : alive.length === 1 ? alive[0].id : -1;
+    this.winnerId = this.adv ? this.adv.won ? 0 : -1 : this.hill ? this.hill.leader() : this.gold ? this.gold.leader() : alive.length === 1 ? alive[0].id : -1;
     for (const st of this.standings())
       this.players[st.id].place = st.place;
     this.events.push({ t: "matchEnd", winner: this.winnerId });
@@ -6508,6 +6646,9 @@ var TITLES = [
   { id: "title-king", name: "Roi de la mèche", rarity: "legend", desc: "Trouvé uniquement dans les coffres.", exclusive: "chest" },
   { id: "title-winter", name: "Roi de l'hiver", rarity: "legend", desc: "Pass de saison Hiver (palier 80, Premium).", exclusive: "pass" },
   { id: "title-frosty", name: "Givré", rarity: "rare", desc: "Pass de saison Hiver (palier 50, gratuit).", exclusive: "pass" },
+  { id: "title-explorer", name: "Explorateur", rarity: "rare", desc: "Aventure : 30 étoiles.", exclusive: "adventure" },
+  { id: "title-bossbuster", name: "Chasseur de boss", rarity: "epic", desc: "Aventure : bats Drako le Dragon.", exclusive: "adventure" },
+  { id: "title-hero", name: "Héros de l'aventure", rarity: "legend", desc: "Aventure : les 120 étoiles.", exclusive: "adventure" },
   ...CHARACTERS.flatMap((c) => [
     { id: `title-m10-${c.id}`, name: `${c.name} confirmé`, rarity: "rare", desc: `Maîtrise ${c.name} niveau 10.`, exclusive: "mastery" },
     { id: `title-m20-${c.id}`, name: `As de ${c.name}`, rarity: "epic", desc: `Maîtrise ${c.name} niveau 20.`, exclusive: "mastery" },
@@ -7543,6 +7684,133 @@ var announce_default = {
   }
 };
 
+// src/meta/adventure.ts
+var W = [
+  {
+    name: "Forêt enchantée",
+    emoji: "\uD83C\uDF32",
+    sky: ["#7fd6ff", "#c9f3ff"],
+    ground: "#5fbf4a",
+    coins: 50,
+    chest: "rare",
+    rows: [
+      ["crates", "forest", [], 60, 8, [35, 22]],
+      ["win", "forest", ["easy"], 120, 0, [70, 40]],
+      ["gold", "forest", ["easy"], 90, 12, [60, 40]],
+      ["crates", "forest", ["easy"], 90, 14, [60, 40]],
+      ["win", "labyrinth", ["easy", "easy"], 120, 0, [80, 50]],
+      ["survive", "forest", ["easy", "easy"], 45, 45, [1, 2], "chaos"],
+      ["gold", "mine", ["easy", "easy"], 100, 20, [70, 45]],
+      ["win", "forest", ["easy", "easy", "easy"], 150, 0, [90, 60]],
+      ["crates", "forest", ["easy", "easy"], 100, 18, [70, 50]]
+    ],
+    boss: { map: "forest", characterId: "bruno", name: "Bruno le Colosse", difficulty: "normal", rules: { hp: 3, bombs: 3, range: 3, speed: 0.2 }, minions: [], stars: [80, 50] }
+  },
+  {
+    name: "Plage aux trésors",
+    emoji: "\uD83C\uDFD6️",
+    sky: ["#5ec8ff", "#bff0ff"],
+    ground: "#f2d48a",
+    coins: 75,
+    chest: "epic",
+    rows: [
+      ["win", "beach", ["normal"], 120, 0, [60, 35]],
+      ["gold", "island", ["easy", "normal"], 100, 20, [65, 45]],
+      ["crates", "beach", ["normal"], 90, 18, [60, 40]],
+      ["survive", "beach", ["normal", "easy"], 60, 60, [1, 2], "chaos"],
+      ["win", "beach", ["normal", "normal"], 120, 0, [80, 50]],
+      ["gold", "island", ["normal", "normal"], 110, 28, [80, 55]],
+      ["crates", "beach", ["normal", "normal"], 100, 20, [75, 50]],
+      ["win", "beach", ["normal", "normal", "easy"], 150, 0, [90, 60]],
+      ["survive", "island", ["normal", "normal", "normal"], 75, 75, [1, 3], "chaos"]
+    ],
+    boss: { map: "beach", characterId: "rainette", skinId: "rainette-royale", name: "Reine Rainette", difficulty: "normal", rules: { hp: 4, bombs: 3, range: 4, speed: 0.25 }, minions: [], stars: [90, 55] }
+  },
+  {
+    name: "Banquise glacée",
+    emoji: "❄️",
+    sky: ["#9fd8ff", "#eef8ff"],
+    ground: "#dff2ff",
+    coins: 100,
+    chest: "epic",
+    rows: [
+      ["win", "ice", ["hard"], 120, 0, [60, 35]],
+      ["crates", "ice", ["normal"], 90, 20, [65, 45]],
+      ["gold", "ice", ["normal", "hard"], 100, 25, [70, 50]],
+      ["survive", "ice", ["hard", "normal"], 60, 60, [1, 2], "chaos"],
+      ["win", "castle", ["hard", "normal"], 150, 0, [80, 50]],
+      ["gold", "pyramid", ["hard", "hard"], 110, 30, [80, 55]],
+      ["crates", "ice", ["hard"], 100, 22, [75, 50]],
+      ["win", "ice", ["hard", "normal", "normal"], 150, 0, [95, 65]],
+      ["survive", "castle", ["hard", "hard", "hard"], 75, 75, [1, 3], "chaos"]
+    ],
+    boss: { map: "ice", characterId: "pingo", name: "Pingo l'Impitoyable", difficulty: "hard", rules: { hp: 4, bombs: 4, range: 4, speed: 0.3 }, minions: ["easy"], stars: [100, 65] }
+  },
+  {
+    name: "Volcan infernal",
+    emoji: "\uD83C\uDF0B",
+    sky: ["#3a1530", "#ff7a3c"],
+    ground: "#5a2a22",
+    coins: 150,
+    chest: "legend",
+    rows: [
+      ["win", "volcano", ["expert"], 120, 0, [60, 35]],
+      ["gold", "vault", ["hard", "expert"], 100, 28, [75, 50]],
+      ["crates", "volcano", ["hard"], 100, 20, [70, 50]],
+      ["survive", "volcano", ["expert", "hard"], 60, 60, [1, 2], "chaos"],
+      ["win", "temple", ["expert", "hard"], 150, 0, [80, 55]],
+      ["gold", "western", ["expert", "expert"], 110, 32, [85, 60]],
+      ["crates", "volcano", ["hard", "normal"], 110, 18, [80, 55]],
+      ["win", "factory", ["expert", "expert", "hard"], 150, 0, [100, 70]],
+      ["survive", "volcano", ["expert", "expert", "expert"], 90, 90, [1, 3], "chaos"]
+    ],
+    boss: { map: "volcano", characterId: "drako", name: "Drako le Dragon", difficulty: "normal", rules: { hp: 5, bombs: 4, range: 5, speed: 0.3 }, minions: [], stars: [110, 70] }
+  }
+];
+var ADV_WORLDS = W.map((w, wi) => {
+  const world = wi + 1;
+  const levels = w.rows.map((r, i) => {
+    const [goal, mapId, bots, duration, target, stars, mode] = r;
+    return {
+      id: `${world}-${i + 1}`,
+      world,
+      n: i + 1,
+      goal,
+      mapId,
+      bots,
+      modeId: goal === "gold" ? "gold" : mode === "chaos" ? "chaos" : "classic",
+      rules: { goal, duration, target: target || undefined, stars }
+    };
+  });
+  const b = w.boss;
+  levels.push({
+    id: `${world}-10`,
+    world,
+    n: 10,
+    goal: "boss",
+    mapId: b.map,
+    bots: b.minions,
+    modeId: "classic",
+    rules: { goal: "boss", duration: 180, stars: b.stars, boss: b.rules },
+    boss: { characterId: b.characterId, skinId: b.skinId, name: b.name, difficulty: b.difficulty }
+  });
+  return { n: world, name: w.name, emoji: w.emoji, sky: w.sky, ground: w.ground, levels, coins: w.coins, bossChest: w.chest };
+});
+var ADV_LEVELS = ADV_WORLDS.flatMap((w) => w.levels);
+var ADV_MAX_STARS = ADV_LEVELS.length * 3;
+var ADV_MILESTONES = [
+  { stars: 10, reward: { kind: "chest", tier: "rare" } },
+  { stars: 20, reward: { kind: "coins", amount: 300 } },
+  { stars: 30, reward: { kind: "item", id: "title-explorer" } },
+  { stars: 45, reward: { kind: "chest", tier: "epic" } },
+  { stars: 60, reward: { kind: "bombers", amount: 30 } },
+  { stars: 75, reward: { kind: "chest", tier: "epic" } },
+  { stars: 90, reward: { kind: "coins", amount: 1000 } },
+  { stars: 105, reward: { kind: "chest", tier: "legend" } },
+  { stars: 120, reward: { kind: "item", id: "title-hero" } }
+];
+var defaultAdv = () => ({ stars: {}, best: {}, claimed: [] });
+
 // src/meta/profile.ts
 var defaultPass = () => ({ season: "", stars: 0, premium: false, free: [], prem: [] });
 var DEFAULT_CHARACTERS = ["renard", "boulon", "rainette", "kage", "champi", "bruno"];
@@ -7575,6 +7843,7 @@ function defaultProfile() {
     missions: { day: "", list: [] },
     weekly: { week: "", list: [] },
     pass: defaultPass(),
+    adv: defaultAdv(),
     mastery: {},
     achievements: {},
     chests: { common: 0, rare: 0, epic: 0, legend: 0 },
@@ -7616,6 +7885,7 @@ function migrate(data) {
     achievements: { ...data.achievements ?? {} },
     chests: { ...base.chests, ...data.chests ?? {} },
     pass: { ...base.pass, ...data.pass ?? {} },
+    adv: { ...base.adv, ...data.adv ?? {} },
     rank: { ...base.rank, ...data.rank ?? {} },
     stats: { ...base.stats, ...data.stats ?? {} },
     clock: { ...base.clock, ...data.clock ?? {} },
@@ -7686,6 +7956,18 @@ function migrate(data) {
   p.pass.season = typeof p.pass.season === "string" ? p.pass.season.slice(0, 32) : "";
   const tiers = (v) => Array.isArray(v) ? [...new Set(v.filter((t) => Number.isInteger(t) && t >= 1 && t <= 100))] : [];
   p.pass.free = tiers(p.pass.free);
+  const advIds = new Set(ADV_LEVELS.map((l) => l.id));
+  const st = {};
+  const best = {};
+  for (const [k, v] of Object.entries(p.adv.stars ?? {}))
+    if (advIds.has(k))
+      st[k] = Math.max(0, Math.min(3, Math.floor(Number(v) || 0)));
+  for (const [k, v] of Object.entries(p.adv.best ?? {}))
+    if (advIds.has(k) && Number(v) > 0)
+      best[k] = Math.min(999, Number(v));
+  p.adv.stars = st;
+  p.adv.best = best;
+  p.adv.claimed = Array.isArray(p.adv.claimed) ? [...new Set(p.adv.claimed.filter((n) => ADV_MILESTONES.some((m) => m.stars === n)))] : [];
   p.pass.prem = tiers(p.pass.prem);
   if (data.rank?.season !== RANK_RULES.season) {
     p.rank.season = RANK_RULES.season;

@@ -351,6 +351,17 @@ export class Renderer {
           this.fx(e.player).emote = null;
           break;
         }
+        case "bossHit": {
+          // Aventure : le boss perd un cœur (gros impact, il clignote)
+          const p = m.players[e.player];
+          P.death(e.x, e.y, lookOf(p.characterId, p.skinId).palette.main);
+          P.spawn("ring", p.x, p.y, { life: 0.5, size: 0.9, color: "#ff5d7a" });
+          this.fx(p.id).hurtAt = this.time;
+          this.bossHitAt = this.time;
+          this.shake = Math.max(this.shake, 0.7);
+          if (e.killer >= 0 && e.killer !== e.player) this.fx(e.killer).happyAt = this.time + 0.4;
+          break;
+        }
         case "shieldBlocked": {
           const p = m.players[e.player];
           P.spawn("ring", p.x, p.y, { life: 0.35, size: 0.4, color: "#9ae8ff" });
@@ -1377,13 +1388,18 @@ export class Renderer {
     }
   }
 
+  /** dernier coup reçu par le boss (Aventure) */
+  private bossHitAt = -10;
+
   private drawPlayer(m: Match, id: number, x: number, y: number) {
     const p = m.players[id];
-    const s = this.s;
+    const boss = m.adv?.bossId === id;
+    // le boss de l'Aventure est bien plus gros (même case au sol)
+    const s = this.s * (boss ? 1.5 : 1);
     const ctx = this.ctx;
     const c = lookOf(p.characterId, p.skinId, p.accessoryId);
-    const cx = x * s;
-    const cy = y * s;
+    const cx = x * this.s;
+    const cy = y * this.s - (boss ? this.s * 0.22 : 0);
     const f = this.fx(id);
     const t = this.time;
     const hurt = t - f.hurtAt < 0.45 ? (t - f.hurtAt) / 0.45 : undefined;
@@ -1417,9 +1433,39 @@ export class Renderer {
       celebrate: won,
     }, this.art.ink);
     if (p.shieldTime > 0) drawShield(ctx, cx, cy - s * 0.12, s, t, p.shieldTime);
+    if (boss && p.alive && m.adv) this.drawBossHp(ctx, cx, cy - s * 0.78, this.s, m.adv.bossHp, m.adv.rules.boss?.hp ?? 1, t);
     if (p.alive && p.toxDose > 0) this.drawPoisoned(ctx, cx, cy, s, t, p.toxDose);
     if (p.alive && p.slowTime > 0) this.drawFrozen(ctx, cx, cy, s, t, p.slowTime);
     if (p.alive && p.stunTime > 0) this.drawStunned(ctx, cx, cy, s, t, p.stunTime);
+  }
+
+  /** Cœurs du boss au-dessus de sa tête. */
+  private drawBossHp(ctx: CanvasRenderingContext2D, cx: number, cy: number, s: number, hp: number, max: number, t: number) {
+    const r = s * 0.17;
+    const gap = r * 2.3;
+    const x0 = cx - ((max - 1) * gap) / 2;
+    const pulse = t - this.bossHitAt < 0.5 ? 1 + 0.4 * (1 - (t - this.bossHitAt) / 0.5) : 1;
+    ctx.save();
+    ctx.fillStyle = "rgba(20,12,40,0.75)";
+    ctx.beginPath();
+    ctx.roundRect(x0 - r * 1.5, cy - r * 1.4, (max - 1) * gap + r * 3, r * 2.8, r * 1.4);
+    ctx.fill();
+    for (let i = 0; i < max; i++) {
+      const x = x0 + i * gap;
+      const on = i < hp;
+      const k = on && i === hp - 1 ? pulse : 1;
+      ctx.save();
+      ctx.translate(x, cy);
+      ctx.scale(k, k);
+      ctx.fillStyle = on ? "#ff4d6d" : "rgba(255,255,255,0.22)";
+      ctx.beginPath();
+      ctx.moveTo(0, r * 0.75);
+      ctx.bezierCurveTo(-r * 1.25, -r * 0.1, -r * 0.6, -r * 1.05, 0, -r * 0.35);
+      ctx.bezierCurveTo(r * 0.6, -r * 1.05, r * 1.25, -r * 0.1, 0, r * 0.75);
+      ctx.fill();
+      ctx.restore();
+    }
+    ctx.restore();
   }
 
   /** Nuages toxiques : nappe verte/violette animée, qui apparaît et s'efface en douceur. */

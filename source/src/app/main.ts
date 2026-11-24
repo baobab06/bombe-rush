@@ -1,3 +1,5 @@
+import { AdventureScreen } from "./adventure-screen";
+import { advClaimable, advMatchConfig, currentLevel, advStars as advStarsOf, GOAL_ICON, goalText, type AdvLevel } from "../meta/adventure";
 import { announceBombers, listenPurchases } from "./bank";
 import { AccountUI } from "./account-ui";
 import "../platform/polyfills";
@@ -65,8 +67,8 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 /** écrans interdits tant qu'une mise à jour obligatoire n'est pas faite */
 const BLOCKED_BY_UPDATE: ScreenId[] = ["setup", "game", "pause", "private", "lobby", "invite"];
 const MODE_ICONS: Record<string, string> = { classic: "🎮", chaos: "💀", koth: "👑", gold: "💰" };
-const SCREENS: ScreenId[] = ["home", "setup", "settings", "pause", "results", "private", "lobby", "boot", "welcome", "invite", "shop", "collection", "missions", "pass", "profile", "rank", "chests", "tutorial", "world"];
-const MENU_SCREENS: ScreenId[] = ["setup", "settings", "private", "lobby", "welcome", "invite", "shop", "collection", "missions", "pass", "profile", "rank", "chests", "tutorial", "world"];
+const SCREENS: ScreenId[] = ["home", "setup", "settings", "pause", "results", "private", "lobby", "boot", "welcome", "invite", "shop", "collection", "missions", "pass", "profile", "rank", "chests", "tutorial", "world", "adventure"];
+const MENU_SCREENS: ScreenId[] = ["setup", "settings", "private", "lobby", "welcome", "invite", "shop", "collection", "missions", "pass", "profile", "rank", "chests", "tutorial", "world", "adventure"];
 
 class App implements AppCtx {
   private save = new SaveSystem();
@@ -321,6 +323,7 @@ class App implements AppCtx {
     this.collTab = null;
     if (id === "missions") this.missionsScr.render();
     if (id === "pass") this.passScr.render();
+    if (id === "adventure" && prev !== "adventure") this.advScr.render();
     if (id === "profile") this.profileScr.render();
     if (id === "rank") this.rankScr.render();
     if (id === "world") this.worldScr.render();
@@ -468,6 +471,7 @@ class App implements AppCtx {
     });
     $("btnRestart").addEventListener("click", () => {
       this.click();
+      if (this.game.adventure && this.advRun) return this.startAdventure(this.advRun);
       // recommencer une partie en cours = l'abandonner (pas d'esquive d'une défaite)
       this.abandonLive();
       if (this.game.training) {
@@ -480,6 +484,13 @@ class App implements AppCtx {
     });
     $("btnQuit").addEventListener("click", () => {
       this.click();
+      if (this.game.adventure) {
+        this.advRun = null;
+        this.game.setPaused(false);
+        this.game.startDemo();
+        this.history = [];
+        return this.go("adventure");
+      }
       this.abandonLive();
       if (this.game.online) {
         this.online.leaveRoom();
@@ -812,6 +823,11 @@ class App implements AppCtx {
     $("missionDot").textContent = String(n);
     $("btnMissions").classList.toggle("has", n > 0);
     $("passLv").textContent = String(passTier(p));
+    // Aventure : niveau en cours, cadeau d'étoiles à récupérer
+    const advReady = advClaimable(p).length;
+    $("advDot").hidden = !advReady;
+    const cl = currentLevel(p);
+    $("advHomeSub").textContent = advStarsOf(p) >= 120 ? "⭐ 120 / 120" : cl.goal === "boss" ? `Boss ${cl.world}` : `Niveau ${cl.id}`;
     document.querySelectorAll<HTMLElement>("[data-mis-dot]").forEach((d) => ((d.hidden = !nm), (d.textContent = String(nm))));
     document.querySelectorAll<HTMLElement>("[data-pass-dot]").forEach((d) => ((d.hidden = !np), (d.textContent = String(np))));
     const a = achievementsToClaim(p);
@@ -1064,6 +1080,8 @@ class App implements AppCtx {
 
   /** L'issue est connue : UNE transaction, enregistrée tout de suite. */
   private settleOutcome(r: GameResult) {
+    // Aventure : pas de mise ni de trophées (réglé à l'écran de fin du niveau)
+    if (this.game.adventure) return;
     const summary = applyMatch(this._profile, r, this.currentStake());
     // classement mondial : le serveur rejoue la partie et compte les points
     const replay = this.worldTicket && summary ? this.game.rankedReplay() : null;
@@ -1613,6 +1631,10 @@ class App implements AppCtx {
     const o = this.online;
     this.game.sendEmote = (id) => o.sendEmote(id);
     o.onEmote = (player, id) => this.game.remoteEmote(player, id);
+    $("btnAdventure").addEventListener("click", () => {
+      this.click();
+      this.go("adventure");
+    });
     $("btnPrivate").addEventListener("click", () => {
       this.click();
       this.ensurePseudo();
@@ -1777,6 +1799,46 @@ class App implements AppCtx {
   private quickSearch = new QuickSearch(this, this.online, () => ({ name: this._profile.name, characterId: this._profile.characterId }));
   private referral = new Referral(this, this.online);
   private passScr = new PassScreen(this, () => this.renderBadges());
+  private advScr = new AdventureScreen(this, (l) => this.startAdventure(l), () => this.renderBadges());
+  /** niveau d'Aventure en cours */
+  private advRun: AdvLevel | null = null;
+
+  /** Lance un niveau du mode Aventure (pas de mise, pas de classement). */
+  private startAdventure(l: AdvLevel) {
+    const p = this._profile;
+    this.advRun = l;
+    this.worldTicket = null;
+    this.game.setPaused(false);
+    this.game.startAdventure(
+      advMatchConfig(
+        l,
+        { name: "Toi", characterId: p.characterId, skinId: this.equippedSkin(p.characterId), accessoryId: p.equipped.accessory ?? undefined, trailId: p.equipped.trail, boomId: p.equipped.boom, isBot: false },
+        (Math.random() * 1e9) | 0,
+      ),
+    );
+    this.history = [];
+    this.go("game");
+    this.toast(`${GOAL_ICON[l.goal]} ${goalText(l)} !`, "good");
+  }
+
+  /** Fin d'un niveau d'Aventure : étoiles, récompenses, retour à la carte. */
+  private finishAdventure() {
+    const l = this.advRun;
+    const m = this.game.session?.match;
+    if (!l || !m?.adv) return this.toMenu();
+    const a = m.adv;
+    this.advRun = null;
+    this.game.setPaused(false);
+    this.game.startDemo();
+    this.history = [];
+    this.go("adventure");
+    this.advScr.finish(l, { won: a.won, stars: a.stars(), time: a.doneAt, why: a.why }, {
+      map: () => this.advScr.render(false),
+      retry: () => this.startAdventure(l),
+      next: (n) => this.startAdventure(n),
+    });
+    this.renderBadges();
+  }
 
   /** partie en ligne de Compétition (trophées en jeu) */
   private quickComp = false;
@@ -1947,6 +2009,11 @@ class App implements AppCtx {
     const live = this.game.live;
     const cs = this.currentStake();
     const loss = maxLoss(cs.stake, cs.players ?? 4);
+    if (this.game.adventure) {
+      $("btnRestart").querySelector("span")!.textContent = "Recommencer le niveau";
+      $("btnQuit").querySelector("span")!.textContent = "Retour à la carte";
+      return;
+    }
     $("btnRestart").querySelector("span")!.textContent = this.game.training ? "Recommencer l'entraînement" : live ? `Recommencer (−${fmt(loss)} 🪙)` : "Recommencer";
     $("btnQuit").querySelector("span")!.textContent = this.game.training ? "Quitter l'entraînement" : live ? `Abandonner (−${fmt(loss)} 🪙)` : "Quitter la partie";
   }
@@ -2100,6 +2167,26 @@ class App implements AppCtx {
           .join("")}${state}`;
       }
     }
+    // Aventure : objectif et avancement (à la place du compteur « en vie »)
+    const ab = $("hudAdv");
+    ab.hidden = !h.adv;
+    if (h.adv) {
+      $("hudAlive").hidden = true;
+      const ad = h.adv;
+      const [cur, goal] = ad.progress;
+      const [s2, s3] = ad.stars;
+      const label = { crates: "🧱 Caisses", gold: "💰 Or", survive: "⏱️ Tenir", boss: "👹 Coups", win: "💥 Éliminés" }[ad.goal];
+      let hint = "";
+      if (ad.goal === "survive") hint = ad.kills >= s3 ? "⭐⭐⭐ assurées" : `💥 ${ad.kills} / ${ad.kills >= s2 ? s3 : s2} élim. → ${"⭐".repeat(ad.kills >= s2 ? 3 : 2)}`;
+      else if (ad.time < s3) hint = `⭐⭐⭐ avant ${Math.floor(s3 / 60)}:${String(s3 % 60).padStart(2, "0")}`;
+      else if (ad.time < s2) hint = `⭐⭐ avant ${Math.floor(s2 / 60)}:${String(s2 % 60).padStart(2, "0")}`;
+      const boss = ad.bossMax ? `<span class="ah-boss"><em>${ad.bossName}</em>${"❤️".repeat(ad.bossHp)}${"🤍".repeat(Math.max(0, ad.bossMax - ad.bossHp))}</span>` : "";
+      const sig = `${ad.goal}|${cur}|${goal}|${hint}|${ad.bossHp}`;
+      if (ab.dataset.sig !== sig) {
+        ab.dataset.sig = sig;
+        ab.innerHTML = `<span class="ah-title">🎯 OBJECTIF</span>${boss}<span class="ah-row"><b>${label}</b><span class="ah-bar"><i style="width:${goal ? Math.min(100, (cur / goal) * 100) : 0}%"></i></span><em>${cur}/${goal}</em></span>${hint ? `<span class="ah-hint">${hint}</span>` : ""}`;
+      }
+    }
     // bas du bloc d'infos en haut à droite (chrono, joueurs en vie, tableau des points) : les boutons ne montent pas dessus
     let topReserved = 0;
     for (const el of document.querySelectorAll<HTMLElement>("#hud .hud-r > *")) {
@@ -2191,6 +2278,7 @@ class App implements AppCtx {
   }
 
   private showResults(r: GameResult) {
+    if (this.game.adventure) return this.finishAdventure();
     const p = this._profile;
     // le règlement a eu lieu à la fin de la partie (une seule fois) ;
     // filet de sécurité si l'issue n'avait pas été signalée

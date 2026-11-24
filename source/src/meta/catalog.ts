@@ -9,7 +9,7 @@ import { BOMBER_CHARACTER_PRICES, BOMBER_EMOTE_PRICES, BOMBER_PRICES, CHARACTER_
 
 export type ItemKind = "skin" | "accessory" | "trail" | "emote" | "boom" | "title" | "character";
 /** Objet exclusif : ne se vend pas, se gagne (maîtrise, succès, niveau, coffres, rang). */
-export type ItemSource = "mastery" | "achievement" | "level" | "chest" | "rank" | "pass";
+export type ItemSource = "mastery" | "achievement" | "level" | "chest" | "rank" | "pass" | "adventure";
 
 export interface CatalogItem {
   id: string;
