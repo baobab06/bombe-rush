@@ -2211,3 +2211,9 @@ body.launching #btnPlay, body.launching #btnLaunch, body.launching #btnAgain, bo
 .featured-head .fh-clock em { font-style: normal; font-family: var(--display); font-weight: 400; letter-spacing: .03em; }
 .item.big { overflow: hidden; }
 .item.big::after { content: ""; position: absolute; top: 0; bottom: 0; width: 35%; left: -45%; pointer-events: none; background: linear-gradient(100deg, transparent, rgba(255,255,255,.32), transparent); animation: nwShine 3.6s ease-in-out infinite; z-index: 3; }
+
+/* ---------- onglets plus compacts (boutique, collection) */
+.browse .tabs { gap: 1cqh; }
+.browse .tab { padding: 1cqh 2.4cqh 1.2cqh; font-size: max(11px, .72em); }
+.kind-head { margin-top: 1cqh; }
+.kind-head:first-child { margin-top: 0; }

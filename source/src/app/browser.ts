@@ -6,7 +6,7 @@
  */
 import { audio } from "../audio/audio";
 import { CHARACTERS, RARITY_LABEL, RARITY_ORDER, getCharacter } from "../core/characters";
-import { CATALOG, CATEGORIES, getItem, isBuyable, type CatalogItem, type ItemKind } from "../meta/catalog";
+import { CATALOG, getItem, isBuyable, type CatalogItem, type ItemKind } from "../meta/catalog";
 import { rankStepFor, unlockText } from "../meta/unlocks";
 import { countOwned, equip, equippedSkin, featured, isEquipped, owns, priceOf } from "../meta/store";
 import { icon } from "../ui/icons";
@@ -17,7 +17,22 @@ import { fmt, type AppCtx } from "./ctx";
 import { renderBank } from "./bank";
 import { confirmPurchase } from "./purchase";
 
-type Tab = "featured" | "bank" | ItemKind;
+/** Onglets regroupés (moins d'onglets) : persos + skins, « style » = accessoires + effets + bombes. */
+type Group = "persos" | "style" | "emote" | "title";
+type Tab = "featured" | "bank" | Group;
+const GROUPS: { id: Group; label: string; ic: string; kinds: ItemKind[] }[] = [
+  { id: "persos", label: "Persos", ic: "🦊", kinds: ["character", "skin"] },
+  { id: "style", label: "Style", ic: "✨", kinds: ["accessory", "trail", "boom"] },
+  { id: "emote", label: "Emotes", ic: "😀", kinds: ["emote"] },
+  { id: "title", label: "Titres", ic: "🏷️", kinds: ["title"] },
+];
+const groupOf = (k: ItemKind): Group => GROUPS.find((g) => g.kinds.includes(k))?.id ?? "persos";
+const KIND_HEAD: Partial<Record<ItemKind, string>> = { accessory: "🎩 Accessoires", trail: "👣 Effets", boom: "💥 Bombes" };
+/** ancien nom d'onglet (catégorie) → onglet regroupé */
+function normTab(t: string): Tab {
+  if (t === "featured" || t === "bank" || GROUPS.some((g) => g.id === t)) return t as Tab;
+  return groupOf(t as ItemKind);
+}
 
 export class ItemBrowser {
   private stage: Stage;
@@ -56,20 +71,20 @@ export class ItemBrowser {
     this.rarEl = root.querySelector(".rar-tag")!;
     this.descEl = root.querySelector(".pv-desc")!;
     this.actEl = root.querySelector(".pv-actions")!;
-    this.tab = mode === "shop" ? "featured" : "skin";
+    this.tab = mode === "shop" ? "featured" : "persos";
   }
 
   /** Affichage de l'écran (éventuellement sur un objet précis). */
   open(itemId?: string, tab?: string) {
     const p = this.ctx.profile;
     this.charFilter = this.charFilter || p.characterId;
-    if (tab) this.tab = tab as Tab;
-    if (tab === "skin" && !itemId) this.charFilter = p.characterId;
+    if (tab && !getItem(tab)) this.tab = normTab(tab);
+    if ((tab === "skin" || tab === "persos") && !itemId) this.charFilter = p.characterId;
     if (itemId) {
       const it = getItem(itemId);
       if (it) {
-        if (!tab) this.tab = it.kind;
-        if (it.kind === "skin") this.charFilter = it.characterId!;
+        if (!tab || getItem(tab)) this.tab = groupOf(it.kind);
+        if (it.kind === "skin" || it.kind === "character") this.charFilter = it.characterId!;
         this.selected = it.id;
       }
     }
@@ -91,8 +106,8 @@ export class ItemBrowser {
 
   // ------------------------------------------------------------- onglets
   private tabs(): { id: Tab; label: string }[] {
-    const list: { id: Tab; label: string }[] = CATEGORIES.filter((c) => this.mode === "collection" || CATALOG.some((i) => i.kind === c.id && isBuyable(i))).map((c) => ({ id: c.id, label: c.label }));
-    if (this.mode === "shop") list.unshift({ id: "featured", label: "À la une" }, { id: "bank", label: "Bombers" });
+    const list: { id: Tab; label: string }[] = GROUPS.filter((g) => this.mode === "collection" || CATALOG.some((i) => g.kinds.includes(i.kind) && isBuyable(i))).map((g) => ({ id: g.id, label: `${g.ic} ${g.label}` }));
+    if (this.mode === "shop") list.unshift({ id: "featured", label: "Du jour" }, { id: "bank", label: "Bombers" });
     return list;
   }
 
@@ -105,7 +120,7 @@ export class ItemBrowser {
       b.setAttribute("role", "tab");
       b.dataset.tab = t.id;
       if (this.mode === "collection" && t.id !== "featured" && t.id !== "bank") {
-        const c = countOwned(p, t.id);
+        const c = GROUPS.find((g) => g.id === t.id)!.kinds.map((k) => countOwned(p, k)).reduce((a, x) => ({ owned: a.owned + x.owned, total: a.total + x.total }), { owned: 0, total: 0 });
         b.innerHTML = `${t.label} <small>${c.owned}/${c.total}</small>`;
       } else b.textContent = t.label;
       if (t.id === "featured") b.insertAdjacentHTML("afterbegin", "⭐ ");
@@ -123,8 +138,8 @@ export class ItemBrowser {
     }
     // filtre par personnage (skins)
     this.subEl.innerHTML = "";
-    this.subEl.hidden = this.tab !== "skin";
-    if (this.tab === "skin") {
+    this.subEl.hidden = this.tab !== "persos";
+    if (this.tab === "persos") {
       for (const c of CHARACTERS) {
         const b = document.createElement("button");
         const own = p.ownedCharacters.includes(c.id);
@@ -151,13 +166,16 @@ export class ItemBrowser {
   private items(): CatalogItem[] {
     if (this.tab === "featured") return featured().items;
     if (this.tab === "bank") return [];
-    let list = CATALOG.filter((i) => i.kind === this.tab);
+    const kinds = GROUPS.find((g) => g.id === this.tab)?.kinds ?? [];
+    let list = CATALOG.filter((i) => kinds.includes(i.kind));
     // boutique : uniquement ce qui se vend (les exclusifs se gagnent)
     // … sauf les personnages de Compétition, montrés avec leur palier pour donner envie
     if (this.mode === "shop") list = list.filter((i) => isBuyable(i) || i.free || (i.kind === "character" && i.exclusive === "rank"));
-    if (this.tab === "skin") list = list.filter((i) => i.characterId === this.charFilter);
+    if (this.tab === "persos") list = list.filter((i) => i.characterId === this.charFilter);
     const rank = (i: CatalogItem) => (i.free ? -1 : RARITY_ORDER.indexOf(i.rarity));
-    return list.slice().sort((a, b) => rank(a) - rank(b) || a.price - b.price);
+    // le personnage avant ses skins ; dans « Style », regroupé par sorte d'objet
+    const kindRank = (i: CatalogItem) => (i.kind === "character" ? -1 : kinds.indexOf(i.kind));
+    return list.slice().sort((a, b) => kindRank(a) - kindRank(b) || rank(a) - rank(b) || a.price - b.price);
   }
 
   private renderGrid() {
@@ -195,7 +213,17 @@ export class ItemBrowser {
       }, 1000);
       grid.appendChild(head);
     }
+    let lastKind: ItemKind | null = null;
     this.items().forEach((it, i) => {
+      // « Style » : petit titre à chaque sorte d'objet (accessoires, effets, bombes)
+      if (this.tab === "style" && it.kind !== lastKind && KIND_HEAD[it.kind]) {
+        const h = document.createElement("div");
+        h.className = "featured-head kind-head";
+        h.style.gridColumn = "1 / -1";
+        h.innerHTML = `<b>${KIND_HEAD[it.kind]}</b>`;
+        grid.appendChild(h);
+      }
+      lastKind = it.kind;
       const own = owns(p, it.id);
       const pr = priceOf(it.id);
       const card = itemCard(
