@@ -59,7 +59,7 @@ export function migrate(data: Partial<Profile> & { ownedSkins?: string[]; versio
     ...base,
     ...data,
     version: 3,
-    settings: { ...base.settings, ...(data.settings ?? {}) },
+    settings: { ...base.settings, ...(data.settings ?? {}), ctrlSize: (["s", "m", "l"] as const).includes(data.settings?.ctrlSize as "m") ? data.settings!.ctrlSize! : "m", leftHanded: data.settings?.leftHanded === true },
     lastSetup: { ...base.lastSetup, ...(data.lastSetup ?? {}) },
     equippedSkins: { ...(data.equippedSkins ?? {}) },
     equipped: { ...base.equipped, ...(data.equipped ?? {}) },

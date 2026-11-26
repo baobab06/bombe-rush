@@ -2023,3 +2023,45 @@ body.launching #btnPlay, body.launching #btnLaunch, body.launching #btnAgain, bo
 
 .adv-node.boss.cur + .adv-me, .adv-me.on-boss { transform: translate(-50%, -175%); animation-name: advHopBoss; }
 @keyframes advHopBoss { 0%, 100% { transform: translate(-50%, -175%); } 50% { transform: translate(-50%, -195%); } }
+
+/* ======================================================= HUD v2 (refonte) */
+/* chrono : plus gros, jauge du temps restant dessous, rouge à la fin */
+#hud .timer { position: relative; font-size: min(9.6cqh, 4.4cqw); padding: .6cqh 4.4cqh 1.6cqh; min-width: 24cqh; }
+#hud .timer::after { content: ""; position: absolute; left: 2.6cqh; right: 2.6cqh; bottom: .9cqh; height: .9cqh; border-radius: 99px;
+  background: linear-gradient(90deg, #ffd23f calc(var(--k, 1) * 100%), rgba(255,255,255,.15) 0); }
+#hud .timer.low:not(.hot) { color: #ffd0d0; }
+#hud .timer.low::after { background: linear-gradient(90deg, #ff5d7a calc(var(--k, 1) * 100%), rgba(255,255,255,.15) 0); }
+#hud .alive { display: none; }
+/* tableau des joueurs */
+.pboard { display: flex; flex-direction: column; gap: .7cqh; align-self: stretch; }
+.pboard[hidden] { display: none; }
+.pb-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 1cqh; padding: .3cqh 1.6cqh .3cqh .4cqh; border-radius: 99px; background: rgba(20,15,60,.78);
+  border: max(1.5px,.35cqh) solid var(--ink); box-shadow: inset .9cqh 0 0 var(--c); font-weight: 800; font-size: max(10px, .62em); color: #fff; white-space: nowrap; min-width: 0; transition: opacity .3s, filter .3s; }
+.pb-row img { width: 6.4cqh; height: 6.4cqh; min-width: 20px; min-height: 20px; border-radius: 50%; background: rgba(255,255,255,.14); }
+.pb-row b { overflow: hidden; text-overflow: ellipsis; min-width: 0; font-weight: 800; }
+.pb-row em { font-style: normal; color: #ffe27a; }
+.pb-row.me { background: linear-gradient(90deg, rgba(80,64,210,.92), rgba(40,32,120,.92)); border-color: #ffd23f; }
+.pb-row.out { opacity: .5; filter: grayscale(1); }
+.pb-row.out img { transform: rotate(-12deg); }
+/* bonus : pastilles icône + gros chiffre */
+#hud .hud-l .pw { gap: .8cqh; padding: .3cqh 2cqh .3cqh .4cqh; font-family: var(--display); font-weight: 400; font-size: max(12px, .9em); text-shadow: 0 .3cqh 0 var(--ink); }
+#hud .hud-l .pw small { display: none; }
+#hud .hud-l .pw.caps small { display: inline; font-family: var(--ui); }
+#hud .hud-l .pwi { width: 7cqh; height: 7cqh; }
+/* danger : les bords de l'écran pulsent en rouge */
+#dangerFx { position: absolute; inset: 0; pointer-events: none; z-index: 4; box-shadow: inset 0 0 6cqh 2cqh rgba(255,40,60,.75); animation: dangerPulse var(--speed, .4s) ease-in-out infinite alternate; }
+#dangerFx[hidden] { display: none; }
+#dangerFx b { position: absolute; left: 50%; bottom: 3cqh; transform: translateX(-50%); font-family: var(--display); font-weight: 400; font-size: max(12px, 4.6cqh); color: #fff; padding: .4cqh 2.6cqh .8cqh; border-radius: 99px; background: rgba(214,31,51,.9); border: max(2px,.4cqh) solid var(--ink); text-shadow: 0 .3cqh 0 var(--ink); letter-spacing: .05em; }
+@keyframes dangerPulse { from { opacity: .35; } to { opacity: 1; } }
+/* grosses annonces */
+#announce { position: absolute; left: 50%; top: 22%; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; pointer-events: none; z-index: 6; animation: annIn 1.5s cubic-bezier(.2,1.4,.4,1) forwards; white-space: nowrap; }
+#announce[hidden] { display: none; }
+#announce strong { font-family: var(--display); font-weight: 400; font-size: min(13cqh, 6.4cqw); color: #fff; letter-spacing: .02em; text-shadow: var(--outline), 0 1.2cqh 0 rgba(0,0,0,.3); transform: rotate(-3deg); }
+#announce em { font-style: normal; font-weight: 800; font-size: max(12px, 4.4cqh); color: #fff; margin-top: .6cqh; padding: .3cqh 2.4cqh .6cqh; border-radius: 99px; background: rgba(20,15,60,.8); }
+#announce.red strong { color: #ff8a5c; }
+#announce.gold strong { color: #ffd23f; }
+#announce.blue strong { color: #9fe0ff; }
+@keyframes annIn { 0% { transform: translate(-50%, -50%) scale(2.6); opacity: 0; } 14% { transform: translate(-50%, -50%) scale(.92); opacity: 1; } 22% { transform: translate(-50%, -50%) scale(1.05); } 30%, 80% { transform: translate(-50%, -50%) scale(1); opacity: 1; } 100% { transform: translate(-50%, -64%) scale(1); opacity: 0; } }
+/* réglages : rangée avec segment */
+.set-row { display: flex; align-items: center; justify-content: space-between; gap: 2cqh; font-weight: 800; }
+.set-row .seg { flex: none; }

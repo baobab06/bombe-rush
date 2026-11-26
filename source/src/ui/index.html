@@ -19,6 +19,7 @@
       <div class="chaos-badge" id="hudChaos" hidden>💀 MODE CHAOS</div>
       <div class="timer" id="hudTimer">2:30</div>
       <div class="alive" id="hudAlive"></div>
+      <div class="pboard" id="hudBoard" hidden></div>
       <div class="adv-hud" id="hudAdv" hidden></div>
       <div class="hill-board" id="hudHill" hidden></div>
       <div class="powers" id="hudPowers"></div>
@@ -34,6 +35,10 @@
   </div>
   <!-- malus CHAOS : petit bandeau en haut, jamais au centre -->
   <div id="malusBar" hidden><i id="malusIcon"></i><b id="malusName"></b><em id="malusHint"></em><span id="malusTime"></span></div>
+  <!-- danger : bords de l'écran qui pulsent en rouge -->
+  <div id="dangerFx" hidden><b>⚠️ DANGER</b></div>
+  <!-- grosses annonces : DOUBLE K.O., DERNIER SURVIVANT… -->
+  <div id="announce" hidden><strong id="annText"></strong><em id="annSub"></em></div>
   <div id="banner" hidden><span id="bannerKicker">⚠️</span><strong id="bannerText">MORT SUBITE !</strong><em id="bannerHint"></em></div>
   <div id="netOverlay" hidden><div><b>📶 Connexion perdue</b><span>Reconnexion en cours… ta place est gardée.</span></div></div>
   <div id="rotateHint" hidden>
@@ -321,6 +326,9 @@
         <label class="toggle"><span>Musique</span><input type="checkbox" id="setMusic"><i></i></label>
         <label class="toggle"><span>Effets sonores</span><input type="checkbox" id="setSfx"><i></i></label>
         <label class="toggle"><span>Vibration</span><input type="checkbox" id="setVibe"><i></i></label>
+        <h3 class="label">Commandes</h3>
+        <div class="set-row"><span>Taille des boutons</span><div class="seg" id="segCtrl" role="radiogroup"><button data-v="s">Petit</button><button data-v="m">Normal</button><button data-v="l">Grand</button></div></div>
+        <label class="toggle"><span>Gaucher (joystick à droite)</span><input type="checkbox" id="setLefty"><i></i></label>
         <div id="notifySettings" hidden>
           <label class="toggle"><span>Notifications</span><input type="checkbox" id="setNotify"><i></i></label>
           <p class="hint" id="notifyHint">Mises à jour, annonces et récompense du jour.</p>

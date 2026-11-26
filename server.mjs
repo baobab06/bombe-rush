@@ -7862,7 +7862,7 @@ function defaultProfile() {
     ledger: [],
     winStreak: 0,
     lastSetup: { botCount: 3, difficulty: "normal", mapId: "forest", modeId: "classic", comp: true },
-    settings: { music: true, sfx: true, vibration: true }
+    settings: { music: true, sfx: true, vibration: true, ctrlSize: "m", leftHanded: false }
   };
 }
 
@@ -7874,7 +7874,7 @@ function migrate(data) {
     ...base,
     ...data,
     version: 3,
-    settings: { ...base.settings, ...data.settings ?? {} },
+    settings: { ...base.settings, ...data.settings ?? {}, ctrlSize: ["s", "m", "l"].includes(data.settings?.ctrlSize) ? data.settings.ctrlSize : "m", leftHanded: data.settings?.leftHanded === true },
     lastSetup: { ...base.lastSetup, ...data.lastSetup ?? {} },
     equippedSkins: { ...data.equippedSkins ?? {} },
     equipped: { ...base.equipped, ...data.equipped ?? {} },

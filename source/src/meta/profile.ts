@@ -22,6 +22,10 @@ export interface Settings {
   music: boolean;
   sfx: boolean;
   vibration: boolean;
+  /** taille des commandes tactiles : petit / normal / grand */
+  ctrlSize: "s" | "m" | "l";
+  /** gaucher : joystick à droite, bombe à gauche */
+  leftHanded: boolean;
 }
 
 export interface MissionState {
@@ -198,6 +202,6 @@ export function defaultProfile(): Profile {
     ledger: [],
     winStreak: 0,
     lastSetup: { botCount: 3, difficulty: "normal", mapId: "forest", modeId: "classic", comp: true },
-    settings: { music: true, sfx: true, vibration: true },
+    settings: { music: true, sfx: true, vibration: true, ctrlSize: "m", leftHanded: false },
   };
 }

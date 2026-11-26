@@ -66,6 +66,10 @@ export class Controls {
   private bombPressT = 0;
   private shieldPressT = 0;
   enabled = true;
+  /** taille des commandes (réglage) */
+  scale = 1;
+  /** gaucher : tout est en miroir (joystick à droite) */
+  mirror = false;
   onPause: (() => void) | null = null;
   onAnyInput: (() => void) | null = null;
 
@@ -90,8 +94,8 @@ export class Controls {
   setLayout(w: number, h: number, safe: Insets, arena: { x: number; y: number; w: number; h: number }) {
     const leftCol = Math.max(0, arena.x - safe.l);
     const rightCol = Math.max(0, w - safe.r - (arena.x + arena.w));
-    const jr = clamp(h * 0.145, 44, 80);
-    const br = clamp(h * 0.135, 42, 74);
+    const jr = clamp(h * 0.145, 44, 80) * this.scale;
+    const br = clamp(h * 0.135, 42, 74) * this.scale;
     const sr = br * 0.62;
     const bottom = h - safe.b;
     // joystick : centré dans la colonne gauche, au tiers bas de l'écran
@@ -127,8 +131,14 @@ export class Controls {
       throw: { x: tx, y: ty, r: tr },
       remote: { x: tx, y: ty, r: tr },
     };
+    // places de base (côté droitier) : les boutons de capacité se calculent dessus
     this.throwBase = { x: tx, y: ty, r: tr };
     this.shieldBase = { x: sx, y: sy, r: sr };
+    if (this.mirror) {
+      const L = this.layout;
+      const f = (c: Circle): Circle => ({ ...c, x: w - c.x });
+      this.layout = { joyHome: f(L.joyHome), joyZone: { x0: w - L.joyZone.x1, y0: L.joyZone.y0, x1: w - L.joyZone.x0, y1: L.joyZone.y1 }, bomb: f(L.bomb), shield: f(L.shield), throw: f(L.throw), remote: f(L.remote) };
+    }
     if (this.joyPointer === null) this.resetJoy();
   }
 
@@ -495,10 +505,12 @@ export class Controls {
    * plus petits.
    */
   private placeAux(throwOn: boolean, remoteOn: boolean): void {
-    const L = this.layout;
+    const { w, h } = viewport;
+    // gaucher : calcul côté droitier, puis miroir
+    const mir = (c: Circle): Circle => (this.mirror ? { ...c, x: w - c.x } : c);
+    const L = { ...this.layout, bomb: mir(this.layout.bomb) };
     L.shield = { ...this.shieldBase };
     const t = this.throwBase;
-    const { w, h } = viewport;
     const lab = (r: number) => Math.max(10, r * 0.38) + 8; // étiquette sous le bouton
     const fixed = [L.bomb, L.shield];
     const fits = (c: Circle, others: Circle[]) =>
@@ -546,8 +558,9 @@ export class Controls {
         for (let i = 1; i < k; i++) chosen.push({ x: xs[i], y: cy, r: rr });
       }
     }
-    L.throw = chosen[0];
-    L.remote = throwOn ? chosen[1] ?? chosen[0] : chosen[0];
+    this.layout.shield = mir(L.shield);
+    this.layout.throw = mir(chosen[0]);
+    this.layout.remote = mir(throwOn ? chosen[1] ?? chosen[0] : chosen[0]);
   }
 
   /** Bouton « BOUM » : rouge, antenne qui clignote. */

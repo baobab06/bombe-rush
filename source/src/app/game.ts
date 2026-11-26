@@ -5,6 +5,7 @@ import { ACCESSORIES, EMOTES, BOOMS, TRAILS } from "../core/cosmetics";
 import { lookOf } from "../render/bodies";
 import { HILL_RULES } from "../core/hill";
 import { TEAM_COLORS } from "../core/rules";
+import { computeDanger } from "../ai/danger";
 import { DT, RULES } from "../core/rules";
 import { NO_INPUT, type Difficulty, type PlayerSlot, type SimEvent } from "../core/types";
 import { Controls } from "../input/controls";
@@ -106,6 +107,15 @@ export class GameScreen {
   onFinished: ((r: GameResult) => void) | null = null;
   onHud: (() => void) | null = null;
   onBanner: ((kicker: string, text: string, hint?: string) => void) | null = null;
+  /** grosse annonce au centre (DOUBLE K.O., DERNIER SURVIVANT…) */
+  onAnnounce: ((text: string, sub?: string, tone?: "gold" | "red" | "blue") => void) | null = null;
+  /** le joueur est dans une zone qui va exploser (0 = rien, sinon secondes avant le boum) */
+  dangerIn = 0;
+  /** ralenti du dernier coup (horloge de l'écran, ms) */
+  private slowUntil = 0;
+  /** éliminations du joueur (temps de jeu) pour les séries */
+  private myKills: number[] = [];
+  private anyKill = false;
   /** malus Chaos : petit bandeau en haut (annonce puis activation) */
   onMalus: ((phase: "warn" | "start", emoji: string, label: string, hint?: string) => void) | null = null;
 
@@ -292,6 +302,10 @@ export class GameScreen {
     this.controls.enabled = !this.demo;
     this.acc = 0;
     this.prev = null;
+    this.myKills = [];
+    this.anyKill = false;
+    this.slowUntil = 0;
+    this.dangerIn = 0;
     this.finishTimer = -1;
     this.finished = false;
     this.result = null;
@@ -329,6 +343,11 @@ export class GameScreen {
   /** Rectangle visible de l'arène (en px logiques), pour le HUD. */
   arenaRect: Rect = { x: 0, y: 0, w: 0, h: 0 };
   onLayout: ((arena: Rect) => void) | null = null;
+
+  /** Recalcule la disposition (réglages des commandes changés). */
+  relayout() {
+    if (this.session) this.resize();
+  }
 
   resize() {
     const w = viewport.w;
@@ -370,6 +389,45 @@ export class GameScreen {
     this.onLayout?.(this.arenaRect);
   }
 
+  /** Séries d'éliminations, dernier survivant, ralenti du coup final. */
+  private announceKill(m: Match, victim: number, killer: number, meId: number) {
+    const first = !this.anyKill;
+    this.anyKill = true;
+    // fin de partie à élimination : il ne reste qu'un joueur → ralenti
+    const left = m.players.filter((p) => p.alive);
+    const lastKill = !m.respawns && !m.hill && left.length <= 1;
+    if (lastKill) this.slowUntil = performance.now() + 1100;
+    if (killer !== meId || victim === meId) {
+      if (lastKill && left[0]?.id === meId) this.onAnnounce?.("DERNIER SURVIVANT !", "👑 Bien joué", "gold");
+      return;
+    }
+    const t = m.time;
+    this.myKills = this.myKills.filter((x) => t - x < 2.5);
+    this.myKills.push(t);
+    const n = this.myKills.length;
+    haptics.pulse(n >= 2 ? 70 : 35);
+    if (lastKill) this.onAnnounce?.("DERNIER SURVIVANT !", n >= 2 ? `${n >= 3 ? "TRIPLE" : "DOUBLE"} K.O. 👑` : "👑 Bien joué", "gold");
+    else if (n >= 3) this.onAnnounce?.("TRIPLE K.O. !!!", "💥💥💥", "red");
+    else if (n === 2) this.onAnnounce?.("DOUBLE K.O. !", "💥💥", "red");
+    else if (first) this.onAnnounce?.("PREMIÈRE ÉLIMINATION !", "💥 À toi la main", "blue");
+    else this.onAnnounce?.("K.O. !", `💥 ${m.players[victim].name}`, "blue");
+  }
+
+  /** Danger du joueur local : une explosion va le toucher bientôt ? */
+  private dangerT = 0;
+  private checkDanger(m: Match, meId: number) {
+    this.dangerT = (this.dangerT + 1) % 3;
+    if (this.dangerT) return;
+    const me = m.players[meId];
+    if (!me?.alive || m.phase !== "playing" || me.shieldTime > 0) {
+      this.dangerIn = 0;
+      return;
+    }
+    const d = computeDanger(m, undefined, meId);
+    const t = d.start[m.grid.idx(Math.floor(me.x), Math.floor(me.y))];
+    this.dangerIn = t !== Infinity && t < 2.2 ? Math.max(0.05, t) : 0;
+  }
+
   // ---------------------------------------------------------------- boucle
   // ---- fluidité : si le téléphone n'arrive pas à suivre, on baisse un peu la résolution
   private perfT = 0;
@@ -401,7 +459,8 @@ export class GameScreen {
     const m = s.match;
     // en ligne, le menu pause n'arrête pas la partie (les autres jouent)
     if (!this.paused || this.online) {
-      this.acc += dt;
+      // ralenti sur le coup final (jamais en ligne : les autres jouent en temps réel)
+      this.acc += now < this.slowUntil && !this.online ? dt * 0.3 : dt;
       let steps = 0;
       while (this.acc >= DT && steps < 6) {
         if (!this.prev || this.prev.length !== m.players.length * 2) this.prev = new Float32Array(m.players.length * 2);
@@ -433,8 +492,10 @@ export class GameScreen {
       return;
     }
     this.renderer.draw(m, frozen ? 0 : dt, this.prev, frozen ? 1 : Math.min(1, this.acc / DT));
+    if (this.finished || this.spectating) this.dangerIn = 0;
     if (!this.demo && !this.finished && !this.spectating) {
       const me = m.players[s.localPlayer];
+      this.checkDanger(m, s.localPlayer);
       this.controls.draw(this.renderer.ctx, me.shieldCharges, me.shieldTime, Math.max(0, me.maxBombs - me.activeBombs), me.maxBombs, me.alive ? me.throwCharges : 0, me.alive ? me.bigCharges : 0, me.alive ? me.elecCharges : 0, me.alive ? me.stunTime : 0, me.alive ? me.freezeCharges : 0, me.alive ? me.toxicCharges : 0, me.alive ? me.chainCharges : 0, me.alive ? me.remoteCharges : 0, me.alive && m.remoteBombsOf(me).length > 0);
     }
   }
@@ -692,12 +753,14 @@ export class GameScreen {
           if (e.player === me.id) audio.play("pickup");
           else audio.play("pickup", 0.25);
           break;
-        case "playerDied":
+        case "playerDied": {
           audio.play("death", e.player === me.id ? 1 : 0.6);
           if (e.player === me.id) haptics.death();
           if (e.player === me.id) this.killedBy = e.killer;
+          this.announceKill(m, e.player, e.killer, me.id);
           this.onHud?.();
           break;
+        }
         case "shieldOn":
           audio.play("shield", e.player === me.id ? 1 : 0.4);
           break;
@@ -836,6 +899,10 @@ export class GameScreen {
     const watched = this.spectating ? m.players[this.watchId] : undefined;
     return {
       timer: `${mm}:${String(ss).padStart(2, "0")}`,
+      /** part du temps restant (0..1) pour la jauge sous le chrono */
+      timeK: m.duration > 0 ? tl / m.duration : 1,
+      /** secondes avant qu'une explosion touche le joueur (0 = aucun danger) */
+      danger: this.dangerIn,
       /** mode spectateur : joueur regardé et nombre de joueurs encore en vie */
       spectate: this.spectating ? { name: watched?.name ?? "", color: watched ? lookOf(watched.characterId, watched.skinId).palette.main : "#fff", count: this.watchable().length } : null,
       hot: m.suddenDeath,
@@ -848,7 +915,7 @@ export class GameScreen {
             active: m.chaos.active.filter((r) => r.def.duration > 0.5).map((r) => ({ id: r.def.id, emoji: r.def.emoji, label: r.def.label, left: Math.ceil(r.timer) })),
           }
         : null,
-      players: m.players.map((p) => ({ color: lookOf(p.characterId, p.skinId).palette.main, alive: p.alive, me: p.id === me.id, name: p.name })),
+      players: m.players.map((p) => ({ id: p.id, color: lookOf(p.characterId, p.skinId).palette.main, alive: p.alive, me: p.id === me.id, name: p.name, characterId: p.characterId, skinId: p.skinId, kills: p.stats.kills, boss: m.adv?.bossId === p.id })),
       /** Aventure : objectif, avancement, cœurs du boss */
       adv: m.adv
         ? {

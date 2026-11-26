@@ -1,3 +1,4 @@
+import { drawCharacter, lookOf } from "../render/bodies";
 import { AdventureScreen } from "./adventure-screen";
 import { advClaimable, advMatchConfig, currentLevel, advStars as advStarsOf, GOAL_ICON, goalText, type AdvLevel } from "../meta/adventure";
 import { announceBombers, listenPurchases } from "./bank";
@@ -119,6 +120,7 @@ class App implements AppCtx {
     };
     this.game.onHud = () => this.updateHud();
     this.game.onBanner = (k, t, h) => this.banner(k, t, h);
+    this.game.onAnnounce = (t, sub, tone) => this.announce(t, sub, tone);
     this.game.onSpectate = () => this.updateSpectate();
     this.game.onMalus = (phase, emoji, label, hint) => this.malus(phase, emoji, label, hint);
     this.game.controls.onPause = () => {
@@ -532,7 +534,7 @@ class App implements AppCtx {
     this.segment("segBots", (v) => (this.setupState.botCount = Number(v)));
 
     // réglages
-    const bind = (id: string, key: keyof Profile["settings"]) => {
+    const bind = (id: string, key: "music" | "sfx" | "vibration") => {
       const el = $<HTMLInputElement>(id);
       el.addEventListener("change", () => {
         this._profile.settings[key] = el.checked;
@@ -544,6 +546,20 @@ class App implements AppCtx {
     bind("setMusic", "music");
     bind("setSfx", "sfx");
     bind("setVibe", "vibration");
+    $<HTMLInputElement>("setLefty").addEventListener("change", (e) => {
+      this._profile.settings.leftHanded = (e.target as HTMLInputElement).checked;
+      this.persist();
+      this.applySettings();
+    });
+    $("segCtrl").querySelectorAll<HTMLButtonElement>("button").forEach((b) =>
+      b.addEventListener("click", () => {
+        this.click();
+        this._profile.settings.ctrlSize = b.dataset.v as "s" | "m" | "l";
+        this.persist();
+        this.applySettings();
+        this.renderCtrlSeg();
+      }),
+    );
     $<HTMLInputElement>("setNotify").addEventListener("change", async (e) => {
       const el = e.target as HTMLInputElement;
       const st = notifications.state();
@@ -617,6 +633,18 @@ class App implements AppCtx {
     audio.setMusic(st.music);
     audio.setSfx(st.sfx);
     haptics.setEnabled(st.vibration);
+    this.game.controls.scale = st.ctrlSize === "s" ? 0.82 : st.ctrlSize === "l" ? 1.2 : 1;
+    this.game.controls.mirror = st.leftHanded;
+    this.game.relayout();
+  }
+
+  private renderCtrlSeg() {
+    const v = this._profile.settings.ctrlSize;
+    $("segCtrl").querySelectorAll<HTMLButtonElement>("button").forEach((b) => {
+      b.classList.toggle("on", b.dataset.v === v);
+      b.setAttribute("aria-checked", String(b.dataset.v === v));
+    });
+    $<HTMLInputElement>("setLefty").checked = this._profile.settings.leftHanded;
   }
 
   persist() {
@@ -1328,6 +1356,7 @@ class App implements AppCtx {
     $<HTMLInputElement>("setMusic").checked = st.music;
     $<HTMLInputElement>("setSfx").checked = st.sfx;
     $<HTMLInputElement>("setVibe").checked = st.vibration;
+    this.renderCtrlSeg();
     $("adsSettings").hidden = !ads.enabled || ads.nativeConsent;
     $("adsPrivacy").hidden = !ads.nativeConsent || !ads.privacyOptionsRequired();
     $<HTMLInputElement>("setAdsPerso").checked = this._profile.ads.personalized === true;
@@ -2105,6 +2134,12 @@ class App implements AppCtx {
     if (this.malusWarn) $("malusTime").textContent = this.malusLeft();
     const timer = $("hudTimer");
     timer.textContent = h.timer;
+    timer.style.setProperty("--k", String(Math.max(0, Math.min(1, h.timeK))));
+    timer.classList.toggle("low", h.timeK < 0.2);
+    // danger : bords rouges qui pulsent (plus vite quand le boum approche)
+    const dz = $("dangerFx");
+    dz.hidden = !h.danger;
+    if (h.danger) dz.style.setProperty("--speed", `${Math.max(0.18, Math.min(0.6, h.danger * 0.3))}s`);
     timer.classList.toggle("hot", h.hot);
     $("hudChaos").hidden = !h.chaos;
     // en CHAOS, le badge prend de la place : bonus en version compacte (jamais sous les boutons)
@@ -2130,6 +2165,19 @@ class App implements AppCtx {
     }
     const alive = h.players.filter((p) => p.alive).length;
     $("hudAlive").textContent = `${alive} en vie`;
+    // tableau des joueurs : tête, nom, éliminations, éliminé ou non
+    const board = $("hudBoard");
+    const showBoard = !h.hill && !h.gold && !h.adv && h.players.length > 1;
+    board.hidden = !showBoard;
+    if (showBoard) {
+      const bsig = h.players.map((p) => `${p.alive ? 1 : 0}${p.kills}`).join();
+      if (board.dataset.sig !== bsig) {
+        board.dataset.sig = bsig;
+        board.innerHTML = h.players
+          .map((p) => `<span class="pb-row${p.me ? " me" : ""}${p.alive ? "" : " out"}" style="--c:${p.color}"><img src="${this.headURL(p.characterId, p.skinId)}" alt=""><b>${p.me ? "Toi" : esc(p.name)}</b><em>${p.alive ? (p.kills ? `💥${p.kills}` : "") : "💀"}</em></span>`)
+          .join("");
+      }
+    }
     // Roi de la colline : tableau des points à la place du compteur « en vie »
     const hb = $("hudHill");
     $("hudAlive").hidden = !!(h.hill || h.gold);
@@ -2251,6 +2299,35 @@ class App implements AppCtx {
       bar.hidden = true;
       bar.classList.remove("out");
     }, 200);
+  }
+
+  /** Grosse annonce animée (DOUBLE K.O., DERNIER SURVIVANT…). */
+  private announceTimer = 0;
+  private announce(text: string, sub = "", tone: "gold" | "red" | "blue" = "blue") {
+    const a = $("announce");
+    $("annText").textContent = text;
+    $("annSub").textContent = sub;
+    a.className = tone;
+    a.hidden = true;
+    void a.offsetWidth;
+    a.hidden = false;
+    window.clearTimeout(this.announceTimer);
+    this.announceTimer = window.setTimeout(() => (a.hidden = true), 1500);
+  }
+
+  /** Têtes des personnages pour le tableau des joueurs (mises en cache). */
+  private heads = new Map<string, string>();
+  private headURL(characterId: string, skinId?: string): string {
+    const k = `${characterId}|${skinId ?? ""}`;
+    let u = this.heads.get(k);
+    if (!u) {
+      const cv = document.createElement("canvas");
+      cv.width = cv.height = 64;
+      drawCharacter(cv.getContext("2d")!, 32, 40, 58, lookOf(characterId, skinId), { faceX: 0, faceY: 1, walk: 0, moving: false, t: 0.3, expr: "normal" });
+      u = cv.toDataURL();
+      this.heads.set(k, u);
+    }
+    return u;
   }
 
   private banner(kicker: string, text: string, hint?: string) {
