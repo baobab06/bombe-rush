@@ -2065,3 +2065,36 @@ body.launching #btnPlay, body.launching #btnLaunch, body.launching #btnAgain, bo
 /* réglages : rangée avec segment */
 .set-row { display: flex; align-items: center; justify-content: space-between; gap: 2cqh; font-weight: 800; }
 .set-row .seg { flex: none; }
+
+/* ================================================================ NOËL */
+.snowfall { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 0; }
+.snowfall[hidden] { display: none; }
+.snowfall i { position: absolute; top: -6cqh; font-style: normal; color: #fff; text-shadow: 0 0 1cqh rgba(255,255,255,.8); animation-name: snowFall, snowSway; animation-timing-function: linear, ease-in-out; animation-iteration-count: infinite, infinite; animation-direction: normal, alternate; }
+@keyframes snowFall { to { transform: translateY(112cqh); } }
+@keyframes snowSway { from { margin-left: -2cqh; } to { margin-left: 2cqh; } }
+@media (prefers-reduced-motion: reduce) { .snowfall { display: none; } }
+.home .home-top, .home .home-body { position: relative; z-index: 1; }
+.xmas-btn { position: relative; display: inline-flex; align-items: center; gap: 1cqh; padding: .6cqh 2.2cqh .8cqh 1.2cqh; border-radius: 99px; border: var(--edge) solid var(--ink); cursor: pointer; font: inherit;
+  background: linear-gradient(180deg, #ff6b7a, #c4182f); box-shadow: inset 0 -.8cqh 0 #8e0f22, 0 .7cqh 0 var(--ink); color: #fff; animation: xmasWiggle 3s ease-in-out infinite; }
+.xmas-btn[hidden] { display: none; }
+.xmas-btn .xb-ic { font-size: min(7cqh, 3.2cqw); filter: drop-shadow(0 .4cqh 0 rgba(0,0,0,.35)); }
+.xmas-btn .xb-t { display: flex; flex-direction: column; line-height: 1; text-align: left; }
+.xmas-btn .xb-t b { font-family: var(--display); font-weight: 400; font-size: max(11px, min(4cqh, 1.9cqw)); text-shadow: var(--outline); }
+.xmas-btn .xb-t small { font-weight: 800; font-size: max(9px, min(2.9cqh, 1.4cqw)); color: #fff1c2; }
+.xmas-btn .dot { position: absolute; top: -1.2cqh; right: -1cqh; }
+@keyframes xmasWiggle { 0%, 88%, 100% { transform: rotate(0); } 91% { transform: rotate(-6deg); } 94% { transform: rotate(6deg); } 97% { transform: rotate(-3deg); } }
+.sheet.advent-sheet { min-width: min(88cqw, 150cqh); background: linear-gradient(180deg, #1f5a3a, #12341f); }
+.advent-sheet .sub b { color: #ffd23f; }
+.avent-grid { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 1.2cqh; }
+.ad-door { position: relative; height: 17cqh; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .2cqh; padding: .6cqh; border-radius: 2.2cqh; cursor: pointer; font: inherit; color: #fff;
+  border: max(2px,.4cqh) solid var(--ink); background: linear-gradient(180deg, #c4182f, #8e0f22); box-shadow: inset 0 -.6cqh 0 rgba(0,0,0,.25), 0 .5cqh 0 var(--ink); }
+.ad-door:nth-child(3n+2) { background: linear-gradient(180deg, #2fa65f, #1b7040); }
+.ad-door:nth-child(3n) { background: linear-gradient(180deg, #2f8fe0, #1d5fa0); }
+.ad-door.big { background: linear-gradient(180deg, #ffd23f, #d08a00); }
+.ad-door .ad-n { position: absolute; top: .3cqh; left: 1cqh; font-family: var(--display); font-size: max(10px, 3.4cqh); text-shadow: var(--outline); }
+.ad-door .ad-ic { font-size: min(6.4cqh, 3cqw); margin-top: 1.6cqh; }
+.ad-door .ad-lb { font-weight: 800; font-size: max(8px, 2.3cqh); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.ad-door.done { filter: grayscale(.6) brightness(.75); }
+.ad-door.done .ad-lb { color: #8affb0; font-size: max(11px, 3.4cqh); }
+.ad-door.can { animation: advPulse 1.2s ease-in-out infinite; outline: max(2px,.5cqh) solid #ffd23f; }
+.ad-door.today { outline: max(2px,.5cqh) solid #fff; }

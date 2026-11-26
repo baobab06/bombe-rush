@@ -1,3 +1,5 @@
+import { AdventUI } from "./advent-ui";
+import { adventInfo } from "../meta/advent";
 import { drawCharacter, lookOf } from "../render/bodies";
 import { AdventureScreen } from "./adventure-screen";
 import { advClaimable, advMatchConfig, currentLevel, advStars as advStarsOf, GOAL_ICON, goalText, type AdvLevel } from "../meta/adventure";
@@ -851,6 +853,9 @@ class App implements AppCtx {
     $("missionDot").textContent = String(n);
     $("btnMissions").classList.toggle("has", n > 0);
     $("passLv").textContent = String(passTier(p));
+    // Noël : bouton du calendrier, neige, musique de Noël
+    this.adventUI.renderButton();
+    audio.setXmas(adventInfo(p).season);
     // Aventure : niveau en cours, cadeau d'étoiles à récupérer
     const advReady = advClaimable(p).length;
     $("advDot").hidden = !advReady;
@@ -1660,6 +1665,10 @@ class App implements AppCtx {
     const o = this.online;
     this.game.sendEmote = (id) => o.sendEmote(id);
     o.onEmote = (player, id) => this.game.remoteEmote(player, id);
+    $("btnAdvent").addEventListener("click", () => {
+      this.click();
+      this.adventUI.open();
+    });
     $("btnAdventure").addEventListener("click", () => {
       this.click();
       this.go("adventure");
@@ -1828,6 +1837,7 @@ class App implements AppCtx {
   private quickSearch = new QuickSearch(this, this.online, () => ({ name: this._profile.name, characterId: this._profile.characterId }));
   private referral = new Referral(this, this.online);
   private passScr = new PassScreen(this, () => this.renderBadges());
+  private adventUI = new AdventUI(this, () => this.renderBadges());
   private advScr = new AdventureScreen(this, (l) => this.startAdventure(l), () => this.renderBadges());
   /** niveau d'Aventure en cours */
   private advRun: AdvLevel | null = null;

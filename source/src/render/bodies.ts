@@ -1448,6 +1448,23 @@ function accessory(ctx: Ctx, kind: Accessory, a: Anchor, s: number, look: Look, 
       ell(ctx, cx, y - s * 0.18 - bounce, s * 0.05, s * 0.05, "#ffffff", true);
       break;
     }
+    case "santa": {
+      // bonnet de Père Noël : pointe rouge qui retombe, bord et pompon blancs
+      const y = top + s * 0.06;
+      const sway = Math.sin(pose.t * (pose.moving ? 9 : 2.5)) * s * 0.025;
+      ctx.fillStyle = shaded(ctx, "#e63946", cx, y - s * 0.1, w * 0.4, s * 0.16);
+      ctx.beginPath();
+      ctx.moveTo(cx - w * 0.42, y);
+      ctx.quadraticCurveTo(cx - w * 0.3, y - s * 0.24, cx + w * 0.05, y - s * 0.3);
+      ctx.quadraticCurveTo(cx + w * 0.34 + sway, y - s * 0.32, cx + w * 0.48 + sway, y - s * 0.12);
+      ctx.quadraticCurveTo(cx + w * 0.3, y - s * 0.16, cx + w * 0.42, y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      rrect(ctx, cx - w * 0.46, y - s * 0.035, w * 0.92, s * 0.075, s * 0.035, "#ffffff", true);
+      ell(ctx, cx + w * 0.5 + sway, y - s * 0.1, s * 0.055, s * 0.055, "#ffffff", true);
+      break;
+    }
     case "horns": {
       for (const sx of [-1, 1]) {
         const bx = cx + sx * w * 0.28;

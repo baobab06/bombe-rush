@@ -34,7 +34,8 @@ export type Accessory =
   | "lei"
   | "tophat"
   | "bow"
-  | "cap";
+  | "cap"
+  | "santa";
 export type WearSlot = "head" | "face" | "neck";
 export const WEAR_SLOT: Record<Exclude<Accessory, "none">, WearSlot> = {
   crown: "head",
@@ -45,6 +46,7 @@ export const WEAR_SLOT: Record<Exclude<Accessory, "none">, WearSlot> = {
   beanie: "head",
   tophat: "head",
   cap: "head",
+  santa: "head",
   headphones: "head",
   flower: "head",
   bow: "head",
@@ -105,7 +107,7 @@ export interface SkinDef {
   special?: "shimmer" | "rainbow";
   desc?: string;
   /** skin exclusif (non vendu en boutique) : comment il se débloque */
-  exclusive?: "mastery" | "pass";
+  exclusive?: "mastery" | "pass" | "advent";
 }
 
 export const CHARACTERS: CharacterDef[] = [
@@ -181,7 +183,7 @@ export interface ThemeDef {
   eyes?: EyeStyle;
   special?: SkinDef["special"];
   /** thème exclusif (non vendu) : Pass de saison */
-  exclusive?: "pass";
+  exclusive?: "pass" | "advent";
 }
 
 export const THEMES: ThemeDef[] = [
@@ -232,6 +234,17 @@ export const THEMES: ThemeDef[] = [
     id: "lutin", name: "Lutin", rarity: "legend", desc: "Exclusif Pass Hiver : bonnet, écharpe et flocons de neige.",
     palette: P("#2fbf71", "#1b7a46", "#fff4e0", "#e63946"), perKind: { ghost: { main: "#eafff2", dark: "#9fd8b6" } },
     wear: ["beanie", "scarf"], pattern: "none", aura: "snow", exclusive: "pass",
+  },
+  // 🎄 Calendrier de l'Avent (pour tous les persos d'un coup)
+  {
+    id: "bonhomme", name: "Bonhomme de neige", rarity: "epic", desc: "Calendrier de l'Avent (jour 12) : tout blanc, chapeau et écharpe.",
+    palette: P("#f4f8ff", "#b8cbe0", "#ffffff", "#ff8a1f"), perKind: { ninja: { light: "#ffffff" } },
+    wear: ["tophat", "scarf"], pattern: "none", aura: "snow", exclusive: "advent",
+  },
+  {
+    id: "pere-noel", name: "Père Noël", rarity: "legend", desc: "Calendrier de l'Avent (jour 24) : le costume rouge, le bonnet et la neige.",
+    palette: P("#e63946", "#9d1c28", "#fff7f0", "#ffffff"), perKind: { ghost: { main: "#ffe4e6", dark: "#e6a3aa" } },
+    wear: ["santa", "scarf"], pattern: "none", aura: "snow", special: "shimmer", exclusive: "advent",
   },
 ];
 

@@ -437,6 +437,15 @@ function bombDeco(ctx: Ctx, cx: number, cy: number, r: number, t: number, deco: 
       }
       break;
     }
+    case "gift": {
+      // ruban doré en croix + petit nœud
+      ctx.fillStyle = "#ffd23f";
+      ctx.fillRect(cx - r * 0.13, cy - r * 0.95, r * 0.26, r * 1.9);
+      ctx.fillRect(cx - r * 0.95, cy - r * 0.13, r * 1.9, r * 0.26);
+      ctx.fillStyle = "rgba(255,255,255,0.35)";
+      ctx.fillRect(cx - r * 0.13, cy - r * 0.95, r * 0.08, r * 1.9);
+      break;
+    }
     case "stripes": {
       ctx.strokeStyle = "rgba(63,240,255,0.8)";
       ctx.lineWidth = Math.max(1, r * 0.12);

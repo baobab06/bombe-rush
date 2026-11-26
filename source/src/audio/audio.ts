@@ -394,8 +394,15 @@ class AudioEngine {
     }
   }
 
+  /** saison de Noël : grelots + air de « Jingle Bells » (domaine public) au menu */
+  private xmas = false;
+  setXmas(on: boolean) {
+    this.xmas = on;
+  }
+
   // Ambiance menu : marimba douce en do majeur
   private menuStep(st: number, t: number, d: number) {
+    if (this.xmas) return this.xmasStep(st, t, d);
     const chords = [
       [262, 330, 392],
       [220, 262, 330],
@@ -408,6 +415,28 @@ class AudioEngine {
     const pattern = [0, -1, 1, -1, 2, -1, 1, 2, 0, -1, 2, -1, 1, -1, 2, 1];
     const n = pattern[st % 16];
     if (n >= 0) this.osc("triangle", ch[n] * 2, ch[n] * 2, t, d * 2.5, 0.16, bus);
+  }
+
+  // Noël : refrain de Jingle Bells (James Lord Pierpont, 1857), grelots, basse douce
+  private xmasStep(st: number, t: number, d: number) {
+    const bus = this.musicBus;
+    // refrain sur 64 pas (doubles croches) : mi mi mi- / mi mi mi- / mi sol do ré / mi---
+    const E = 659, G = 784, C = 523, D = 587;
+    const mel: Record<number, [number, number]> = {
+      0: [E, 3], 4: [E, 3], 8: [E, 7], 16: [E, 3], 20: [E, 3], 24: [E, 7], 32: [E, 3], 36: [G, 3], 40: [C, 5], 46: [D, 2], 48: [E, 14],
+    };
+    const n = mel[st];
+    if (n) {
+      this.osc("triangle", n[0], n[0], t, d * n[1], 0.13, bus);
+      this.osc("sine", n[0] * 2, n[0] * 2, t, d * Math.min(3, n[1]), 0.04, bus);
+    }
+    // basse : do, fa, sol, do
+    const roots = [131, 131, 175, 196];
+    const root = roots[Math.floor(st / 16) % 4];
+    if (st % 8 === 0) this.osc("sine", root, root, t, d * 6, 0.28, bus);
+    if (st % 8 === 4) this.osc("sine", root * 1.5, root * 1.5, t, d * 3, 0.12, bus);
+    // grelots sur les contretemps
+    if (st % 2 === 1) this.burst(t, 0.04, st % 4 === 3 ? 0.07 : 0.035, "highpass", 9000, 8000, bus);
   }
 
   // Partie : basse sautillante + charleston + petite mélodie

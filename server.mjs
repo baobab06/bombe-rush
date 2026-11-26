@@ -170,6 +170,31 @@ var THEMES = [
     pattern: "none",
     aura: "snow",
     exclusive: "pass"
+  },
+  {
+    id: "bonhomme",
+    name: "Bonhomme de neige",
+    rarity: "epic",
+    desc: "Calendrier de l'Avent (jour 12) : tout blanc, chapeau et écharpe.",
+    palette: P("#f4f8ff", "#b8cbe0", "#ffffff", "#ff8a1f"),
+    perKind: { ninja: { light: "#ffffff" } },
+    wear: ["tophat", "scarf"],
+    pattern: "none",
+    aura: "snow",
+    exclusive: "advent"
+  },
+  {
+    id: "pere-noel",
+    name: "Père Noël",
+    rarity: "legend",
+    desc: "Calendrier de l'Avent (jour 24) : le costume rouge, le bonnet et la neige.",
+    palette: P("#e63946", "#9d1c28", "#fff7f0", "#ffffff"),
+    perKind: { ghost: { main: "#ffe4e6", dark: "#e6a3aa" } },
+    wear: ["santa", "scarf"],
+    pattern: "none",
+    aura: "snow",
+    special: "shimmer",
+    exclusive: "advent"
   }
 ];
 function buildSkins() {
@@ -2195,6 +2220,31 @@ var VAULT = {
   modes: ["gold"]
 };
 
+// src/maps/xmas.ts
+var XMAS = {
+  id: "xmas",
+  name: "Village de Noël",
+  subtitle: "Des cadeaux… explosifs",
+  theme: "xmas",
+  layout: [
+    "###############",
+    "#S.....s.....S#",
+    "#.#.#.#.#.#.#.#",
+    "#.....#.#.....#",
+    "#.#.#.....#.#.#",
+    "#s..._.#._...s#",
+    "#.#.#.....#.#.#",
+    "#.....#.#.....#",
+    "#.#.#.#.#.#.#.#",
+    "#S.....s.....S#",
+    "###############"
+  ],
+  blockDensity: 0.65,
+  spawnClear: 1,
+  startRange: 1,
+  available: true
+};
+
 // src/maps/temple.ts
 var TEMPLE = {
   id: "temple",
@@ -2247,7 +2297,7 @@ var VOLCANO = {
 };
 
 // src/maps/index.ts
-var MAPS = [FOREST, VOLCANO, ICE, BEACH, LABYRINTH, TEMPLE, CASTLE, FACTORY, MINE, WESTERN, PYRAMID, ISLAND, VAULT];
+var MAPS = [FOREST, VOLCANO, ICE, BEACH, LABYRINTH, TEMPLE, CASTLE, FACTORY, MINE, WESTERN, PYRAMID, ISLAND, VAULT, XMAS];
 var DEFAULT_MODES = ["classic", "chaos"];
 function mapAllows(map, modeId) {
   return (map.modes ?? DEFAULT_MODES).includes(modeId);
@@ -6569,7 +6619,8 @@ var ACCESSORIES = [
   { id: "acc-horns", wear: "horns", name: "Cornes", rarity: "epic", desc: "Un petit air de démon." },
   { id: "acc-visor", wear: "visor", name: "Visière néon", rarity: "epic", desc: "Elle brille dans le noir." },
   { id: "acc-halo", wear: "halo", name: "Auréole", rarity: "legend", desc: "Un ange… qui pose des bombes." },
-  { id: "acc-crown", wear: "crown", name: "Couronne", rarity: "legend", desc: "Réservée aux rois de l'arène." }
+  { id: "acc-crown", wear: "crown", name: "Couronne", rarity: "legend", desc: "Réservée aux rois de l'arène." },
+  { id: "acc-santa", wear: "santa", name: "Bonnet de Père Noël", rarity: "epic", desc: "Calendrier de l'Avent (jour 9). Ho ho ho !", exclusive: "advent" }
 ];
 var TRAILS = [
   { id: "fx-dust", kind: "dust", name: "Poussière", rarity: "common", desc: "Le petit nuage classique.", colors: ["#e8dcc4", "#cbbd9f"], free: true },
@@ -6606,7 +6657,9 @@ var EMOTES = [
   { id: "emo-chicken", emoji: "\uD83D\uDC14", name: "Poule mouillée !", rarity: "epic", anim: "shake", taunt: true },
   { id: "emo-baby", emoji: "\uD83C\uDF7C", name: "Petit joueur", rarity: "epic", anim: "spin", taunt: true },
   { id: "emo-dance", emoji: "\uD83D\uDD7A", name: "Danse de la victoire", rarity: "legend", anim: "dance", taunt: true },
-  { id: "emo-snowman", emoji: "☃️", name: "Bonhomme de neige", rarity: "rare", anim: "bounce", exclusive: "pass" }
+  { id: "emo-snowman", emoji: "☃️", name: "Bonhomme de neige", rarity: "rare", anim: "bounce", exclusive: "pass" },
+  { id: "emo-xmas", emoji: "\uD83C\uDF84", name: "Joyeux Noël !", rarity: "rare", anim: "party", exclusive: "advent" },
+  { id: "emo-santa", emoji: "\uD83C\uDF85", name: "Ho ho ho !", rarity: "epic", anim: "laugh", exclusive: "advent" }
 ];
 var BOOMS = [
   { id: "boom-classic", name: "Classique", rarity: "common", desc: "La bonne vieille explosion orange.", spark: ["#ffe066", "#ff8a2a"], smoke: ["#e9e2d6", "#bdb4a6"], ring: "#ffb347", glow: "#fffbe0", free: true, bomb: { body: ["#5b5f8a", "#1b1c33"], cap: "#8b8fb3" } },
@@ -6619,6 +6672,7 @@ var BOOMS = [
   { id: "boom-cosmic", name: "Galaxie", rarity: "legend", desc: "Une bombe-planète et une supernova en miniature.", spark: ["#c77dff", "#ffd60a", "#ffffff"], smoke: ["#2a1b5c", "#4b2a8f"], ring: "#c77dff", glow: "#fff3b0", extra: "stars", bomb: { body: ["#b07dff", "#2a1065"], cap: "#ffd60a", deco: "ring", aura: "#c77dff" } },
   { id: "boom-gold", name: "Pluie d'or", rarity: "legend", desc: "Réservé aux meilleurs : une explosion en or massif.", spark: ["#ffd23f", "#fff4c2", "#c98a10"], smoke: ["#fff1c4", "#e8c56a"], ring: "#ffd23f", glow: "#fffbe0", extra: "stars", exclusive: "rank", bomb: { body: ["#fff1a8", "#c98a10"], cap: "#fff8dc", deco: "stars", aura: "#ffd23f" } },
   { id: "boom-veteran", name: "Vétéran", rarity: "epic", desc: "Pour ceux qui ont joué des centaines de parties.", spark: ["#ff6a1f", "#ffcf4a", "#ffffff"], smoke: ["#5a5a5a", "#3a3a3a"], ring: "#ff6a1f", glow: "#fff0d0", exclusive: "achievement", bomb: { body: ["#7a7a7a", "#2a2a2a"], cap: "#ff6a1f", deco: "stripes" } },
+  { id: "boom-gift", name: "Cadeau surprise", rarity: "epic", desc: "Calendrier de l'Avent (jour 6) : ta bombe est un cadeau… piégé.", spark: ["#ff4d6d", "#ffd23f", "#2fa65f", "#ffffff"], smoke: ["#fff4f4", "#ffe2e2"], ring: "#ffd23f", glow: "#ffffff", extra: "confetti", exclusive: "advent", bomb: { body: ["#ff6b7a", "#b81d2e"], cap: "#ffd23f", deco: "gift" } },
   { id: "boom-snowball", name: "Boule de neige", rarity: "epic", desc: "Exclusif Pass Hiver : ta bombe devient une boule de neige… qui explose en poudreuse.", spark: ["#ffffff", "#d6efff", "#8fd0ff"], smoke: ["#f4fbff", "#cfe6f7"], ring: "#bfe6ff", glow: "#ffffff", extra: "snow", exclusive: "pass", bomb: { body: ["#ffffff", "#bcd7ec"], cap: "#e63946", deco: "dots", aura: "#d6efff" } }
 ];
 var DEFAULT_BOOM = "boom-classic";
@@ -6648,6 +6702,7 @@ var TITLES = [
   { id: "title-frosty", name: "Givré", rarity: "rare", desc: "Pass de saison Hiver (palier 50, gratuit).", exclusive: "pass" },
   { id: "title-explorer", name: "Explorateur", rarity: "rare", desc: "Aventure : 30 étoiles.", exclusive: "adventure" },
   { id: "title-bossbuster", name: "Chasseur de boss", rarity: "epic", desc: "Aventure : bats Drako le Dragon.", exclusive: "adventure" },
+  { id: "title-xmas", name: "Esprit de Noël", rarity: "epic", desc: "Calendrier de l'Avent (jour 18).", exclusive: "advent" },
   { id: "title-hero", name: "Héros de l'aventure", rarity: "legend", desc: "Aventure : les 120 étoiles.", exclusive: "adventure" },
   ...CHARACTERS.flatMap((c) => [
     { id: `title-m10-${c.id}`, name: `${c.name} confirmé`, rarity: "rare", desc: `Maîtrise ${c.name} niveau 10.`, exclusive: "mastery" },
@@ -6720,7 +6775,7 @@ function build() {
       exclusive: s.exclusive
     });
   for (const a of ACCESSORIES)
-    out.push({ id: a.id, kind: "accessory", name: a.name, rarity: a.rarity, price: PRICES[a.rarity], desc: a.desc, free: false });
+    out.push({ id: a.id, kind: "accessory", name: a.name, rarity: a.rarity, price: a.exclusive ? 0 : PRICES[a.rarity], desc: a.desc, free: false, exclusive: a.exclusive });
   for (const t of TRAILS)
     out.push({ id: t.id, kind: "trail", name: t.name, rarity: t.rarity, price: t.free || t.exclusive ? 0 : PRICES[t.rarity], desc: t.desc, free: !!t.free, exclusive: t.exclusive });
   for (const e of EMOTES)
@@ -7727,24 +7782,24 @@ var W = [
     boss: { map: "beach", characterId: "rainette", skinId: "rainette-royale", name: "Reine Rainette", difficulty: "normal", rules: { hp: 4, bombs: 3, range: 4, speed: 0.25 }, minions: [], stars: [90, 55] }
   },
   {
-    name: "Banquise glacée",
+    name: "Village enneigé",
     emoji: "❄️",
     sky: ["#9fd8ff", "#eef8ff"],
     ground: "#dff2ff",
     coins: 100,
     chest: "epic",
     rows: [
-      ["win", "ice", ["hard"], 120, 0, [60, 35]],
-      ["crates", "ice", ["normal"], 90, 20, [65, 45]],
-      ["gold", "ice", ["normal", "hard"], 100, 25, [70, 50]],
-      ["survive", "ice", ["hard", "normal"], 60, 60, [1, 2], "chaos"],
+      ["win", "xmas", ["hard"], 150, 0, [70, 45]],
+      ["crates", "xmas", ["normal"], 90, 20, [65, 45]],
+      ["gold", "xmas", ["normal", "hard"], 110, 22, [75, 55]],
+      ["survive", "xmas", ["hard", "normal"], 60, 60, [1, 2], "chaos"],
       ["win", "castle", ["hard", "normal"], 150, 0, [80, 50]],
       ["gold", "pyramid", ["hard", "hard"], 110, 30, [80, 55]],
-      ["crates", "ice", ["hard"], 100, 22, [75, 50]],
-      ["win", "ice", ["hard", "normal", "normal"], 150, 0, [95, 65]],
+      ["crates", "xmas", ["hard"], 100, 22, [75, 50]],
+      ["win", "xmas", ["hard", "normal", "normal"], 150, 0, [95, 65]],
       ["survive", "castle", ["hard", "hard", "hard"], 75, 75, [1, 3], "chaos"]
     ],
-    boss: { map: "ice", characterId: "pingo", name: "Pingo l'Impitoyable", difficulty: "hard", rules: { hp: 4, bombs: 4, range: 4, speed: 0.3 }, minions: ["easy"], stars: [100, 65] }
+    boss: { map: "xmas", characterId: "pingo", name: "Pingo l'Impitoyable", difficulty: "normal", rules: { hp: 4, bombs: 4, range: 4, speed: 0.3 }, minions: [], stars: [100, 65] }
   },
   {
     name: "Volcan infernal",
@@ -7811,6 +7866,9 @@ var ADV_MILESTONES = [
 ];
 var defaultAdv = () => ({ stars: {}, best: {}, claimed: [] });
 
+// src/meta/advent.ts
+var defaultAdvent = () => ({ year: 0, days: [] });
+
 // src/meta/profile.ts
 var defaultPass = () => ({ season: "", stars: 0, premium: false, free: [], prem: [] });
 var DEFAULT_CHARACTERS = ["renard", "boulon", "rainette", "kage", "champi", "bruno"];
@@ -7844,6 +7902,7 @@ function defaultProfile() {
     weekly: { week: "", list: [] },
     pass: defaultPass(),
     adv: defaultAdv(),
+    advent: defaultAdvent(),
     mastery: {},
     achievements: {},
     chests: { common: 0, rare: 0, epic: 0, legend: 0 },
@@ -7886,6 +7945,7 @@ function migrate(data) {
     chests: { ...base.chests, ...data.chests ?? {} },
     pass: { ...base.pass, ...data.pass ?? {} },
     adv: { ...base.adv, ...data.adv ?? {} },
+    advent: { year: Number(data.advent?.year) || 0, days: Array.isArray(data.advent?.days) ? [...new Set(data.advent.days.map(Number).filter((n) => n >= 1 && n <= 24))] : [] },
     rank: { ...base.rank, ...data.rank ?? {} },
     stats: { ...base.stats, ...data.stats ?? {} },
     clock: { ...base.clock, ...data.clock ?? {} },

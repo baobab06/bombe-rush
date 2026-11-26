@@ -480,6 +480,7 @@ export class Renderer {
           if (Math.random() < 0.6) P.spawn("ember", x, y, { z: 0.1, vz: 0.5 + Math.random() * 0.6, vx: 0.15, life: 1.6, size: 0.035, color: Math.random() < 0.5 ? "#ff8a2a" : "#ffcf4a" });
           else P.spawn("flake", x, y, { z: 1.4, vz: -0.3, vx: 0.2, life: 3, size: 0.04, color: "#8a7d76", vr: 1 });
           break;
+        case "xmas":
         case "ice":
           P.spawn("flake", x, y, { z: 1.6, vz: -0.45, vx: 0.15, life: 3.2, size: 0.05 + Math.random() * 0.03, color: "#ffffff", vr: 1.5 });
           break;

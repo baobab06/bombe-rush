@@ -11,6 +11,8 @@ export interface AccessoryDef {
   name: string;
   rarity: Rarity;
   desc: string;
+  /** objet exclusif (non vendu) */
+  exclusive?: "advent";
 }
 
 export const ACCESSORIES: AccessoryDef[] = [
@@ -28,6 +30,7 @@ export const ACCESSORIES: AccessoryDef[] = [
   { id: "acc-visor", wear: "visor", name: "Visière néon", rarity: "epic", desc: "Elle brille dans le noir." },
   { id: "acc-halo", wear: "halo", name: "Auréole", rarity: "legend", desc: "Un ange… qui pose des bombes." },
   { id: "acc-crown", wear: "crown", name: "Couronne", rarity: "legend", desc: "Réservée aux rois de l'arène." },
+  { id: "acc-santa", wear: "santa", name: "Bonnet de Père Noël", rarity: "epic", desc: "Calendrier de l'Avent (jour 9). Ho ho ho !", exclusive: "advent" },
 ];
 
 /** Effets : traînée en courant + éclat quand on pose une bombe. */
@@ -43,7 +46,7 @@ export interface TrailDef {
   /** offert d'office */
   free?: boolean;
   /** objet exclusif (non vendu) : comment il se débloque */
-  exclusive?: "pass";
+  exclusive?: "pass" | "advent";
 }
 
 export const TRAILS: TrailDef[] = [
@@ -72,7 +75,7 @@ export interface EmoteDef {
   /** emote de moquerie : affiche aussi son texte au-dessus de la bulle */
   taunt?: boolean;
   /** objet exclusif (non vendu) : comment il se débloque */
-  exclusive?: "pass";
+  exclusive?: "pass" | "advent";
 }
 
 export const EMOTES: EmoteDef[] = [
@@ -99,6 +102,9 @@ export const EMOTES: EmoteDef[] = [
   { id: "emo-dance", emoji: "🕺", name: "Danse de la victoire", rarity: "legend", anim: "dance", taunt: true },
   // ❄️ Pass de saison Hiver
   { id: "emo-snowman", emoji: "☃️", name: "Bonhomme de neige", rarity: "rare", anim: "bounce", exclusive: "pass" },
+  // 🎄 Calendrier de l'Avent
+  { id: "emo-xmas", emoji: "🎄", name: "Joyeux Noël !", rarity: "rare", anim: "party", exclusive: "advent" },
+  { id: "emo-santa", emoji: "🎅", name: "Ho ho ho !", rarity: "epic", anim: "laugh", exclusive: "advent" },
 ];
 
 // --------------------------------------------------- effets d'explosion
@@ -119,13 +125,13 @@ export interface BoomDef {
   bomb: BombLook;
   free?: boolean;
   /** objet exclusif (non vendu) : comment il se débloque */
-  exclusive?: "mastery" | "achievement" | "level" | "chest" | "rank" | "pass" | "adventure";
+  exclusive?: "mastery" | "achievement" | "level" | "chest" | "rank" | "pass" | "adventure" | "advent";
 }
 export interface BombLook {
   body: [string, string];
   /** couleur du bouchon */
   cap: string;
-  deco?: "flame" | "ice" | "ring" | "skull" | "stars" | "hearts" | "dots" | "stripes";
+  deco?: "flame" | "ice" | "ring" | "skull" | "stars" | "hearts" | "dots" | "stripes" | "gift";
   /** halo coloré autour de la bombe */
   aura?: string;
 }
@@ -141,6 +147,8 @@ export const BOOMS: BoomDef[] = [
   // exclusifs
   { id: "boom-gold", name: "Pluie d'or", rarity: "legend", desc: "Réservé aux meilleurs : une explosion en or massif.", spark: ["#ffd23f", "#fff4c2", "#c98a10"], smoke: ["#fff1c4", "#e8c56a"], ring: "#ffd23f", glow: "#fffbe0", extra: "stars", exclusive: "rank", bomb: { body: ["#fff1a8", "#c98a10"], cap: "#fff8dc", deco: "stars", aura: "#ffd23f" } },
   { id: "boom-veteran", name: "Vétéran", rarity: "epic", desc: "Pour ceux qui ont joué des centaines de parties.", spark: ["#ff6a1f", "#ffcf4a", "#ffffff"], smoke: ["#5a5a5a", "#3a3a3a"], ring: "#ff6a1f", glow: "#fff0d0", exclusive: "achievement", bomb: { body: ["#7a7a7a", "#2a2a2a"], cap: "#ff6a1f", deco: "stripes" } },
+  // 🎄 Calendrier de l'Avent
+  { id: "boom-gift", name: "Cadeau surprise", rarity: "epic", desc: "Calendrier de l'Avent (jour 6) : ta bombe est un cadeau… piégé.", spark: ["#ff4d6d", "#ffd23f", "#2fa65f", "#ffffff"], smoke: ["#fff4f4", "#ffe2e2"], ring: "#ffd23f", glow: "#ffffff", extra: "confetti", exclusive: "advent", bomb: { body: ["#ff6b7a", "#b81d2e"], cap: "#ffd23f", deco: "gift" } },
   // ❄️ Pass de saison Hiver
   { id: "boom-snowball", name: "Boule de neige", rarity: "epic", desc: "Exclusif Pass Hiver : ta bombe devient une boule de neige… qui explose en poudreuse.", spark: ["#ffffff", "#d6efff", "#8fd0ff"], smoke: ["#f4fbff", "#cfe6f7"], ring: "#bfe6ff", glow: "#ffffff", extra: "snow", exclusive: "pass", bomb: { body: ["#ffffff", "#bcd7ec"], cap: "#e63946", deco: "dots", aura: "#d6efff" } },
 ];
@@ -155,7 +163,7 @@ export interface TitleDef {
   rarity: Rarity;
   desc: string;
   free?: boolean;
-  exclusive?: "mastery" | "achievement" | "level" | "chest" | "rank" | "pass" | "adventure";
+  exclusive?: "mastery" | "achievement" | "level" | "chest" | "rank" | "pass" | "adventure" | "advent";
 }
 export const TITLES: TitleDef[] = [
   { id: "title-rookie", name: "Petit nouveau", rarity: "common", desc: "Tout le monde commence quelque part.", free: true },
@@ -184,6 +192,7 @@ export const TITLES: TitleDef[] = [
   // 🗺️ Aventure
   { id: "title-explorer", name: "Explorateur", rarity: "rare", desc: "Aventure : 30 étoiles.", exclusive: "adventure" },
   { id: "title-bossbuster", name: "Chasseur de boss", rarity: "epic", desc: "Aventure : bats Drako le Dragon.", exclusive: "adventure" },
+  { id: "title-xmas", name: "Esprit de Noël", rarity: "epic", desc: "Calendrier de l'Avent (jour 18).", exclusive: "advent" },
   { id: "title-hero", name: "Héros de l'aventure", rarity: "legend", desc: "Aventure : les 120 étoiles.", exclusive: "adventure" },
   // maîtrise : 3 titres par personnage
   ...CHARACTERS.flatMap((c): TitleDef[] => [

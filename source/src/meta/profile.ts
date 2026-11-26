@@ -3,6 +3,7 @@
  * permettre les migrations (et plus tard une synchro serveur).
  */
 import { defaultAdv, type AdvState } from "./adventure";
+import { defaultAdvent, type AdventState } from "./advent";
 import { DEFAULT_BOOM, DEFAULT_EMOTES, DEFAULT_TITLE, DEFAULT_TRAIL } from "../core/cosmetics";
 import type { ChestTier } from "./progress-config";
 
@@ -114,6 +115,8 @@ export interface Profile {
   pass: PassState;
   /** mode Aventure : étoiles, records, paliers */
   adv: AdvState;
+  /** calendrier de l'Avent : cases ouvertes */
+  advent: AdventState;
   /** rang compétitif local */
   rank: { points: number; best: number; bestPoints?: number; rewarded: string[]; history: RankEntry[]; season?: number; /** saison en cours (mois UTC) */ month?: string; /** saison précédente */ last?: { month: string; points: number } };
   stats: ExtraStats;
@@ -184,6 +187,7 @@ export function defaultProfile(): Profile {
     weekly: { week: "", list: [] },
     pass: defaultPass(),
     adv: defaultAdv(),
+    advent: defaultAdvent(),
     mastery: {},
     achievements: {},
     chests: { common: 0, rare: 0, epic: 0, legend: 0 },

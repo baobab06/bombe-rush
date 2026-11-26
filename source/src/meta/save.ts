@@ -71,6 +71,7 @@ export function migrate(data: Partial<Profile> & { ownedSkins?: string[]; versio
     chests: { ...base.chests, ...(data.chests ?? {}) },
     pass: { ...base.pass, ...(data.pass ?? {}) },
     adv: { ...base.adv, ...(data.adv ?? {}) },
+    advent: { year: Number(data.advent?.year) || 0, days: Array.isArray(data.advent?.days) ? [...new Set(data.advent!.days.map(Number).filter((n) => n >= 1 && n <= 24))] : [] },
     rank: { ...base.rank, ...(data.rank ?? {}) },
     stats: { ...base.stats, ...(data.stats ?? {}) },
     clock: { ...base.clock, ...(data.clock ?? {}) },
