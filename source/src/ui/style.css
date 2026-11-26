@@ -2083,18 +2083,93 @@ body.launching #btnPlay, body.launching #btnLaunch, body.launching #btnAgain, bo
 .xmas-btn .xb-t small { font-weight: 800; font-size: max(9px, min(2.9cqh, 1.4cqw)); color: #fff1c2; }
 .xmas-btn .dot { position: absolute; top: -1.2cqh; right: -1cqh; }
 @keyframes xmasWiggle { 0%, 88%, 100% { transform: rotate(0); } 91% { transform: rotate(-6deg); } 94% { transform: rotate(6deg); } 97% { transform: rotate(-3deg); } }
-.sheet.advent-sheet { min-width: min(88cqw, 150cqh); background: linear-gradient(180deg, #1f5a3a, #12341f); }
-.advent-sheet .sub b { color: #ffd23f; }
-.avent-grid { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 1.2cqh; }
-.ad-door { position: relative; height: 17cqh; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .2cqh; padding: .6cqh; border-radius: 2.2cqh; cursor: pointer; font: inherit; color: #fff;
-  border: max(2px,.4cqh) solid var(--ink); background: linear-gradient(180deg, #c4182f, #8e0f22); box-shadow: inset 0 -.6cqh 0 rgba(0,0,0,.25), 0 .5cqh 0 var(--ink); }
-.ad-door:nth-child(3n+2) { background: linear-gradient(180deg, #2fa65f, #1b7040); }
-.ad-door:nth-child(3n) { background: linear-gradient(180deg, #2f8fe0, #1d5fa0); }
-.ad-door.big { background: linear-gradient(180deg, #ffd23f, #d08a00); }
-.ad-door .ad-n { position: absolute; top: .3cqh; left: 1cqh; font-family: var(--display); font-size: max(10px, 3.4cqh); text-shadow: var(--outline); }
-.ad-door .ad-ic { font-size: min(6.4cqh, 3cqw); margin-top: 1.6cqh; }
-.ad-door .ad-lb { font-weight: 800; font-size: max(8px, 2.3cqh); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
-.ad-door.done { filter: grayscale(.6) brightness(.75); }
-.ad-door.done .ad-lb { color: #8affb0; font-size: max(11px, 3.4cqh); }
-.ad-door.can { animation: advPulse 1.2s ease-in-out infinite; outline: max(2px,.5cqh) solid #ffd23f; }
-.ad-door.today { outline: max(2px,.5cqh) solid #fff; }
+/* ---------- calendrier de l'Avent : boîtes-cadeaux sur fond de nuit enneigée */
+.sheet.advent-sheet { position: relative; overflow: hidden auto; min-width: min(94cqw, 178cqh); padding: 6.2cqh 3.4cqh 3cqh; gap: 1.6cqh;
+  background: radial-gradient(120% 40% at 50% 112%, #f4fbff 0 40%, transparent 41%), radial-gradient(90% 30% at 15% 108%, #e3f0fb 0 45%, transparent 46%),
+    radial-gradient(2px 2px at 12% 22%, #fff 50%, transparent 51%), radial-gradient(2px 2px at 78% 14%, #fff 50%, transparent 51%), radial-gradient(1.5px 1.5px at 42% 30%, #fff 50%, transparent 51%), radial-gradient(1.5px 1.5px at 90% 40%, #fff 50%, transparent 51%),
+    linear-gradient(180deg, #14204d 0%, #233a7a 60%, #3a5aa0 100%);
+  border-color: #ffd23f; box-shadow: 0 0 0 max(2px,.5cqh) var(--ink), 0 0 6cqh rgba(255,210,63,.35); }
+.advent-sheet .sheet-close { z-index: 5; }
+.av-lights { position: absolute; left: 0; right: 0; top: 0; height: 6cqh; display: flex; justify-content: space-around; align-items: flex-start; pointer-events: none;
+  background: radial-gradient(60% 140% at 50% -60%, transparent 70%, #0b1230 71% 74%, transparent 75%); }
+.av-lights i { width: 2.2cqh; height: 3.2cqh; min-width: 8px; min-height: 11px; margin-top: 1.2cqh; border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%; background: #ff4d6d; box-shadow: 0 0 2.4cqh #ff4d6d; animation: avBlink 1.6s var(--d) ease-in-out infinite alternate; }
+.av-lights i:nth-child(4n+2) { background: #ffd23f; box-shadow: 0 0 2.4cqh #ffd23f; }
+.av-lights i:nth-child(4n+3) { background: #4cc9f0; box-shadow: 0 0 2.4cqh #4cc9f0; }
+.av-lights i:nth-child(4n) { background: #8ae65a; box-shadow: 0 0 2.4cqh #8ae65a; }
+.av-lights i:nth-child(odd) { margin-top: 2.2cqh; }
+@keyframes avBlink { from { opacity: .35; filter: saturate(.6); } to { opacity: 1; } }
+.av-snow { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.av-snow i { position: absolute; top: -5cqh; font-style: normal; color: #fff; opacity: .6; font-size: max(9px, 2.6cqh); animation: avSnow linear infinite; }
+@keyframes avSnow { to { transform: translateY(105cqh) translateX(3cqh); } }
+.av-head { position: relative; display: flex; flex-direction: column; align-items: center; gap: .8cqh; }
+.av-head h2 { color: #ffd23f; font-size: min(9cqh, 4.4cqw) !important; }
+.av-sub { display: flex; gap: 1.6cqh; align-items: center; flex-wrap: wrap; justify-content: center; }
+.av-chip { padding: .5cqh 2.4cqh .8cqh; border-radius: 99px; background: rgba(255,255,255,.14); border: max(1.5px,.3cqh) solid rgba(255,255,255,.35); font-weight: 800; font-size: max(11px, .8em); }
+.av-chip b { color: #ffd23f; }
+.av-hint { font-weight: 800; font-size: max(11px, .78em); color: #cfe0ff; }
+.avent-grid { position: relative; display: grid; grid-template-columns: repeat(9, minmax(0, 1fr)); gap: 1cqh 1.2cqh; }
+.ad-gift { --w: #e63946; --wd: #a51d2a; --r: #ffd23f; position: relative; height: 20cqh; min-width: 0; padding: 0; border: 0; background: none; cursor: pointer; font: inherit; color: #fff; }
+.ad-gift.w1 { --w: #2fa65f; --wd: #1b7040; --r: #ff4d6d; }
+.ad-gift.w2 { --w: #2f8fe0; --wd: #1d5fa0; --r: #ffffff; }
+.ad-gift.w3 { --w: #9b5de5; --wd: #6a35b0; --r: #ffd23f; }
+.ad-gift.w4 { --w: #ffcf3a; --wd: #c99a10; --r: #e63946; }
+.ad-gift.w5 { --w: #f4f6fb; --wd: #b9c3d6; --r: #e63946; }
+.ad-gift.hero { grid-column: span 4; --w: #ffcf3a; --wd: #c48a00; --r: #e63946; }
+.ad-box { position: absolute; left: 9%; right: 9%; top: 31%; bottom: 17%; border-radius: 1.4cqh; border: max(2px,.4cqh) solid var(--ink); overflow: hidden;
+  background: repeating-linear-gradient(135deg, rgba(255,255,255,.16) 0 .9cqh, transparent .9cqh 2.6cqh), linear-gradient(180deg, var(--w), var(--wd)); box-shadow: 0 .7cqh 0 var(--ink); }
+.ad-gift.w5 .ad-box { background: repeating-linear-gradient(135deg, #e63946 0 1.2cqh, #f4f6fb 1.2cqh 2.8cqh); }
+.ad-lid { position: absolute; left: 4%; right: 4%; top: 21%; height: 14%; border-radius: 1.2cqh; border: max(2px,.4cqh) solid var(--ink); background: linear-gradient(180deg, var(--w), var(--wd)); z-index: 2; transition: transform .3s; }
+.ad-rib-v { position: absolute; left: 50%; top: 0; bottom: 0; width: 18%; transform: translateX(-50%); background: var(--r); box-shadow: inset .4cqh 0 0 rgba(255,255,255,.35); }
+.ad-rib-h { position: absolute; left: 0; right: 0; top: 30%; height: 15%; background: var(--r); }
+.ad-bow { position: absolute; left: 50%; top: -3.4cqh; width: 9cqh; height: 4cqh; transform: translateX(-50%); }
+.ad-bow i { position: absolute; top: .4cqh; width: 4.4cqh; height: 3.2cqh; border-radius: 50%; background: var(--r); border: max(1.5px,.35cqh) solid var(--ink); }
+.ad-bow i:first-child { left: 0; transform: rotate(-22deg); }
+.ad-bow i:nth-child(2) { right: 0; transform: rotate(22deg); }
+.ad-bow b { position: absolute; left: 50%; top: 1.4cqh; width: 2.4cqh; height: 2.4cqh; transform: translateX(-50%); border-radius: 50%; background: var(--r); border: max(1.5px,.35cqh) solid var(--ink); }
+.ad-tag { position: absolute; left: 50%; top: 60%; transform: translate(-50%, -50%); z-index: 3; min-width: 7cqh; height: 7cqh; padding: 0 1cqh; border-radius: 99px; display: grid; place-items: center;
+  background: #fff; color: var(--ink); border: max(2px,.4cqh) solid var(--ink); font-family: var(--display); font-size: max(12px, 4.6cqh); line-height: 1; box-shadow: 0 .5cqh 0 rgba(0,0,0,.3); }
+.ad-cap { position: absolute; left: -2%; right: -2%; bottom: 0; z-index: 3; text-align: center; font-weight: 800; font-size: max(8.5px, 2.5cqh); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 .3cqh 0 var(--ink), 0 0 .6cqh var(--ink); }
+.ad-in { position: absolute; left: 0; right: 0; top: 4%; bottom: 20%; display: grid; place-items: center; z-index: 4; pointer-events: none; opacity: 0; }
+.ad-art { display: grid; place-items: center; filter: drop-shadow(0 .6cqh 0 rgba(0,0,0,.35)); }
+.ad-art .coin.big, .ad-art .bomber.big { width: 9cqh; height: 9cqh; }
+.ad-emo { font-style: normal; font-size: 9cqh; line-height: 1; }
+.ad-title { font-style: normal; font-weight: 800; font-size: max(9px, 2.6cqh); background: rgba(20,15,60,.85); padding: .6cqh 1.4cqh; border-radius: 99px; white-space: nowrap; }
+/* objets exclusifs encore fermés : silhouette mystère dans un coin */
+.ad-gift.special:not(.done):not(.hero) .ad-in { opacity: 1; left: auto; right: -8%; top: -6%; bottom: auto; width: 9cqh; height: 9cqh; transform: rotate(10deg); }
+.ad-gift.special:not(.done):not(.hero) .ad-art canvas { width: 9cqh !important; height: 9cqh !important; filter: brightness(0) drop-shadow(0 0 .8cqh rgba(255,230,140,.9)); opacity: .85; }
+.ad-gift.special:not(.done):not(.hero) .ad-emo { font-size: 5.6cqh; filter: brightness(0) drop-shadow(0 0 .8cqh rgba(255,230,140,.9)); }
+.ad-gift.special:not(.done):not(.hero) .ad-title { display: none; }
+/* la grande boîte du 24 : le cadeau est montré à côté */
+.ad-gift.hero .ad-box { left: 52%; right: 4%; }
+.ad-gift.hero .ad-lid { left: 49%; right: 1%; }
+.ad-gift.hero .ad-bow { width: 12cqh; height: 5cqh; top: -4.4cqh; }
+.ad-gift.hero .ad-bow i { width: 6cqh; height: 4.2cqh; }
+.ad-gift.hero .ad-tag { left: 74%; font-size: max(14px, 6cqh); min-width: 9cqh; height: 9cqh; }
+.ad-gift.hero .ad-in { opacity: 1; left: 4%; right: 52%; top: -16%; bottom: 0; }
+.ad-gift.hero .ad-art canvas { width: 23cqh !important; height: 23cqh !important; }
+.ad-gift.hero .ad-cap { left: 50%; right: 2%; bottom: -1cqh; font-family: var(--display); font-weight: 400; font-size: max(10px, 3.2cqh); color: #ffd23f; }
+.ad-gift.hero:not(.done) .ad-in::before { content: ""; position: absolute; inset: 10% 10%; border-radius: 50%; background: radial-gradient(circle, rgba(255,230,120,.55), transparent 70%); animation: avBlink 1.4s ease-in-out infinite alternate; z-index: -1; }
+/* à ouvrir maintenant */
+.ad-gift.can { animation: adWiggle 1.6s ease-in-out infinite; filter: drop-shadow(0 0 1.6cqh rgba(255,230,120,.95)); }
+.ad-gift.can .ad-cap { color: #ffd23f; font-family: var(--display); font-weight: 400; }
+@keyframes adWiggle { 0%, 70%, 100% { transform: rotate(0); } 76% { transform: rotate(-5deg) scale(1.05); } 82% { transform: rotate(5deg) scale(1.05); } 88% { transform: rotate(-3deg); } 94% { transform: rotate(2deg); } }
+.ad-today { position: absolute; left: 50%; top: -1.2cqh; transform: translateX(-50%) rotate(-4deg); z-index: 5; padding: .2cqh 1.2cqh .4cqh; border-radius: 99px; background: #ff4d6d; border: max(1.5px,.3cqh) solid var(--ink); font-weight: 800; font-size: max(8px, 2.1cqh); white-space: nowrap; }
+/* déjà ouvert : couvercle posé de côté, le cadeau sort de la boîte */
+.ad-gift.done .ad-lid { transform: translate(16%, -38%) rotate(14deg) scale(.86); }
+.ad-gift.done .ad-tag { display: none; }
+.ad-gift.done .ad-in { opacity: 1; }
+.ad-gift.done .ad-box { filter: saturate(.55) brightness(.85); }
+.ad-gift.done .ad-cap { color: #8affb0; }
+.ad-gift.nope { animation: adNope .35s; }
+@keyframes adNope { 25% { transform: translateX(-1cqh); } 75% { transform: translateX(1cqh); } }
+/* ouverture : le couvercle saute, confettis */
+.ad-gift.opening { animation: adJump .5s cubic-bezier(.2,1.6,.4,1); filter: drop-shadow(0 0 3cqh rgba(255,230,120,1)); }
+.ad-gift.opening .ad-lid { animation: adLidOff .7s cubic-bezier(.2,1.2,.4,1) forwards; }
+.ad-gift.opening .ad-tag { opacity: 0; transition: opacity .2s; }
+.ad-gift.opening .ad-in { opacity: 1; animation: adRise .7s .15s cubic-bezier(.2,1.6,.4,1) both; }
+@keyframes adJump { 30% { transform: scale(1.18, .85); } 60% { transform: scale(.92, 1.12) translateY(-1.5cqh); } }
+@keyframes adLidOff { to { transform: translate(40%, -120%) rotate(40deg); opacity: 0; } }
+@keyframes adRise { from { transform: translateY(40%) scale(.3); } to { transform: translateY(-12%) scale(1.25); } }
+.ad-burst { position: absolute; left: 50%; top: 45%; z-index: 6; pointer-events: none; }
+.ad-burst i { position: absolute; width: 1.4cqh; height: 2.2cqh; border-radius: .4cqh; background: var(--c); transform: rotate(var(--a)) translateY(0); animation: adConf .8s ease-out forwards; }
+@keyframes adConf { to { transform: rotate(var(--a)) translateY(-14cqh) rotate(200deg); opacity: 0; } }
