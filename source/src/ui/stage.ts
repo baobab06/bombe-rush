@@ -36,7 +36,7 @@ export class Stage {
   private mode: Mode = "idle";
   private emote: { def: EmoteDef; at: number; loop: boolean } | null = null;
   private actAt = -10;
-  private act: "wave" | "hop" | "spin" | null = null;
+  private act: "wave" | "hop" | "spin" | "dance" | null = null;
   private nextAct = 3;
   private face = 0;
   private flashAt = -10;
@@ -92,7 +92,7 @@ export class Stage {
   /** Toucher le personnage : il réagit. */
   poke() {
     const r = Math.random();
-    this.act = r < 0.4 ? "hop" : r < 0.75 ? "wave" : "spin";
+    this.act = r < 0.3 ? "hop" : r < 0.55 ? "wave" : r < 0.75 ? "spin" : "dance";
     this.actAt = this.t;
     if (this.idleEmotes.length && Math.random() < 0.5) this.showEmote(this.idleEmotes[Math.floor(Math.random() * this.idleEmotes.length)]);
   }
@@ -221,7 +221,11 @@ export class Stage {
       else if (r < 0.7) {
         this.act = "hop";
         this.actAt = t;
-      } else if (r < 0.85 && this.idleEmotes.length) this.showEmote(this.idleEmotes[Math.floor(Math.random() * this.idleEmotes.length)]);
+      } else if (r < 0.8) {
+        // petite danse
+        this.act = "dance";
+        this.actAt = t;
+      } else if (r < 0.9 && this.idleEmotes.length) this.showEmote(this.idleEmotes[Math.floor(Math.random() * this.idleEmotes.length)]);
       else this.face = 0;
     }
     // 2e place : petits sauts de joie ; dernière place : sonné, étoiles
@@ -236,16 +240,20 @@ export class Stage {
       this.actAt = t;
       for (let k = 0; k < 3; k++) this.P.spawn("star", (Math.random() - 0.5) * 0.6, -0.2, { z: 1.2 + Math.random() * 0.3, vx: (Math.random() - 0.5) * 0.8, vz: 0.4, life: 0.9, size: 0.09, color: "#ffe066" });
     }
-    if (this.act && sinceAct > 1.2) this.act = null;
+    if (this.act && sinceAct > (this.act === "dance" ? 2.6 : 1.2)) this.act = null;
+    const dancing = this.act === "dance";
+    const beat = dancing ? Math.floor(sinceAct / 0.32) : 0;
+    if (dancing && Math.floor((sinceAct - dt) / 0.32) !== beat)
+      this.P.spawn("twinkle", (beat % 2 ? 0.45 : -0.45), -0.9, { z: 0.6, vz: 0.5, vx: beat % 2 ? 0.3 : -0.3, life: 0.9, size: 0.1, color: ["#ffd23f", "#ff7eb6", "#7df9ff"][beat % 3] });
     const running = this.mode === "run";
     const pose: CharPose = {
-      faceX: running ? 1 : this.act === "spin" ? [0, 1, 0, -1][Math.floor(sinceAct * 8) % 4] : this.face,
+      faceX: running ? 1 : this.act === "spin" ? [0, 1, 0, -1][Math.floor(sinceAct * 8) % 4] : dancing ? [-1, 0, 1, 0][beat % 4] : this.face,
       faceY: running ? 0 : this.act === "spin" ? [1, 0, -1, 0][Math.floor(sinceAct * 8) % 4] : 1,
       walk: t * 2.4,
       moving: running,
       t,
       expr: this.expr(),
-      celebrate: this.mode === "win" || this.act === "hop",
+      celebrate: this.mode === "win" || this.act === "hop" || (dancing && beat % 2 === 0),
       hurt: this.mode === "ko" && sinceAct < 0.45 ? sinceAct / 0.45 : undefined,
       wave: this.act === "wave" ? Math.min(1, sinceAct / 1.2) : undefined,
     };
@@ -255,7 +263,9 @@ export class Stage {
     emitAura(this.P, look.aura, 0, -0.25, look.palette, dt, this.auraAcc, 1.4);
     if (running) emitTrail(this.P, this.look.trailId ?? getTrail(null).id, 0, 0, 1, 0, dt, this.trailAcc, false);
     this.P.update(dt);
-    drawCharacter(ctx, cx, cy, s, look, pose, "#1a1626");
+    // danse : petits rebonds en rythme
+    const bob = dancing ? Math.abs(Math.sin((sinceAct / 0.32) * Math.PI)) * s * 0.06 : 0;
+    drawCharacter(ctx, cx, cy - bob, s, look, pose, "#1a1626");
     this.P.draw(ctx, cx, cy, s);
     if (this.emote) {
       const age = t - this.emote.at;

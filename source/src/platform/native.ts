@@ -5,6 +5,8 @@
  */
 export interface AndroidBridge {
   share(text: string, title: string): void;
+  /** partage d'une image PNG en base64 (appli 1.21.0 et plus) */
+  shareImage?(base64Png: string, text: string, title: string): void;
   vibrate(ms: number): void;
   /** adresse du serveur multijoueur intégrée à l'APK */
   serverUrl(): string;

@@ -24,8 +24,8 @@ android {
         applicationId = "com.bomberush.game"
         minSdk = 24
         targetSdk = 36
-        versionCode = 64
-        versionName = "1.20.0"
+        versionCode = 65
+        versionName = "1.21.0"
         manifestPlaceholders["admobAppId"] = admobAppId
     }
 
@@ -86,6 +86,8 @@ dependencies {
     implementation("com.android.billingclient:billing:8.0.0")
     // demande de note officielle (« In-App Review »)
     implementation("com.google.android.play:review:2.0.2")
+    // partage d'images (FileProvider)
+    implementation("androidx.core:core:1.13.1")
     // connexion Google officielle (Credential Manager + « Se connecter avec Google »)
     implementation("androidx.credentials:credentials:1.5.0")
     implementation("androidx.credentials:credentials-play-services-auth:1.5.0")

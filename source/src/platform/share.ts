@@ -59,3 +59,39 @@ export async function shareInvite(o: { title: string; text: string; url: string 
   }
   return (await copyText(`${o.text}`)) ? "copied" : "failed";
 }
+
+/**
+ * Partage d'une image (carte joueur) : appli Android → feuille de partage
+ * avec l'image ; navigateur → partage de fichier si possible, sinon
+ * téléchargement de l'image.
+ */
+export async function shareImage(canvas: HTMLCanvasElement, o: { title: string; text: string; file: string }): Promise<ShareResult> {
+  const app = androidApp();
+  const url = canvas.toDataURL("image/png");
+  try {
+    if (app?.shareImage) {
+      app.shareImage(url.slice(url.indexOf(",") + 1), o.text, o.title);
+      return "shared";
+    }
+    const blob: Blob | null = await new Promise((res) => canvas.toBlob(res, "image/png"));
+    if (blob && navigator.canShare) {
+      const f = new File([blob], o.file, { type: "image/png" });
+      if (navigator.canShare({ files: [f] })) {
+        await navigator.share({ files: [f], title: o.title, text: o.text });
+        return "shared";
+      }
+    }
+    if (app) {
+      app.share(o.text, o.title);
+      return "shared";
+    }
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = o.file;
+    a.click();
+    return "copied";
+  } catch (e) {
+    if ((e as Error)?.name === "AbortError") return "cancelled";
+    return "failed";
+  }
+}

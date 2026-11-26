@@ -1,3 +1,4 @@
+import { getItem } from "../meta/catalog";
 import { AdventUI } from "./advent-ui";
 import { adventInfo } from "../meta/advent";
 import { drawCharacter, lookOf } from "../render/bodies";
@@ -718,6 +719,7 @@ class App implements AppCtx {
     }
     const deal = featured();
     const dp = priceOf(deal.dealId);
+    this.renderNews();
     $("shopRibbon").hidden = !dp.deal;
     $("shopRibbon").textContent = `-${Math.round((1 - dp.price / dp.full) * 100)}%`;
     // événement en cours sur le mode choisi : rappelé au début de la ligne
@@ -1665,6 +1667,10 @@ class App implements AppCtx {
     const o = this.online;
     this.game.sendEmote = (id) => o.sendEmote(id);
     o.onEmote = (player, id) => this.game.remoteEmote(player, id);
+    $("homeNews").addEventListener("click", () => {
+      this.click();
+      this.news[this.newsIdx]?.go();
+    });
     $("btnAdvent").addEventListener("click", () => {
       this.click();
       this.adventUI.open();
@@ -2309,6 +2315,49 @@ class App implements AppCtx {
       bar.hidden = true;
       bar.classList.remove("out");
     }, 200);
+  }
+
+  // ------------------------------------------------------------ à la une (accueil)
+  private news: { ic: string; t: string; s: string; tone: string; go: () => void }[] = [];
+  private newsIdx = 0;
+  private newsTimer = 0;
+
+  /** Bandeau « à la une » de l'accueil : les nouveautés défilent toutes seules. */
+  private renderNews() {
+    const p = this._profile;
+    const items: typeof this.news = [];
+    const av = adventInfo(p);
+    if (av.season)
+      items.push({ ic: "🎄", t: "Calendrier de l'Avent", s: av.claimable.length ? `🎁 ${av.claimable.length} cadeau${av.claimable.length > 1 ? "x" : ""} à ouvrir !` : av.open ? "Reviens demain !" : `Ouverture dans ${av.startsIn} j`, tone: "red", go: () => this.adventUI.open() });
+    const cl = currentLevel(p);
+    items.push({ ic: "🗺️", t: "Mode Aventure", s: advStarsOf(p) >= 120 ? "120 ⭐ : bravo !" : cl.goal === "boss" ? `Boss : ${cl.boss!.name}` : `Niveau ${cl.id} · ⭐ ${advStarsOf(p)}/120`, tone: "orange", go: () => this.go("adventure") });
+    const f = featured();
+    const it = getItem(f.dealId);
+    const fp = priceOf(f.dealId);
+    if (it && fp.deal) items.push({ ic: "🔥", t: `Offre du jour −${Math.round((1 - fp.price / fp.full) * 100)} %`, s: it.name, tone: "pink", go: () => this.go("shop") });
+    const np = passToClaim(p);
+    items.push({ ic: "⭐", t: "Pass de saison", s: np ? `🎁 ${np} récompense${np > 1 ? "s" : ""} à prendre` : `Palier ${passTier(p)} / 100`, tone: "purple", go: () => this.go("pass") });
+    items.push({ ic: "💰", t: "Ruée vers l'or", s: "5 cartes à piller !", tone: "gold", go: () => this.go("setup") });
+    const rp = rankProgress(p.rank.points);
+    items.push({ ic: rp.rank.icon, t: "Compétition", s: `${rp.step.name} · ${fmt(p.rank.points)} 🏆`, tone: "blue", go: () => this.go("rank") });
+    this.news = items;
+    this.newsIdx %= items.length;
+    this.showNews(false);
+    if (!this.newsTimer)
+      this.newsTimer = window.setInterval(() => {
+        if (this.screen !== "home" || this.modal.isOpen || document.hidden) return;
+        this.newsIdx = (this.newsIdx + 1) % this.news.length;
+        this.showNews(true);
+      }, 4500);
+  }
+
+  private showNews(anim: boolean) {
+    const n = this.news[this.newsIdx];
+    if (!n) return;
+    const card = $("newsCard");
+    card.className = `nw-card ${n.tone}${anim ? " in" : ""}`;
+    card.innerHTML = `<span class="nw-ic">${n.ic}</span><span class="nw-t"><b>${esc(n.t)}</b><small>${esc(n.s)}</small></span>`;
+    $("newsDots").innerHTML = this.news.map((_, i) => `<i class="${i === this.newsIdx ? "on" : ""}"></i>`).join("");
   }
 
   /** Grosse annonce animée (DOUBLE K.O., DERNIER SURVIVANT…). */

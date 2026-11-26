@@ -178,7 +178,21 @@ export class ItemBrowser {
       const head = document.createElement("div");
       head.className = "featured-head";
       head.style.gridColumn = "1 / -1";
-      head.innerHTML = `<b>Sélection du jour</b><span>· renouvelée dans ${Math.floor(ms / 3600000)} h ${String(Math.floor((ms % 3600000) / 60000)).padStart(2, "0")}</span>`;
+      // compte à rebours en direct jusqu'à la nouvelle sélection (minuit)
+      const end = Date.now() + ms;
+      const hms = () => {
+        const r = Math.max(0, end - Date.now());
+        const h = Math.floor(r / 3600000);
+        const m = Math.floor((r % 3600000) / 60000);
+        const s = Math.floor((r % 60000) / 1000);
+        return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+      };
+      head.innerHTML = `<b>🔥 Sélection du jour</b><span class="fh-clock">⏱ <em>${hms()}</em></span><span>nouvelle sélection à minuit</span>`;
+      const clock = head.querySelector("em")!;
+      const tick = window.setInterval(() => {
+        if (!head.isConnected) return window.clearInterval(tick);
+        clock.textContent = hms();
+      }, 1000);
       grid.appendChild(head);
     }
     this.items().forEach((it, i) => {

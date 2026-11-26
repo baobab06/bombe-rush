@@ -11,14 +11,16 @@ import { masteryOf, nextMasteryStep } from "../meta/mastery";
 import { MASTERY_MAX, levelXp, masteryXp } from "../meta/progress-config";
 import { rankProgress } from "../meta/rank";
 import { drawPortrait } from "../ui/thumbs";
+import { drawPlayerCard, favoriteCharacter } from "../ui/player-card";
+import { shareImage } from "../platform/share";
 import { fmt, type AppCtx } from "./ctx";
 import { coinsOf, rewardChip, showGranted } from "./rewards";
 
 const $ = (id: string) => document.getElementById(id)!;
-type Tab = "ach" | "mastery" | "stats";
+type Tab = "card" | "ach" | "mastery" | "stats";
 
 export class ProfileScreen {
-  tab: Tab = "ach";
+  tab: Tab = "card";
 
   constructor(private ctx: AppCtx, private onChange: () => void, private actions: { rename(): void; titles(): void; rank(): void }) {
     $("profTabs").querySelectorAll<HTMLButtonElement>("button").forEach((b) =>
@@ -39,7 +41,8 @@ export class ProfileScreen {
     const body = $("profBody");
     body.innerHTML = "";
     body.scrollTop = 0;
-    if (this.tab === "ach") this.renderAch(body);
+    if (this.tab === "card") this.renderPlayerCard(body);
+    else if (this.tab === "ach") this.renderAch(body);
     else if (this.tab === "mastery") this.renderMastery(body);
     else this.renderStats(body);
   }
@@ -74,6 +77,37 @@ export class ProfileScreen {
       this.ctx.click();
       this.actions.rename();
     });
+  }
+
+  /** Carte joueur à partager (image). */
+  private renderPlayerCard(body: HTMLElement) {
+    const p = this.ctx.profile;
+    const wrap = document.createElement("div");
+    wrap.className = "pcard-wrap";
+    const cv = document.createElement("canvas");
+    cv.className = "pcard";
+    drawPlayerCard(cv, p);
+    // les polices du jeu peuvent arriver après : on redessine
+    void document.fonts?.ready.then(() => drawPlayerCard(cv, p));
+    wrap.appendChild(cv);
+    const side = document.createElement("div");
+    side.className = "pcard-side";
+    const fav = favoriteCharacter(p);
+    side.innerHTML = `<h3>Ta carte de joueur</h3>
+      <p>Montre ton niveau, ton rang et tes meilleures stats à tes amis !</p>
+      <p class="pcard-fav">❤️ Perso préféré : <b>${fav.name}</b></p>`;
+    const share = document.createElement("button");
+    share.className = "btn btn-green";
+    share.innerHTML = "<span>📤 PARTAGER MA CARTE</span>";
+    share.addEventListener("click", async () => {
+      this.ctx.click();
+      const r = await shareImage(cv, { title: "Ma carte Bombe Rush", text: `Mon profil sur Bombe Rush 💣 Niveau ${p.level} — viens me défier ! https://play.google.com/store/apps/details?id=com.bomberush.game`, file: "carte-bombe-rush.png" });
+      if (r === "copied") this.ctx.toast("📥 Image enregistrée", "good");
+      else if (r === "failed") this.ctx.toast("Partage impossible sur cet appareil", "bad");
+    });
+    side.appendChild(share);
+    wrap.appendChild(side);
+    body.appendChild(wrap);
   }
 
   private renderAch(body: HTMLElement) {

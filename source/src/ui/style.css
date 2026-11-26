@@ -2173,3 +2173,41 @@ body.launching #btnPlay, body.launching #btnLaunch, body.launching #btnAgain, bo
 .ad-burst { position: absolute; left: 50%; top: 45%; z-index: 6; pointer-events: none; }
 .ad-burst i { position: absolute; width: 1.4cqh; height: 2.2cqh; border-radius: .4cqh; background: var(--c); transform: rotate(var(--a)) translateY(0); animation: adConf .8s ease-out forwards; }
 @keyframes adConf { to { transform: rotate(var(--a)) translateY(-14cqh) rotate(200deg); opacity: 0; } }
+
+/* ---------- carte joueur (profil) */
+.pcard-wrap { display: flex; gap: 3cqh; align-items: center; justify-content: center; height: 100%; min-height: 0; padding: 1cqh 0; }
+.pcard { height: min(100%, 72cqh); aspect-ratio: 3 / 4; width: auto; border-radius: 3cqh; box-shadow: 0 1.4cqh 0 var(--ink), 0 3cqh 5cqh rgba(0,0,0,.45); transform: rotate(-2deg); animation: pcardIn .6s cubic-bezier(.2,1.4,.4,1); }
+@keyframes pcardIn { from { transform: rotate(-12deg) scale(.6); opacity: 0; } }
+.pcard-side { display: flex; flex-direction: column; gap: 1.6cqh; max-width: 70cqh; }
+.pcard-side h3 { margin: 0; font-family: var(--display); font-weight: 400; font-size: min(6cqh, 3cqw); text-shadow: var(--outline); }
+.pcard-side p { margin: 0; font-weight: 700; color: var(--muted); font-size: max(11px, .8em); }
+.pcard-side .pcard-fav { color: #fff; }
+.pcard-side .pcard-fav b { color: #ffd23f; }
+
+/* ---------- accueil : bandeau « à la une » qui défile */
+.news { flex: 0 1 62cqh; min-width: 0; margin: 0 1.6cqh; padding: 0; border: 0; background: none; cursor: pointer; display: flex; flex-direction: column; align-items: stretch; gap: .6cqh; font: inherit; color: #fff; }
+.nw-card { --a: #4a5ae0; --b: #2a2f9e; display: flex; align-items: center; gap: 1.4cqh; padding: .8cqh 2.4cqh 1cqh 1.2cqh; border-radius: 99px; border: var(--edge) solid var(--ink); min-width: 0;
+  background: linear-gradient(180deg, var(--a), var(--b)); box-shadow: inset 0 -.7cqh 0 rgba(0,0,0,.22), 0 .7cqh 0 var(--ink); overflow: hidden; position: relative; }
+.nw-card::after { content: ""; position: absolute; top: 0; bottom: 0; width: 30%; left: -40%; background: linear-gradient(100deg, transparent, rgba(255,255,255,.35), transparent); animation: nwShine 4.5s ease-in-out infinite; }
+@keyframes nwShine { 0%, 60% { left: -40%; } 85%, 100% { left: 120%; } }
+.nw-card.in { animation: nwIn .45s cubic-bezier(.2,1.3,.4,1); }
+@keyframes nwIn { from { transform: translateY(60%) scale(.9); opacity: 0; } }
+.nw-card.red { --a: #ff6b7a; --b: #c4182f; }
+.nw-card.orange { --a: #ffa84a; --b: #e0661a; }
+.nw-card.pink { --a: #ff7eb6; --b: #d1307a; }
+.nw-card.purple { --a: #a77bff; --b: #6a35d0; }
+.nw-card.gold { --a: #ffd23f; --b: #d08a00; }
+.nw-card.blue { --a: #5ab0ff; --b: #2a6fd0; }
+.nw-ic { font-size: min(6.4cqh, 3cqw); filter: drop-shadow(0 .4cqh 0 rgba(0,0,0,.35)); flex: none; }
+.nw-t { display: flex; flex-direction: column; min-width: 0; line-height: 1.05; text-align: left; }
+.nw-t b { font-family: var(--display); font-weight: 400; font-size: max(9px, min(3.1cqh, 1.5cqw)); text-shadow: var(--outline); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nw-t small { font-weight: 800; font-size: max(9px, min(3cqh, 1.4cqw)); color: #fff6d6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 .3cqh 0 rgba(0,0,0,.35); }
+.nw-dots { display: flex; justify-content: center; gap: .8cqh; }
+.nw-dots i { width: 1.2cqh; height: 1.2cqh; min-width: 4px; min-height: 4px; border-radius: 50%; background: rgba(255,255,255,.35); transition: width .3s; }
+.nw-dots i.on { width: 3.4cqh; border-radius: 99px; background: #ffd23f; }
+
+/* ---------- boutique : offre du jour plus visible */
+.featured-head .fh-clock { padding: .3cqh 1.8cqh .5cqh; border-radius: 99px; background: linear-gradient(180deg, #ff6b7a, #c4182f); border: max(1.5px,.3cqh) solid var(--ink); color: #fff; font-variant-numeric: tabular-nums; }
+.featured-head .fh-clock em { font-style: normal; font-family: var(--display); font-weight: 400; letter-spacing: .03em; }
+.item.big { overflow: hidden; }
+.item.big::after { content: ""; position: absolute; top: 0; bottom: 0; width: 35%; left: -45%; pointer-events: none; background: linear-gradient(100deg, transparent, rgba(255,255,255,.32), transparent); animation: nwShine 3.6s ease-in-out infinite; z-index: 3; }

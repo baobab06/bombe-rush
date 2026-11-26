@@ -304,6 +304,41 @@ public class MainActivity extends Activity {
             });
         }
 
+        /** Partage d'une image PNG (base64) avec un texte : carte joueur. */
+        @JavascriptInterface
+        public void shareImage(final String base64Png, final String text, final String title) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        byte[] data = android.util.Base64.decode(base64Png, android.util.Base64.DEFAULT);
+                        java.io.File dir = new java.io.File(getCacheDir(), "share");
+                        if (!dir.exists() && !dir.mkdirs()) throw new java.io.IOException("cache");
+                        java.io.File f = new java.io.File(dir, "carte-bombe-rush.png");
+                        java.io.FileOutputStream out = new java.io.FileOutputStream(f);
+                        try {
+                            out.write(data);
+                        } finally {
+                            out.close();
+                        }
+                        android.net.Uri uri = androidx.core.content.FileProvider.getUriForFile(MainActivity.this, getPackageName() + ".fileprovider", f);
+                        Intent send = new Intent(Intent.ACTION_SEND);
+                        send.setType("image/png");
+                        send.putExtra(Intent.EXTRA_STREAM, uri);
+                        send.putExtra(Intent.EXTRA_TEXT, text);
+                        send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                        startActivity(Intent.createChooser(send, title));
+                    } catch (Exception e) {
+                        // pas d'image possible : on partage au moins le texte
+                        Intent send = new Intent(Intent.ACTION_SEND);
+                        send.setType("text/plain");
+                        send.putExtra(Intent.EXTRA_TEXT, text);
+                        startActivity(Intent.createChooser(send, title));
+                    }
+                }
+            });
+        }
+
         @JavascriptInterface
         @SuppressWarnings("deprecation")
         public void vibrate(int ms) {
