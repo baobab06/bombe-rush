@@ -1,23 +1,24 @@
 {
-  "rev": "2026-11-12-v1.14.0",
+  "rev": "2026-11-26-noel-v1.20.0",
   "config": {
     "enabled": true,
-    "latestVersion": "1.14.0",
+    "latestVersion": "1.20.0",
     "minVersion": "1.0.0",
     "mandatory": false,
-    "title": "5 nouveaux persos !",
-    "description": "La version 1.14.0 de Bombe Rush est disponible sur le Play Store.",
+    "title": "La grosse mise à jour de Noël !",
+    "description": "La version 1.20.0 de Bombe Rush est disponible sur le Play Store.",
     "notes": [
-      { "kind": "new", "text": "Drako, le bébé dragon légendaire : à gagner au rang Élite en Compétition." },
-      { "kind": "new", "text": "Piquant (rang Or), Pouf (rang Platine) et Zorg (rang Diamant) : à gagner en Compétition." },
-      { "kind": "new", "text": "Bulle l'axolotl : disponible en boutique." },
-      { "kind": "improve", "text": "Tous les skins à thème marchent aussi sur les nouveaux persos." }
+      { "kind": "new", "text": "Mode Aventure : 40 niveaux dans 4 mondes, des étoiles à gagner et 4 boss à battre." },
+      { "kind": "new", "text": "Calendrier de l'Avent : un cadeau par jour du 1er au 24 décembre (skins, émotes, titres…)." },
+      { "kind": "new", "text": "Village de Noël : une nouvelle carte sous la neige, avec musique de Noël." },
+      { "kind": "new", "text": "Ruée vers l'or : 3 nouvelles cartes." },
+      { "kind": "improve", "text": "Nouvelle interface de jeu : tableau des joueurs, alertes de danger, annonces des éliminations." }
     ],
     "storeUrl": "https://play.google.com/store/apps/details?id=com.bomberush.game",
     "push": {
-      "id": "v1-14-0-nouveaux-persos",
-      "title": "🐉 5 nouveaux persos !",
-      "body": "Drako le dragon légendaire et 4 autres persos débarquent dans Bombe Rush. Mets à jour et viens les gagner !"
+      "id": "noel-2026-aventure",
+      "title": "🎄 La grosse mise à jour de Noël est là !",
+      "body": "Mode Aventure : 40 niveaux et 4 boss à battre ! Et dès le 1er décembre, ouvre ton calendrier de l'Avent 🎁"
     }
   }
 }
