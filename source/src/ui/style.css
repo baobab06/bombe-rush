@@ -2225,4 +2225,4 @@ body.launching #btnPlay, body.launching #btnLaunch, body.launching #btnAgain, bo
 .lang-pick button span { overflow: hidden; text-overflow: ellipsis; }
 /* langues aux mots plus longs (ADVENTURE, ABENTEUER, MIT FREUNDEN…) : boutons de l'accueil un peu plus petits */
 html:not([lang="fr"]) .home-row2 .btn-adv { font-size: min(4.5cqh, 2.15cqw); }
-html:not([lang="fr"]) .home-row2 .btn-private { font-size: min(4.5cqh, 2.15cqw); }
+html:not([lang="fr"]) .home-row2 .btn-private { font-size: min(4.2cqh, 2cqw); }
