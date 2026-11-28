@@ -4,6 +4,7 @@
  * navigateur mobile, et à défaut copie du lien dans le presse-papiers.
  */
 import { androidApp } from "./native";
+import { t, tLines } from "../i18n/i18n";
 
 type CapShare = { share(o: { title?: string; text?: string; url?: string; dialogTitle?: string }): Promise<unknown> };
 
@@ -13,6 +14,7 @@ function capShare(): CapShare | null {
 }
 
 export async function copyText(text: string): Promise<boolean> {
+  text = tLines(text);
   try {
     await navigator.clipboard.writeText(text);
     return true;
@@ -36,15 +38,16 @@ export async function copyText(text: string): Promise<boolean> {
 export type ShareResult = "shared" | "copied" | "cancelled" | "failed";
 
 export async function shareInvite(o: { title: string; text: string; url: string }): Promise<ShareResult> {
+  o = { ...o, title: t(o.title), text: tLines(o.text) };
   const cap = capShare();
   const app = androidApp();
   try {
     if (app) {
-      app.share(o.text, "Inviter des amis");
+      app.share(o.text, t("Inviter des amis"));
       return "shared";
     }
     if (cap) {
-      await cap.share({ title: o.title, text: o.text, url: o.url, dialogTitle: "Inviter des amis" });
+      await cap.share({ title: o.title, text: o.text, url: o.url, dialogTitle: t("Inviter des amis") });
       return "shared";
     }
     if (navigator.share) {
@@ -66,6 +69,7 @@ export async function shareInvite(o: { title: string; text: string; url: string 
  * téléchargement de l'image.
  */
 export async function shareImage(canvas: HTMLCanvasElement, o: { title: string; text: string; file: string }): Promise<ShareResult> {
+  o = { ...o, title: t(o.title), text: tLines(o.text) };
   const app = androidApp();
   const url = canvas.toDataURL("image/png");
   try {

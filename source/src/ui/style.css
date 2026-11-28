@@ -270,7 +270,7 @@ button:focus-visible, input:focus-visible + i { outline: 3px solid var(--coin); 
 .map:active { transform: scale(.97); }
 .seg { display: flex; background: rgba(10,6,40,.5); border-radius: 3.2cqh; padding: .9cqh; gap: .9cqh; border: max(1.5px,.4cqh) solid rgba(255,255,255,.08); }
 .seg button { flex: 1; padding: 1.8cqh 1cqh; border-radius: 2.4cqh; font-weight: 800; font-size: max(11px, .8em); color: var(--muted); white-space: nowrap; transition: background .15s; }
-.seg button.sel { background: linear-gradient(180deg, #fff, #dcdaf7); color: var(--ink); box-shadow: 0 .5cqh 0 #9896d0; }
+.seg button.sel, .seg button.on { background: linear-gradient(180deg, #fff, #dcdaf7); color: var(--ink); box-shadow: 0 .5cqh 0 #9896d0; }
 
 /* ===================================================== PERSONNAGE */
 .locker { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, .82fr) minmax(0, 1.38fr); gap: 3.2cqw; }
@@ -2217,3 +2217,12 @@ body.launching #btnPlay, body.launching #btnLaunch, body.launching #btnAgain, bo
 .browse .tab { padding: 1cqh 2.4cqh 1.2cqh; font-size: max(11px, .72em); }
 .kind-head { margin-top: 1cqh; }
 .kind-head:first-child { margin-top: 0; }
+
+/* choix de la langue (Paramètres) */
+.lang-pick { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.lang-pick button { display: flex; align-items: center; justify-content: center; gap: .9cqh; padding: 1.3cqh .6cqh; min-width: 0; }
+.lang-pick button i { font-style: normal; font-size: 1.25em; line-height: 1; }
+.lang-pick button span { overflow: hidden; text-overflow: ellipsis; }
+/* langues aux mots plus longs (ADVENTURE, ABENTEUER, MIT FREUNDEN…) : boutons de l'accueil un peu plus petits */
+html:not([lang="fr"]) .home-row2 .btn-adv { font-size: min(4.5cqh, 2.15cqw); }
+html:not([lang="fr"]) .home-row2 .btn-private { font-size: min(4.5cqh, 2.15cqw); }

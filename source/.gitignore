@@ -9,3 +9,4 @@ android-gradle/build/
 android-gradle/app/build/
 package-lock.json
 __pycache__/
+src/i18n/strings.json

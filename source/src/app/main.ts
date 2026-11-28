@@ -1,3 +1,4 @@
+import { LANGS, getLang, setLang, type Lang } from "../i18n/i18n"; // en premier : traduit la page et les canvas dès le départ
 import { getItem } from "../meta/catalog";
 import { AdventUI } from "./advent-ui";
 import { adventInfo } from "../meta/advent";
@@ -554,6 +555,18 @@ class App implements AppCtx {
       this.persist();
       this.applySettings();
     });
+    // langue : drapeaux, nom de chaque langue dans sa langue ; le jeu redémarre pour tout réafficher
+    $("langPick").innerHTML = LANGS.map(
+      (l) => `<button data-l="${l.id}" role="radio" aria-checked="${l.id === getLang()}" class="${l.id === getLang() ? "on" : ""}"><i>${l.flag}</i><span>${l.name}</span></button>`,
+    ).join("");
+    $("langPick").querySelectorAll<HTMLButtonElement>("button").forEach((b) =>
+      b.addEventListener("click", () => {
+        this.click();
+        if (b.dataset.l === getLang()) return;
+        this.persist();
+        setLang(b.dataset.l as Lang);
+      }),
+    );
     $("segCtrl").querySelectorAll<HTMLButtonElement>("button").forEach((b) =>
       b.addEventListener("click", () => {
         this.click();
@@ -2430,6 +2443,15 @@ class App implements AppCtx {
     const title = $("resTitle");
     title.innerHTML = r.draw ? `<small>Personne ne gagne</small><span class="rt-place">${medal} ${ord} ex aequo</span>` : `<small>Tu termines</small><span class="rt-place">${medal} ${ord} !</span>`;
     title.className = `res-title t-${tier}`;
+    // « 1er ex aequo », « 1.º empatados »… : le titre rapetisse s'il dépasse de sa colonne
+    requestAnimationFrame(() => {
+      const el = title.querySelector<HTMLElement>(".rt-place");
+      const box = title.parentElement;
+      if (!el || !box) return;
+      el.style.fontSize = "";
+      const room = box.clientWidth * 0.96;
+      if (el.scrollWidth > room) el.style.fontSize = `${Math.max(0.45, room / el.scrollWidth).toFixed(3)}em`;
+    });
     const hero = $("resHero");
     hero.className = `res-hero-col t-${tier}`;
     void hero.offsetWidth;

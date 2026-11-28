@@ -8,6 +8,7 @@
  *  - navigateur : bouton officiel Google Identity Services ;
  *  - tests : jeton fourni par le banc d'essai, seulement en local avec ?auth=test.
  */
+import { getLang } from "../i18n/locale";
 
 interface NativeAuth {
   signIn(serverClientId: string, callbackId: string): void;
@@ -120,7 +121,7 @@ export async function renderWebButton(el: HTMLElement, clientId: string, onToken
     use_fedcm_for_prompt: true,
   });
   el.innerHTML = "";
-  id.renderButton(el, { theme: "filled_blue", size: "large", shape: "pill", text: "signin_with", locale: "fr", width: 260 });
+  id.renderButton(el, { theme: "filled_blue", size: "large", shape: "pill", text: "signin_with", locale: getLang(), width: 260 });
 }
 
 /** Tests en local (?auth=test) : jeton préparé par le banc d'essai. */

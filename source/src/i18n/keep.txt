@@ -1,0 +1,36 @@
+# Textes qui restent tels quels dans toutes les langues (noms propres, classes CSS repérées par erreur…)
+# Un id par ligne (voir scripts/i18n-extract.ts --check).
+1bvlcy2	{0}px {1}
+0dc5hbr	mission {0}
+14m77nm	cf-rarity {0}
+12errw3	cf-reveal in {0}
+1760i65	gcard {0}{1}
+0e6kg4h	acct-status {0}
+0y2pig9	btn {0}
+1jq3wpt	ach {0}
+0iw30rc	nw-card {0}{1}
+1up3rkd	stake-result {0} t-{1}
+0h0rkgo	Map «
+1yxvoc8	» trop petite pour
+0p5d6qv	Flamme
+0pol6ma	Boulon
+18fatl1	Rainette
+126kzid	Kage
+0kgcxbf	Champi
+1m6nmgv	Bruno
+1mz88fm	Pingo
+1k317tj	Bulle
+1y4tro5	Piquant
+1qxeqvf	Pouf
+11tt3tt	Zorg
+10wyhh4	Drako
+0kbxru8	Sakura
+0yqrmc4	Lumi
+1he8zyz	Panda
+1kglqw9	Cartoon
+1l5k9og	Pirate
+18gp6bv	Ninja
+1dgvi7w	BOMBE
+1yt0yxf	RUSH
+115f9rj	OK
+0vdi5hx	XP

@@ -10,6 +10,7 @@ import { ACHIEVEMENTS, type AchStat, type AchievementDef } from "./progress-conf
 import type { Profile } from "./profile";
 import { rankIndex } from "./rank";
 import { owns } from "./store";
+import { locale } from "../i18n/locale";
 
 export function achStat(p: Profile, s: AchStat): number {
   switch (s) {
@@ -35,7 +36,7 @@ export function achStat(p: Profile, s: AchStat): number {
   }
 }
 
-export const achDesc = (a: AchievementDef) => a.desc.replace("{n}", a.goal.toLocaleString("fr-FR").replace(/ | /g, " "));
+export const achDesc = (a: AchievementDef) => a.desc.replace("{n}", a.goal.toLocaleString(locale()).replace(/ | /g, " "));
 
 export interface AchView {
   def: AchievementDef;

@@ -159,7 +159,7 @@
         <div class="map-surprise" id="mapSurprise" hidden><b>🎲 Carte surprise</b><span>En Classique, la carte est tirée au hasard : tu la découvres au début de la partie.</span></div>
         <div class="launch-row">
           <div class="stake-banner" id="stakeBanner"></div>
-          <button class="btn btn-yellow launch" id="btnLaunch"><i data-icon="play"></i><span>LANCER</span></button>
+          <button class="btn btn-yellow launch" id="btnLaunch"><i data-icon="play"></i><span data-tr="LANCER (une partie)">LANCER</span></button>
         </div>
       </div>
     </div>
@@ -326,7 +326,9 @@
     <header class="bar"><button class="back" data-back aria-label="Retour"><i data-icon="back"></i></button><h2>Paramètres</h2></header>
     <div class="settings-grid">
       <div class="panel">
-        <h3 class="label first">Son & vibrations</h3>
+        <h3 class="label first">🌍 Langue</h3>
+        <div class="seg lang-pick" id="langPick" role="radiogroup" data-no-i18n></div>
+        <h3 class="label">Son & vibrations</h3>
         <label class="toggle"><span>Musique</span><input type="checkbox" id="setMusic"><i></i></label>
         <label class="toggle"><span>Effets sonores</span><input type="checkbox" id="setSfx"><i></i></label>
         <label class="toggle"><span>Vibration</span><input type="checkbox" id="setVibe"><i></i></label>

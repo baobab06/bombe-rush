@@ -1,0 +1,449 @@
+# English — part 1 (id<TAB>translation). Ids come from scripts/i18n-extract.ts.
+01q845u	error {0}
+0xsrtc0	difficulty
+14i8y4y	New update!
+0og4xr6	A new version of Bombe Rush is available.
+1c5rnb1	Invalid latest version (example: 1.12.0).
+0j5sllj	Invalid minimum version (example: 1.11.0).
+0b965qy	The minimum version can't be higher than the latest version.
+04785cr	The link must point to the Google Play Store (https://play.google.com/…).
+0x37c4s	Invalid Play Store link.
+007oz1v	Title
+10k37mo	SALE
+09cn6uu	NEW
+0fvyx2q	EQUIPPED
+1sqqaum	OWNED
+12urqdf	LEVEL
+0riaq4v	Matches
+0faajyb	Wins
+1spkd84	Win %
+12cgswn	Eliminations
+0tgou3d	Best streak
+0uscy9j	Adventure
+1fduhcp	❤️ Favourite character: {0} (mastery {1}) · 🎒 Collection {2}%
+05iouei	❤️ Favourite character:
+0pfdtya	(mastery
+1nhiksn	) · 🎒 Collection
+1h0wowg	Play with me! Free on Google Play
+0wsxcts	Invite friends
+0g6vzfx	Google sign-in isn't available on this device.
+1ur33si	Google sign-in isn't responding. Try again.
+070evwq	Sign-in cancelled.
+0b9jkdu	No Google account on this phone. Add one in the Android settings, then try again.
+1r1fnh2	Google sign-in failed. Check your connection and try again.
+15mucwz	Can't reach Google. Check your connection.
+0s3tly0	{0} (test)
+1x6ucn2	(test)
+09z9pk7	TEST PURCHASE
+127gioj	Local simulation (localhost) — no real payment.
+14jxo0p	Pay (test)
+1v7foqi	Cancel
+18c8wzn	🎁 Your daily reward is waiting!
+06i5bwi	Day {0}/7: log in to claim it before it flies away.
+0ismpht	Day
+1dclsp4	💣 The arena is waiting for you!
+0jnsqek	Your rivals are training while you're away… Come back and defend your rank!
+111htgy	OPEN
+08s5gz9	CONTENTS
+1bm89ut	How do you earn chests?
+1xcxi81	⬆️ Level up (lvl 3, 5, 8, 10…)
+0q0zjnh	📅 7th login day
+0gbpych	🎯 Weekly missions
+1hvo9hg	🎖️ Character mastery
+0issaxi	🏅 Achievements and new ranks
+04zzevn	🔥 10-win streak
+1ju9yxl	Chests can't be bought: you only earn them by playing. An item you already own is replaced with coins.
+03n4ek1	to discover · duplicate =
+1scmvxl	<span>{0}</span> · Opens for <b>free</b> · earned by playing · <b>{1}</b> in stock
+1twytmp	Always contains <b>{0} to {1} coins</b> + <b>{2} {2|item|items}</b>:
+14myg6a	You don't have any yet
+14ytq4u	Common
+0578o3h	Rare
+0llvi6g	Epic
+18m3b7n	Legendary
+14pjpc4	Day {0}/7 · your gift is waiting!
+1i0rndh	Day {0}/7 claimed · come back tomorrow
+1yw3mnj	New missions in {0}
+05g09wx	New missions in
+0rrts61	CLAIMED
+1pmjkxq	DONE
+0qgj3fo	IN PROGRESS
+0hbt3pk	CLAIM
+1so2w3d	Missions progress on their own as you play (solo and online). Each mission gives coins and XP.
+1pq5zgi	Longer missions, bigger rewards (sometimes a chest). Renewed every Monday.
+063bxhe	+{0} coins
+05rc6gv	coins
+19bdubq	Watch a video · {0} more today
+11yh49r	Watch a video ·
+01xb8z0	today
+1ozovdf	Come back tomorrow
+0mrt9dv	Free common chest
+08bxkz7	Watch a video · 1 per day
+0qrsre4	Already claimed today
+1lzmmui	🎁 Common chest added: open it in CHESTS!
+0zzfywo	· secure payment with Google Play
+0pc3qf7	· available in the Android app (Google Play)
+1iudsad	Bombers 💣
+0it317j	Coins
+085mzam	Exchange bombers
+08zpxoq	· for coins, right away
+1qpojjq	{0} free
+0skbm11	{0} coins
+0tfuq3d	for {0} bombers
+1tzb1zi	You need {0} more bombers
+1keukdo	You need
+01jx4is	You'll have <b>{0}</b> bombers left.
+0z9bhe3	Exchange?
+1lobhaq	EXCHANGE
+1v9ksxg	Purchases are made in the Android app (Google Play)
+00d016z	Payment pending: your pack will arrive as soon as it's confirmed
+09mv43m	Google Play store unavailable right now
+1v0zkyu	The purchase didn't go through. You haven't been charged.
+1djkm1g	Thanks for your purchase!
+1i5coxo	🎉 Purchase received: {0}
+1g3xz5a	🎉 Purchase received:
+0oeh3lz	New: Bombers!
+0uve156	The premium currency of Bombe Rush. Buy skins, characters and effects with bombers, or exchange them for coins.
+1ja6cgg	A gift to celebrate their arrival. You also earn some on your 7th login day.
+1mcv62e	Later
+0sce99m	SEE THE BANK
+1u2mmlk	Videos are always optional. You can accept <b>personalised</b> ads (based on your interests, using cookies/identifiers) or only <b>non-personalised</b> ads. You can change this anytime in Settings.
+1qa934d	Ads
+1v86qzf	Non-personalised
+0ivdff2	Personalised
+0pl9e5u	Loading video…
+0a9ae1w	Video interrupted: no reward
+1vmgx83	No video available right now, try again later
+1cr3vto	SKIP ⏩
+12sixv2	Tap the screen to open faster
+1h9ch1b	COINS
+0cvgbsy	Tap to continue
+1e0w48l	Tap to see the summary
+1r0z5p3	OPEN ANOTHER ({0})
+1t0a8xu	OPEN ANOTHER (
+0ymx58w	{0} {0|day|days}
+1bbehlx	less than an hour
+1mdv216	🌐 The world leaderboard needs internet.
+16kwy5p	Loading…
+0sn3bwj	😕 Leaderboard unavailable right now.
+1eklqww	Try again
+1j6vbn0	🏆 this week
+0pn105l	Nobody has won trophies this week yet.
+1m1xjwt	Be the first!
+0ihdtyg	Nobody has trophies this season yet.
+0z2u7dm	Play Ranked to get in!
+07olstu	Win trophies this week to show up here!
+0q183i2	Finish a Ranked match to show up here!
+0evas00	Play a Ranked match (online) to join the leaderboard!
+0s4ymvb	⏳ Week ends in <b>{0}</b> · Rewards: 1st legendary chest, top 3 epic chest, top 10 rare chest
+1jd1qmj	⏳ Week ends in
+1dp9u20	· Rewards: 1st legendary chest, top 3 epic chest, top 10 rare chest
+1wksrzg	{0} ranked {0|player|players} · 📅 One-month season{3}, then everyone starts again from 0
+1assm8y	ranked
+1hhv2rj	· 📅 One-month season
+0tkitef	, then everyone starts again from 0
+0x6iblj	: ends in <b>{0}</b>
+0ldrb6w	: ends in
+0jqup6u	World leaderboard (#{0})
+12ogj4q	World leaderboard (
+11iuj64	🏆 {0} of the week!
+1dra8r6	of the week!
+0eeuqej	1st
+01uiy4p	Your world leaderboard reward
+17531pn	{0} XP
+19mhd9i	Chest
+1dtwee0	Skin
+1ilqunq	Accessory
+0v0xyql	Effect
+05erd5v	Emote
+1e7nd8c	Bomb
+0zl0qz2	Character
+19vcunu	duplicate → <i></i>+{0}
+1lcb8mx	NEW!
+16uxrqf	AWESOME!
+1awc7h5	Daily login
+044chh8	A gift every day · day {0}/7 · missing a day doesn't lose anything
+15f04m9	A gift every day · day
+0hn5az3	Day {0}
+0ikpgrs	SEE YOU TOMORROW!
+0k0peph	🎁 Chest added: open it in CHESTS!
+1e71y8v	Already claimed · come back tomorrow!
+1ipyq6g	<span>💣</span>Trap your opponents
+1f57xo9	<span>🔥</span>Dodge the explosions
+0rwsf3g	<span>🏆</span>Win the match
+1axhmga	Drop bombs, break crates, grab power-ups… and be the last one standing!
+1h3dfm5	{0} You can watch it again in Settings.
+0uadqhz	You can watch it again in Settings.
+0cn3tx2	New
+12gxndm	Welcome to the arena!
+0z3oesf	The tutorial is here
+1io5789	Welcome to BOMBE RUSH
+08qmc0w	A quick tour of the rules, power-ups and modes, with a training ground.
+0po1k7x	A 2-minute tutorial teaches you the controls, power-ups and game modes.
+0fcbitr	Skip
+17fpu76	▶ FOLLOW THE TUTORIAL
+1oyokkn	Step 1
+0518sp1	<b>Trap your opponents</b> with your bombs: one explosion knocks them out.
+168l8hq	<b>Dodge the explosions</b> (your own too!).
+1j6fqma	<b>Win</b>: be the last one standing… or score the most points in Domination.
+0fcfkbd	A bomb arena game for 2 to 4 players.
+1p8o69m	Step 2
+084fl7f	Moving
+1vidnbv	Put your <b>left thumb</b> anywhere on the left half of the screen: the <b>joystick appears under your finger</b>.
+1tnerno	On a keyboard: <b>arrow keys</b> or <b>ZQSD</b>.
+038asra	Slide it in a direction to run. You move along the lanes, between the blocks.
+1pinryl	Step 3
+02u8rqe	Dropping bombs
+0tq05xr	The big <b>💣 button on the right</b> (Space on a keyboard) drops a bomb at your feet.
+1hps0ts	It explodes after a few seconds <b>in a cross</b>: up, down, left, right, over your whole <b>range</b>.
+1hwtmp1	<b>Stone blocks stop the flame</b>: hide behind them, or turn a corner. <b>Crates</b> break.
+10k8cn9	Before dropping one, <b>plan your escape</b>: a bomb blocks the way, don't trap yourself!
+1nkqk3s	Step 4
+1w5k5og	Power-ups and abilities
+0i5q0ai	Break crates: sometimes a <b>power-up</b> appears. <b>Walk over it</b> to pick it up.
+0oh6nnw	<b>Abilities</b> transform your <b>next bomb</b>. They appear on the ground during the match; the throwing bomb and the remote bomb have their own button (<b>THROW</b>, <b>BOOM</b>).
+1nuq5sr	Step 5
+0be937m	Game modes
+1u8jgja	{0} min {1}
+164aqgu	The <b>last one standing</b> wins. Matches last {0}; {1} s before the end, <b>sudden death</b> drops walls: the arena shrinks.
+09cjxpb	You and a teammate against two opponents. <b>Stay in the zone</b>: 1 point per second if only your team is in it (nobody scores if both teams are). The zone <b>moves</b> every {0} to {1} s, announced {2} s before. First team to <b>{3} points</b>. Knocked out? Back in {4} s.
+1utnix1	Grab the <b>nuggets</b> by walking over them (big ones are worth 5). Hit by an explosion: you <b>lose half</b> of your gold, scattered on the ground, then you respawn. In the <b>last 30 seconds</b>, gold is worth double. The <b>richest</b> wins!
+0wozfa4	Classic… with <b>curses</b> every few seconds (after 15 s): {0}. Dangerous curses are <b>announced</b> (countdown, red tiles): get out in time!
+1vl5yl7	<b>Create a room</b>: you get a <b>code</b> and a <b>link</b> to share. Your friends land straight in your room (up to {0} players, with bots if you want). You can also <b>join</b> with a code.
+0tgwr7v	🎮 Classic
+0kgbti2	👑 Domination 2 vs 2
+15vnab9	💰 Gold Rush
+1v1ipr4	💀 Chaos
+01ydnkg	👥 Play with friends
+1o4prhq	Step 6
+1aeua7s	Your turn!
+126uf97	Try it all on the <b>training ground</b>, with no risk and without losing coins:
+0addhkb	You can also finish the tutorial now and go play right away.
+19ibnjz	✅ Tutorial complete! You can watch it again in Settings.
+1jk4rz0	{0} of {1}
+1scggrv	FINISH
+0greinz	NEXT
+1tp0g5x	Move a few tiles
+15asrkb	Drop a bomb and take cover
+0evtx5m	Break 3 crates
+02mr8p9	Grab a power-up
+0pez5c7	Knock out the dummy
+0vmmn9h	Oops! Don't stay in the explosion's cross: hide behind a block.
+0ihuujj	🎯 TRAINING
+1tf5wi5	🏆 All done!
+1q9t3rb	Characters
+0nf3vcm	Style
+1hqrho0	Emotes
+0f3fc3k	Titles
+18i82va	🎩 Accessories
+0jni0ec	👣 Effects
+0eiqzfx	💥 Bombs
+0ammjlq	New selection in {0} h {1}
+18sp69n	New selection in
+1st0du2	Daily
+06w4rzv	Bombers
+0kzbmjr	{0} (to unlock)
+0vsqjzt	(to unlock)
+0kte7zu	{0} skins
+1m0egzk	Skins of
+00zxuz4	🔥 Daily selection
+058xnpt	new selection at midnight
+0hrfxms	🏆 Ranked
+0sumucw	⭐ Pass
+0m7qdf7	🗺️ Adventure
+1p8z2u3	🎄 Christmas
+1hhtp0r	🔒 Exclusive
+0k31cj7	Premium currency
+1g87vfg	<i></i> {0} bombers
+163r02h	{0} bombers
+1b6dgqc	Buy skins, characters and effects with bombers, or exchange them for coins. You also earn some on your 7th login day.
+1uoyc3e	✔ Owned
+0jw2fza	How to get it: {0}
+0evo55w	How to get it:
+16rpfjg	REMOVE
+0ig118w	UNLOCK {0}
+0hjufa2	UNLOCK
+1otpdac	EQUIP
+1lsoyfm	SEE IN SHOP
+1tsvdjj	Buy for {0} bombers
+14qfr59	Buy for
+0ersxuz	Buy for {0} coins
+1sg0od4	You need {0} more coins
+0fn3fb7	You need {0} more coins: play matches and do your missions!
+0mnvenw	coins: play matches and do your missions!
+1jliucd	🏷️ Title “{0}” equipped!
+1ixjen4	🏷️ Title “
+0d427s6	” equipped!
+1gjk1qz	{0} equipped!
+0ck3olx	equipped!
+0t5zjek	Buy?
+02sovkx	You'll have <b>{0}</b> {1} left.
+1r67x61	BUY
+1mcc5hj	Can't buy
+0hhijqx	UNLOCKED!
+1dbvwde	Continue
+1ov4v8e	Close
+0usyjy6	no server
+1crziyn	Online save unavailable right now (progress kept on this device).
+1ibrm32	Sign in to save your progress and get it back on any phone.
+129zbfc	Syncing…
+1ksbm15	Progress saved online ✓
+0jqkwo5	Sending progress…
+0xbeb04	Offline: will send when you're back online.
+0h6yhm4	Sync error.
+0zin299	Account
+12kstnu	Signed in{0}
+02oxemo	Signed in
+07hw0vd	with Google
+1k6cjhy	Sync
+0sjdmd5	Sign out
+12cjfp8	Delete my online account
+1ec573q	Sign in with Google
+1yysew6	Your online save and the link to your Google account will be <b>permanently deleted</b> from our server. Your progress stays on this phone (as a guest account).
+1ew0s2c	Delete the online account?
+1xv0wgh	Delete permanently
+0cng3ax	<i></i>Deleting…
+0gsdare	Deleting…
+0jk9yuf	Can't delete right now.
+0eyrjp3	Online account deleted. Your progress stays on this phone.
+1ij097w	Sign out?
+16pvw6q	Your progress stays on this phone and in your Google account. Sign in to the same account to get it back.
+1s1c51o	Signed out. Your progress stays on this phone.
+0x5v32w	Google account
+0svp2w1	Google only gives us your account ID and email address. No password is ever sent to the game.
+0aenpb5	Played before? Sign in to get your progress back.
+0ku1if2	Save your progress (coins, skins, level, rank…) and get it back on any phone.
+0a2ogzj	Signing in to your account…
+001cl7m	Sign-in failed. Try again.
+0k5rwc4	Google sign-in isn't enabled on the server yet. Your progress stays on this phone.
+0vry6n7	Loading Google…
+0xg3jt1	Google sign-in isn't available here (you need the app or the secure https site).
+0b59k5g	Choosing a Google account…
+1pjcdej	Progress linked to your Google account ✓
+08hn42i	Account progress restored ✓
+12pkad0	Signed in — progress up to date ✓
+04jb64i	Level <b>{0}</b>
+1g1u9xt	<b>{0}</b> coins · <b>{1}</b> bombers
+05d47rv	<b>{0}</b> matches · <b>{1}</b> wins
+0bu5h8c	Two different progressions
+001ebtz	This Google account already has progress that's different from this phone's. Which one do you want to keep?
+0ussi1m	☁️ Google account
+1j2kj98	Saved on
+1mpb1ft	📱 This phone
+0qk5kk5	Current progress
+0kvdnc4	Keep the Google account
+078cffc	Keep this phone
+0ui9olc	Cancel (change nothing)
+1b2dhvk	<i></i>Saving…
+0yshowh	Saving…
+06mgvha	Account progress restored ✓ (the old one is kept aside on this phone)
+0r9ex0o	Confirm: replace the account
+03mabdn	The Google account's progress will be replaced by this phone's (a backup copy is kept).
+0e8n57s	This phone's progress saved to your account ✓
+0l8d74o	Nothing was changed. You're not signed in.
+1s4ks4r	Easy
+0r09lwn	Medium
+13spzbu	Hard
+12b3ocx	Expert
+0rwhxby	<b>{0}</b> 🏆 trophies
+1on8ccl	🎲 The game mode is picked at random, always with 4 players. Current opponents: <b>{0}</b> — the higher you climb, the stronger they get.{1} In Domination (2 vs 2): win {2}, loss {3}.
+1gajk7j	Season rewards <small>⏳ ends in {0}</small>
+1n61jik	🌍 When you're online, your Ranked matches also count for the <b>world leaderboard</b>: the server replays every match to check the result.
+05kfto3	📅 <b>A season lasts one month.</b> On the 1st of every month, everyone starts again from 0 trophies, all rewards can be earned again, and you get a bonus based on the division you reached.{0}
+16uakw5	Each Ranked match:
+0y1mry9	Latest Ranked matches
+07hya7z	<b>{0}</b> more 🏆 for {1} {2}
+13u5rhp	Still
+1ed6m1m	🏆 for {0} {1}
+17rcltz	🏆 for
+08swnwf	Top division reached!
+1kytjq3	Below {0} 🏆, you lose half as much.
+0wjumq7	Below
+1tgtrxp	🏆, you lose half as much.
+1l82sdj	Start
+0j6xfq3	No Ranked matches yet. Pick 🏆 RANKED on the home screen and go for it!
+0ojufi7	Previous season: {0} 🏆.
+00ltii5	Previous season:
+0bpc8dt	Fix
+1v3f6db	Improved
+10xowvd	Your version <b>{0}</b>
+1rss9gi	New <b>{0}</b>
+1b7z1zq	⛔ REQUIRED UPDATE
+1d8fm6l	🎁 UPDATE AVAILABLE
+07yyvfr	This version is no longer supported. Update the game to keep playing. Your progress, items and purchases are kept.
+1umzlvi	UPDATE
+1m1hjed	RELOAD THE GAME
+1mgj82e	LATER
+0gv6hwm	Update available
+1tfonca	Required update
+1f1fwzw	🔒 Beat the boss of world {0} to open this world
+1o75tts	🔒 Beat the boss of world
+0hxv017	to open this world
+09qz51a	🔒 Clear the previous level first
+1m57ln1	Level {0}
+00gl02r	Level
+02i7427	🎁 <b>{0} ⭐</b> milestone reached!
+1gask6g	🏆 All Adventure rewards are yours!
+11efhqd	Next gift at <b>{0} ⭐</b>
+0l9u5v2	🗺️ Adventure gifts
+0mazgeo	+ {0} {0|sidekick|sidekicks}
+03yf6e6	⚔️ {0} {0|opponent|opponents} ({2})
+0huu72v	🎯 Alone on the map
+0y798wc	BOSS
+12qz94d	LEVEL {0}
+19vqr8h	🏁 Your record: <b>{0}</b>
+1r9346r	✅ Reward claimed
+1cwwbtv	1st clear: {0}
+1szjpb1	1st clear:
+117ch7p	PLAY AGAIN
+0wpoes2	PLAY
+1mrtxjb	PERFECT!
+0a8b2nj	LEVEL CLEARED!
+10bk6bj	FAILED…
+0amy9k5	⏱️ Time's up
+11au238	💥 You got hit
+17a6kyv	BOSS · {0}
+07a7hs9	BOSS ·
+0y5z54c	NEW RECORD!
+0pb4sv9	⭐ +{0} Pass
+1qt0x88	Pass
+15u27uq	🗺️ Map
+1kj8bdk	↻ Play again
+0njknmd	↻ TRY AGAIN
+114wdi9	NEXT ▶
+0k8nbkd	💡 Drop your bombs among the crates: one bomb can break several.
+1c4o2lm	💡 Break the crates: they often hide gold. And dodge explosions, you lose half your gold!
+0nga7g3	💡 Stay away from the others and always keep an escape tile.
+17isp1c	💡 {0} gets a shield after every hit: back off, then come back when it stops flashing.
+16vj91e	gets a shield after every hit: back off, then come back when it stops flashing.
+1x9iit5	💡 Grab power-ups early (🔥 range, 💣 bombs, 👟 speed) before attacking.
+00okzl6	Change nickname
+06awmgg	New nickname
+085d58d	CHANGE
+0rrx2xy	You need <b>{0}</b> more coins. Play matches to earn some!
+0jooqbm	coins. Play matches to earn some!
+0371oub	Your current nickname: <b>{0}</b>
+1e12hdo	Your current nickname:
+1ma37av	That's already your nickname.
+0w00dzy	You'll have <b>{0}</b> coins left.
+0dz9prf	You'll have
+0h8zbr7	coins.
+1ivjrzj	Invalid nickname
+0fvzr8j	✏️ Your name is now {0}!
+10nc1ui	✏️ Your name is now
+0zdsgt8	SEARCHING FOR PLAYERS…
+18r118h	Nobody? You'll play against the computer. With real players: 🪙 coins ×1.5!
+0nh7q9m	CANCEL
+09iktp3	YOU
+0h6kzk6	✔ FOUND
+1ygpq4s	Searching…
+0npfi3g	🎁 Referral complete!
+0ouaus5	Your friends played their 3 matches
+13zp692	You and your friend won a chest
+1dc2y0h	INVITE YOUR FRIENDS 🎁
+07z0g6q	✔ chest won
+0ngcea1	No friends yet: share your code!
+01ed5ky	✔ You used your friend's code{0}
+06jn9qw	✔ You used your friend's code
+1oif29w	· chest won 🎁
+1oiteca	· {0}/{1} matches for your chest

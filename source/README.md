@@ -162,6 +162,30 @@ l'adresse du serveur (`src/net/config.ts`). Rien à réécrire.
 
 ---
 
+## 🌍 Langues
+
+Le jeu est écrit en français ; il s'affiche aussi en anglais, espagnol, allemand, italien et portugais (Brésil).
+Au premier lancement, la langue suit celle du téléphone (puis son pays ; sinon l'anglais). Elle se change dans
+**Paramètres › Langue** (le jeu redémarre).
+
+Fonctionnement (`src/i18n/i18n.ts`) : les textes ne sont pas réécrits dans le code. Au moment de l'affichage, la page
+(nœuds texte, `placeholder`, `title`…) et les canvas (`fillText`) sont traduits à partir d'un dictionnaire indexé par le
+texte français. Une phrase avec des parties variables (« Il te manque 120 pièces ») est reconnue par son gabarit
+(« Il te manque {0} pièces »), et une phrase mise en forme (« Il te reste <b>12</b> pièces ») se traduit d'un bloc.
+En français, rien de tout cela ne tourne.
+
+Ajouter ou modifier un texte :
+
+1. écrire le texte en français dans le code, comme d'habitude ;
+2. `bun scripts/i18n-extract.ts --check` liste les textes sans traduction (avec leur identifiant) ;
+   `bun scripts/i18n-extract.ts --work liste.txt` donne la liste complète avec le contexte de chaque phrase ;
+3. ajouter les lignes `identifiant<TAB>traduction` dans `src/i18n/lang/<langue>.N.tsv` ;
+   `{0}` = partie variable, `{0|singulier|pluriel}` = mot accordé avec le nombre `{0}` ;
+4. `bun scripts/i18n-build.ts` régénère `src/i18n/dict.gen.json`, puis `bun tests/i18n.test.ts`.
+
+Un nom propre ou un faux positif qui doit rester tel quel va dans `src/i18n/keep.txt`. Un même mot français qui se
+traduit différemment selon l'endroit : `data-tr="clé"` sur l'élément (ex. le bouton « LANCER » d'une partie).
+
 ## Détails techniques
 
 ### Origine : vertical slice « Forêt »

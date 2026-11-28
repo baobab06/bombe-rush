@@ -8,6 +8,7 @@
  */
 import type { Profile } from "../meta/profile";
 import { dayKey } from "../meta/store";
+import { t } from "../i18n/i18n";
 
 export type NotifyState = "granted" | "denied" | "default" | "off" | "unsupported";
 
@@ -63,12 +64,12 @@ export const notifications = {
     const claimedToday = p.daily?.last === dayKey(now);
     if (claimedToday || at.getTime() <= now.getTime() + 10 * 60 * 1000) at.setDate(at.getDate() + 1);
     const day = Math.min(7, ((p.daily?.streak ?? 0) % 7) + 1);
-    n.schedule("daily", at.getTime(), "🎁 Ta récompense du jour t'attend !", `Jour ${day}/7 : connecte-toi pour la récupérer avant qu'elle ne s'envole.`);
+    n.schedule("daily", at.getTime(), t("🎁 Ta récompense du jour t'attend !"), t(`Jour ${day}/7 : connecte-toi pour la récupérer avant qu'elle ne s'envole.`));
     // 2. retour dans l'arène après 3 jours sans jouer
     const back = new Date(now);
     back.setDate(back.getDate() + 3);
     back.setHours(18, 0, 0, 0);
-    n.schedule("comeback", back.getTime(), "💣 L'arène t'attend !", "Tes adversaires s'entraînent pendant ton absence… Reviens défendre ton rang !");
+    n.schedule("comeback", back.getTime(), t("💣 L'arène t'attend !"), t("Tes adversaires s'entraînent pendant ton absence… Reviens défendre ton rang !"));
   },
   cancelReminders() {
     const n = native();

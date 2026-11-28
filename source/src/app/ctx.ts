@@ -4,6 +4,7 @@
  */
 import type { Profile } from "../meta/profile";
 import type { UiFx } from "../ui/fx";
+import { locale } from "../i18n/locale";
 
 export type ScreenId =
   | "home" | "setup" | "settings" | "pause" | "results" | "game" | "private" | "lobby" | "boot" | "welcome" | "invite" | "shop" | "collection" | "missions" | "pass" | "profile" | "rank" | "chests" | "tutorial" | "world" | "adventure";
@@ -24,7 +25,7 @@ export interface AppCtx {
 }
 
 const $ = (id: string) => document.getElementById(id)!;
-export const fmt = (n: number) => Math.round(n).toLocaleString("fr-FR").replace(/ | /g, " ");
+export const fmt = (n: number) => Math.round(n).toLocaleString(locale()).replace(/ | /g, " ");
 
 /** Porte-monnaie : tous les compteurs [data-coins] (et [data-bombers]) de l'interface. */
 export class Wallet {

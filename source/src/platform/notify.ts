@@ -21,6 +21,8 @@ type CapPush = {
 const plugins = () =>
   (window as unknown as { Capacitor?: { Plugins?: { LocalNotifications?: CapLocal; PushNotifications?: CapPush } } }).Capacitor?.Plugins ?? {};
 
+import { t } from "../i18n/i18n";
+
 let nextId = 1;
 
 export const notify = {
@@ -41,6 +43,7 @@ export const notify = {
   /** Affiche une notification seulement si le jeu n'est pas au premier plan. */
   async show(title: string, body: string) {
     if (!document.hidden) return;
+    title = t(title); body = t(body);
     const cap = plugins().LocalNotifications;
     try {
       if (cap) await cap.schedule({ notifications: [{ id: nextId++, title, body }] });

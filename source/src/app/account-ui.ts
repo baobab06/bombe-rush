@@ -9,9 +9,10 @@ import type { Profile } from "../meta/profile";
 import { serverBase } from "../net/config";
 import { AuthError, authKind, forgetGoogleAccount, nativeSignIn, renderWebButton, testSignIn } from "../platform/google-auth";
 import type { Modal } from "./ctx";
+import { locale } from "../i18n/locale";
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
-const fr = (n: number) => Math.round(n).toLocaleString("fr-FR");
+const fr = (n: number) => Math.round(n).toLocaleString(locale());
 
 const G_LOGO =
   '<svg viewBox="0 0 48 48" width="22" height="22" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.6 5.4 2.7 13.3l7.9 6.1C12.5 13.6 17.8 9.5 24 9.5z"/><path fill="#4285F4" d="M46.1 24.6c0-1.6-.1-3.1-.4-4.6H24v9h12.4c-.5 2.9-2.1 5.3-4.6 7l7.1 5.5c4.2-3.9 7.2-9.6 7.2-16.9z"/><path fill="#FBBC05" d="M10.6 28.6c-.5-1.4-.8-3-.8-4.6s.3-3.2.8-4.6l-7.9-6.1C1 16.6 0 20.2 0 24s1 7.4 2.7 10.7l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.1-5.5c-2 1.4-4.6 2.2-8.8 2.2-6.2 0-11.5-4.1-13.4-9.9l-7.9 6.1C6.6 42.6 14.6 48 24 48z"/></svg>';
@@ -301,7 +302,7 @@ export class AccountUI {
     const card = (title: string, s: ProfileSummary, extra: string) =>
       `<div class="acct-card"><b>${title}</b><span class="acct-name">${esc(s.name)}</span>
         <ul><li>Niveau <b>${s.level}</b></li><li><b>${fr(s.coins)}</b> pièces · <b>${fr(s.bombers)}</b> bombers</li><li><b>${s.played}</b> parties · <b>${s.wins}</b> victoires</li><li><b>${s.items}</b> objets</li></ul><small>${extra}</small></div>`;
-    const when = updatedAt ? new Date(updatedAt).toLocaleDateString("fr-FR", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" }) : "";
+    const when = updatedAt ? new Date(updatedAt).toLocaleDateString(locale(), { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" }) : "";
     this.host.modal.open(
       (sheet, close) => {
         sheet.classList.add("acct-sheet");

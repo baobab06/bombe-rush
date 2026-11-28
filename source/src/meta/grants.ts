@@ -13,6 +13,7 @@ import {
   type ChestTier, type Reward,
 } from "./progress-config";
 import type { Profile } from "./profile";
+import { locale } from "../i18n/locale";
 
 /** Ce qui a réellement été donné (pour l'affichage). */
 export interface Granted {
@@ -35,7 +36,7 @@ const KIND_LABEL: Record<string, string> = {
   skin: "Skin", accessory: "Accessoire", trail: "Effet", emote: "Emote", boom: "Bombe", title: "Titre", character: "Personnage",
 };
 export const itemLabel = (it: CatalogItem) => `${KIND_LABEL[it.kind] ?? "Objet"} : ${it.name}`;
-export const fmtN = (n: number) => Math.round(n).toLocaleString("fr-FR").replace(/ | /g, " ");
+export const fmtN = (n: number) => Math.round(n).toLocaleString(locale()).replace(/ | /g, " ");
 
 export function addCoins(p: Profile, amount: number): number {
   const n = Math.max(0, Math.floor(amount));

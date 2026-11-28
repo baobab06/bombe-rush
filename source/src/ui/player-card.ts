@@ -10,6 +10,7 @@ import type { Profile } from "../meta/profile";
 import { rankProgress } from "../meta/rank";
 import { countOwned, equippedSkin } from "../meta/store";
 import { drawCharacter, lookOf } from "../render/bodies";
+import { locale } from "../i18n/locale";
 
 export const CARD_W = 900;
 export const CARD_H = 1200;
@@ -17,7 +18,7 @@ const INK = "#120d36";
 const DISPLAY = '"Dela Gothic One", "Arial Black", Impact, sans-serif';
 const UI = '"Baloo 2", "Trebuchet MS", system-ui, sans-serif';
 
-const fmt = (n: number) => Math.round(n).toLocaleString("fr-FR");
+const fmt = (n: number) => Math.round(n).toLocaleString(locale());
 
 /** Personnage le plus joué (maîtrise). */
 export function favoriteCharacter(p: Profile): { id: string; name: string; games: number; level: number } {
